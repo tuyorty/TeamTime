@@ -78,3 +78,14 @@ def require_admin(
 
 
 AdminDep = Annotated[str, Depends(require_admin)]
+
+
+def require_admin_read(admin: IsAdminDep) -> str:
+    """Чтение админских данных: нужна сессия админа. Заголовок от CSRF не нужен — GET ничего
+    не меняет, а сайт шлёт X-Requested-With только с изменяющими запросами."""
+    if not admin:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен режим админа")
+    return "admin"
+
+
+AdminReadDep = Annotated[str, Depends(require_admin_read)]

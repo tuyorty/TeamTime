@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { api, ApiError } from "./client";
 import type {
   AppSettings, Audit, EmployeeDetail, Employee, Identity, Inbox, Message, Meta, Month, Plans,
-  Today, Topic, Week,
+  Chat, Today, Topic, Week,
 } from "./types";
 
 export const keys = {
@@ -20,6 +20,7 @@ export const keys = {
   inbox: (view: string) => ["inbox", view] as const,
   identities: ["identities"] as const,
   topics: ["topics"] as const,
+  chats: ["chats"] as const,
   settings: ["settings"] as const,
   audit: (employeeId?: number) => ["audit", employeeId] as const,
   search: (q: string) => ["search", q] as const,
@@ -90,6 +91,8 @@ export const useInbox = (view: string) =>
 
 export const useIdentities = () =>
   useQuery({ queryKey: keys.identities, queryFn: () => api.get<Identity[]>("/identities") });
+
+export const useChats = () => useQuery({ queryKey: keys.chats, queryFn: () => api.get<Chat[]>("/admin/chats") });
 
 export const useTopics = (enabled: boolean) =>
   useQuery({ queryKey: keys.topics, queryFn: () => api.get<Topic[]>("/admin/topics"), enabled });

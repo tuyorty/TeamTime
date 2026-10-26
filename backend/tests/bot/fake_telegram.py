@@ -38,6 +38,8 @@ from teamtime.core import clock
 
 BOT_USER = User(id=42, is_bot=True, first_name="xTime", username="teamtime_test_bot")
 GROUP = Chat(id=-1001234567890, type="supergroup", title="Вымышленная команда", is_forum=True)
+# Чужая группа: кто-то добавил туда бота, админ её не разрешал.
+STRANGERS = Chat(id=-1009999999999, type="supergroup", title="Чужая группа", is_forum=True)
 
 
 class FakeSession(BaseSession):
@@ -115,13 +117,15 @@ class Telegram:
         thread: int | None = 22,
         message_id: int | None = None,
         edit: bool = False,
+        chat: Chat = GROUP,
+        name: str = "Вымышленный",
     ) -> int:
         mid = message_id or next(self._message_ids)
         msg = Message(
             message_id=mid,
             date=datetime(2026, 10, 26, 6, 0, tzinfo=UTC),
-            chat=GROUP,
-            from_user=self.user(uid),
+            chat=chat,
+            from_user=self.user(uid, name),
             text=text,
             message_thread_id=thread,
             is_topic_message=thread is not None,

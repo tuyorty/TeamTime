@@ -26,6 +26,9 @@ TEST_DB = os.environ.get("TEST_DATABASE_URL")
 BACKEND = Path(__file__).resolve().parents[1]
 # Понедельник 26.10.2026, 12:00 по Екатеринбургу.
 NOW = datetime(2026, 10, 26, 7, 0, tzinfo=UTC)
+# Чат вымышленной команды: в каждом тесте с БД уже разрешён админом. Сообщения из любых
+# других чатов бот не принимает — это проверяют отдельные тесты.
+TEAM_CHAT = -1001234567890
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -77,6 +80,13 @@ TABLES = (
 async def maker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     async with engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+        await conn.execute(
+            text(
+                "INSERT INTO bot_chats (chat_id, title, is_forum, approved) "
+                "VALUES (:id, 'Вымышленная команда', true, true)"
+            ),
+            {"id": TEAM_CHAT},
+        )
     return async_sessionmaker(engine, expire_on_commit=False)
 
 

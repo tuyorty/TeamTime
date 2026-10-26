@@ -7,13 +7,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 
-from teamtime.api.deps import AdminDep, AppSettingsDep, SessionDep
+from teamtime.api.deps import AdminDep, AdminReadDep, AppSettingsDep, SessionDep
 from teamtime.calc import StatusKind
 from teamtime.db.models import BotChat, Employee, Resolution, TopicBinding
 from teamtime.parsing import PlanDayKind
-from teamtime.schemas import EmployeeIn, EmployeeOut, TopicIn, TopicOut
+from teamtime.schemas import ChatIn, ChatOut, EmployeeIn, EmployeeOut, TopicIn, TopicOut
 from teamtime.services import audit, events, manual
 from teamtime.services.settings import AppSettings, save_settings
 
@@ -89,11 +89,65 @@ async def link_identity(
     return LinkOut(reprocessed=report.reprocessed, detail=detail)
 
 
+# --- чаты ---------------------------------------------------------------------------------
+
+
+@router.get("/chats", summary="Чаты, в которые добавлен бот")
+async def chats(session: SessionDep, _: AdminReadDep) -> list[ChatOut]:
+    counts = (
+        select(TopicBinding.chat_id, func.count().label("n"))
+        .group_by(TopicBinding.chat_id)
+        .subquery()
+    )
+    rows = await session.execute(
+        select(BotChat, func.coalesce(counts.c.n, 0))
+        .outerjoin(counts, counts.c.chat_id == BotChat.chat_id)
+        .order_by(BotChat.approved.desc(), BotChat.added_at)
+    )
+    return [
+        ChatOut(
+            chat_id=c.chat_id, title=c.title, is_forum=c.is_forum, approved=c.approved, topics=n
+        )
+        for c, n in rows
+    ]
+
+
+@router.put("/chats/{chat_id}", summary="Разрешить или запретить чат")
+async def set_chat(chat_id: int, body: ChatIn, session: SessionDep, actor: AdminDep) -> OkOut:
+    chat = await session.get(BotChat, chat_id)
+    if chat is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Чат не найден")
+    before = chat.approved
+    chat.approved = body.approved
+    await audit.record(
+        session, actor=actor, action="chat.approve" if body.approved else "chat.revoke",
+        entity_type="bot_chat", entity_id=chat_id, before={"approved": before},
+        after={"approved": body.approved, "title": chat.title},
+    )  # fmt: skip
+    await events.notify(session, "settings.changed")
+    return OkOut(detail="Чат разрешён" if body.approved else "Чат запрещён")
+
+
+@router.delete("/chats/{chat_id}", summary="Забыть чат и его привязки тем")
+async def delete_chat(chat_id: int, session: SessionDep, actor: AdminDep) -> OkOut:
+    chat = await session.get(BotChat, chat_id)
+    if chat is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Чат не найден")
+    await audit.record(
+        session, actor=actor, action="chat.delete", entity_type="bot_chat", entity_id=chat_id,
+        before={"title": chat.title, "approved": chat.approved},
+    )  # fmt: skip
+    session.expunge(chat)
+    await session.execute(delete(BotChat).where(BotChat.chat_id == chat_id))  # темы — каскадом
+    await events.notify(session, "settings.changed")
+    return OkOut(detail="Чат удалён. Исходные сообщения из него остаются в базе")
+
+
 # --- темы форума ---------------------------------------------------------------------------
 
 
 @router.get("/topics", summary="Привязки тем форума")
-async def topics(session: SessionDep, _: AdminDep) -> list[TopicOut]:
+async def topics(session: SessionDep, _: AdminReadDep) -> list[TopicOut]:
     rows = await session.execute(
         select(TopicBinding, BotChat.title).join(BotChat).order_by(TopicBinding.id)
     )
@@ -114,9 +168,12 @@ async def topics(session: SessionDep, _: AdminDep) -> list[TopicOut]:
     "/topics", summary="Привязать тему к типу сообщений", status_code=status.HTTP_201_CREATED
 )
 async def bind_topic(body: TopicIn, session: SessionDep, actor: AdminDep) -> TopicOut:
-    if await session.get(BotChat, body.chat_id) is None:
-        session.add(BotChat(chat_id=body.chat_id, title="", is_forum=body.thread_id is not None))
-        await session.flush()
+    chat = await session.get(BotChat, body.chat_id)
+    if chat is None:
+        chat = BotChat(chat_id=body.chat_id, title="", is_forum=body.thread_id is not None)
+        session.add(chat)
+    chat.approved = True  # тему привязывает сам админ — чат доверенный
+    await session.flush()
     existing = await session.scalar(
         select(TopicBinding).where(
             TopicBinding.chat_id == body.chat_id,

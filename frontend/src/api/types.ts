@@ -10,6 +10,7 @@ export type EmployeeIn = S["EmployeeIn"];
 export type EmployeeDetail = S["EmployeeDetailOut"];
 export type Identity = S["IdentityOut"];
 export type Topic = S["TopicOut"];
+export type Chat = S["ChatOut"];
 export type DayCell = S["DayCellOut"];
 export type PlanDay = S["PlanOut"];
 export type Fact = S["FactOut"];

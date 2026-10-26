@@ -1,9 +1,9 @@
-import { Link2, Plus, Trash2 } from "lucide-react";
+import { Check, Link2, Plus, ShieldOff, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { api } from "@/api/client";
-import { keys, useAdminMutation, useEmployees, useIdentities, useMeta, useTopics } from "@/api/queries";
-import type { Identity } from "@/api/types";
+import { keys, useAdminMutation, useChats, useEmployees, useIdentities, useMeta, useTopics } from "@/api/queries";
+import type { Chat, Identity } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -16,6 +16,7 @@ export function TelegramTab() {
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <Identities />
       <div className="grid content-start gap-5">
+        <Chats />
         <Topics />
         <Panel title="Как подключить бота">
           <ol className="grid list-decimal gap-1.5 pl-5 text-[13px] text-ink-2">
@@ -26,6 +27,7 @@ export function TelegramTab() {
               В теме расписаний отправьте <code className="rounded bg-surface-2 px-1">/bind расписание</code>, в теме
               дейликов — <code className="rounded bg-surface-2 px-1">/bind дейлики</code>.
             </li>
+            <li>Разрешите группу выше, в разделе «Чаты». Из неразрешённых чатов бот сообщения не принимает.</li>
           </ol>
           {bot ? <p className="mt-3 text-[12px] text-ink-3">Бот: @{bot}</p> : null}
         </Panel>
@@ -101,6 +103,76 @@ function Identities() {
   );
 }
 
+function ChatRow({ chat }: { chat: Chat }) {
+  const [confirm, setConfirm] = useState(false);
+  const invalidate = [[...keys.chats], [...keys.topics]];
+  const approve = useAdminMutation((approved: boolean) => api.put<{ detail: string }>(`/admin/chats/${chat.chat_id}`, { approved }), {
+    success: (r) => r.detail,
+    invalidate,
+  });
+  const remove = useAdminMutation(() => api.delete<{ detail: string }>(`/admin/chats/${chat.chat_id}`), {
+    success: (r) => r.detail,
+    invalidate,
+  });
+  return (
+    <li className="grid gap-2 rounded-md border border-line p-2.5 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={chat.approved ? "accent" : "deviation"}>{chat.approved ? "разрешён" : "ждёт разрешения"}</Badge>
+        <span className="min-w-0 truncate font-medium">{chat.title || "Без названия"}</span>
+        <span className="text-[12px] text-ink-3 tnum">
+          {chat.chat_id}, тем: {chat.topics}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {chat.approved ? (
+          <Button size="sm" variant="ghost" disabled={approve.isPending} onClick={() => approve.mutate(false)}>
+            <ShieldOff /> Запретить
+          </Button>
+        ) : (
+          <Button size="sm" variant="primary" disabled={approve.isPending} onClick={() => approve.mutate(true)}>
+            <Check /> Разрешить
+          </Button>
+        )}
+        {confirm ? (
+          <>
+            <span className="text-[12px] text-ink-2">Удалить чат и его темы?</span>
+            <Button size="sm" variant="danger" disabled={remove.isPending} onClick={() => remove.mutate(undefined)}>
+              Удалить
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
+              Нет
+            </Button>
+          </>
+        ) : (
+          <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label="Удалить чат" onClick={() => setConfirm(true)}>
+            <Trash2 />
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** Бот публичный: добавить его в группу может кто угодно, поэтому чаты разрешает админ. */
+function Chats() {
+  const { data } = useChats();
+  const pending = data?.filter((c) => !c.approved).length ?? 0;
+  return (
+    <Panel
+      title="Чаты"
+      description="Бот принимает сообщения только из разрешённых групп. Разрешайте только рабочую группу команды."
+      actions={pending ? <Badge tone="deviation">{pending} ждут</Badge> : undefined}
+    >
+      <ul className="grid gap-2">
+        {data?.map((c) => <ChatRow key={c.chat_id} chat={c} />)}
+        {data && !data.length ? (
+          <li className="text-[13px] text-ink-2">Бот ещё не добавлен ни в одну группу. Добавьте его и отправьте /bind в теме.</li>
+        ) : null}
+      </ul>
+    </Panel>
+  );
+}
+
 function Topics() {
   const { data } = useTopics(true);
   const [form, setForm] = useState({ chat_id: "", thread_id: "", kind: "schedule", title: "" });
@@ -112,7 +184,7 @@ function Topics() {
         kind: form.kind,
         title: form.title,
       }),
-    { success: "Тема привязана", invalidate: [[...keys.topics]] },
+    { success: "Тема привязана, чат разрешён", invalidate: [[...keys.topics], [...keys.chats]] },
   );
   const remove = useAdminMutation((id: number) => api.delete(`/admin/topics/${id}`), {
     success: "Тема отвязана",

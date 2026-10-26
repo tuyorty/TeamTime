@@ -147,6 +147,12 @@ class BotChat(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     title: Mapped[str] = mapped_column(String(255), default="")
     is_forum: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        comment="Разрешён админом на сайте. Сообщения из неразрешённых чатов бот не принимает",
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     topics: Mapped[list[TopicBinding]] = relationship(back_populates="chat")

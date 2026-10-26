@@ -56,8 +56,14 @@ function templates(today: string, shortName: string): Record<Topic, string> {
   };
 }
 
+const ENTITIES: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'", "&amp;": "&" };
+
+/** HTML ответа бота → обычный текст (выводится React как текст, без разметки). */
 function strip(html: string): string {
-  return html.replace(/<a [^>]*>(.*?)<\/a>/g, "$1").replace(/<[^>]+>/g, "");
+  return html
+    .replace(/<a [^>]*>(.*?)<\/a>/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(?:lt|gt|quot|#x27|amp);/g, (e) => ENTITIES[e] ?? e);
 }
 
 export default function EmulatorPage() {

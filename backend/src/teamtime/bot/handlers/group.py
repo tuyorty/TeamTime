@@ -162,6 +162,14 @@ async def bind(message: Message, command: CommandObject, bot: Bot, session: Asyn
         after={"kind": kind.value, "thread_id": thread_id},
     )
     label = "расписаний" if kind is TopicKind.SCHEDULE else "дейликов"
+    chat = await session.get(BotChat, message.chat.id)
+    if chat is None or not chat.approved:
+        await _short_reply(
+            message,
+            f"Тема для {label} записана, но чат ещё не разрешён. Админ разрешит его на сайте: "
+            "«Админка → Telegram». До этого бот не принимает сообщения из чата.",
+        )
+        return
     await _short_reply(message, f"Готово: эта тема — для {label}.")
 
 

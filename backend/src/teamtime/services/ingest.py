@@ -120,6 +120,10 @@ async def ingest(
     session: AsyncSession, msg: IncomingMessage, settings: AppSettings | None = None
 ) -> IngestOutcome:
     settings = settings or await load_settings(session)
+    # Бот публичный: добавить его в свою группу может кто угодно. Из Telegram принимаем
+    # только чаты, которые админ разрешил на сайте; импорт и эмулятор запускает сам админ.
+    if msg.source is Source.TELEGRAM and not await chat_approved(session, msg.chat_id):
+        return IngestOutcome(skipped="chat_not_approved")
     binding = await topic_binding(session, msg.chat_id, msg.thread_id)
     hint = TOPIC_TO_KIND.get(binding.kind) if binding else msg.topic_hint
 
@@ -186,10 +190,22 @@ async def ingest(
     return outcome
 
 
+async def chat_approved(session: AsyncSession, chat_id: int) -> bool:
+    chat = await session.get(BotChat, chat_id)
+    return bool(chat and chat.approved)
+
+
 async def _ensure_chat(session: AsyncSession, msg: IncomingMessage) -> None:
     chat = await session.get(BotChat, msg.chat_id)
     if chat is None:
-        session.add(BotChat(chat_id=msg.chat_id, title=msg.chat_title, is_forum=msg.is_forum))
+        session.add(
+            BotChat(
+                chat_id=msg.chat_id,
+                title=msg.chat_title,
+                is_forum=msg.is_forum,
+                approved=msg.source is not Source.TELEGRAM,
+            )
+        )
     elif msg.chat_title and chat.title != msg.chat_title:
         chat.title = msg.chat_title
 

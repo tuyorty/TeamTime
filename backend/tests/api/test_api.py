@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import io
 
 import httpx
@@ -9,6 +10,7 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from teamtime.db.models import BotChat
 from teamtime.services.ingest import ingest
 from tests import factories as f
 from tests.api.conftest import ADMIN_HEADERS
@@ -122,6 +124,30 @@ async def test_admin_delete_employee_cascades(admin: httpx.AsyncClient, maker) -
     audit = (await admin.get("/audit")).json()
     items = audit["items"] if isinstance(audit, dict) else audit
     assert any(a["action"] == "employee.delete" for a in items)
+
+
+async def test_admin_approves_and_deletes_chats(admin: httpx.AsyncClient, maker) -> None:
+    stranger = -1009999999999
+    async with maker() as s:
+        await f.employee(s, "Иванов И.И.")
+        msg = dataclasses.replace(f.message(f.schedule_text(), thread=None), chat_id=stranger)
+        assert (await ingest(s, msg)).skipped == "chat_not_approved"
+        s.add(BotChat(chat_id=stranger, title="Новая группа"))  # так её записывает /bind
+        await s.commit()
+    chats = {c["chat_id"]: c for c in (await admin.get("/admin/chats")).json()}
+    assert chats[stranger]["approved"] is False
+    assert chats[f.CHAT]["approved"] is True
+    r = await admin.put(f"/admin/chats/{stranger}", json={"approved": True}, headers=ADMIN_HEADERS)
+    assert r.status_code == 200, r.text
+    async with maker() as s:
+        msg = dataclasses.replace(f.message(f.schedule_text(), thread=None), chat_id=stranger)
+        assert (await ingest(s, msg)).skipped is None
+        await s.commit()
+    r = await admin.delete(f"/admin/chats/{stranger}", headers=ADMIN_HEADERS)
+    assert r.status_code == 200, r.text
+    assert stranger not in {c["chat_id"] for c in (await admin.get("/admin/chats")).json()}
+    anon = await admin.put(f"/admin/chats/{f.CHAT}", json={"approved": False})
+    assert anon.status_code == 403  # без заголовка X-Requested-With
 
 
 async def test_admin_fix_fact_and_settings(admin: httpx.AsyncClient, maker) -> None:

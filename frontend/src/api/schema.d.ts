@@ -338,7 +338,8 @@ export interface paths {
         /** Изменить сотрудника */
         put: operations["update_employee_api_v1_admin_employees__employee_id__put"];
         post?: never;
-        delete?: never;
+        /** Удалить сотрудника с его планами и дейликами */
+        delete: operations["delete_employee_api_v1_admin_employees__employee_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -356,6 +357,41 @@ export interface paths {
         put: operations["link_identity_api_v1_admin_identities__identity_id__put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Чаты, в которые добавлен бот */
+        get: operations["chats_api_v1_admin_chats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/chats/{chat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Разрешить или запретить чат */
+        put: operations["set_chat_api_v1_admin_chats__chat_id__put"];
+        post?: never;
+        /** Забыть чат и его привязки тем */
+        delete: operations["delete_chat_api_v1_admin_chats__chat_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -706,6 +742,27 @@ export interface components {
              * @default 21
              */
             reminder_hour: number;
+        };
+        /** ChatIn */
+        ChatIn: {
+            /** Approved */
+            approved: boolean;
+        };
+        /** ChatOut */
+        ChatOut: {
+            /** Chat Id */
+            chat_id: number;
+            /** Title */
+            title: string;
+            /** Is Forum */
+            is_forum: boolean;
+            /** Approved */
+            approved: boolean;
+            /**
+             * Topics
+             * @default 0
+             */
+            topics: number;
         };
         /** DailyIn */
         DailyIn: {
@@ -2476,6 +2533,39 @@ export interface operations {
             };
         };
     };
+    delete_employee_api_v1_admin_employees__employee_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                employee_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     link_identity_api_v1_admin_identities__identity_id__put: {
         parameters: {
             query?: never;
@@ -2513,12 +2603,100 @@ export interface operations {
             };
         };
     };
-    topics_api_v1_admin_topics_get: {
+    chats_api_v1_admin_chats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOut"][];
+                };
+            };
+        };
+    };
+    set_chat_api_v1_admin_chats__chat_id__put: {
         parameters: {
             query?: never;
             header?: {
                 "x-requested-with"?: string | null;
             };
+            path: {
+                chat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_chat_api_v1_admin_chats__chat_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                chat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    topics_api_v1_admin_topics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -2531,15 +2709,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TopicOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

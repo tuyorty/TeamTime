@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from teamtime.db.models import BotChat, Employee, TelegramIdentity, TopicBinding, TopicKind
 from teamtime.services.ingest import IncomingMessage
-from tests.conftest import NOW
+from tests.conftest import NOW, TEAM_CHAT
 
-CHAT = -1001234567890
+CHAT = TEAM_CHAT
 SCHEDULE_THREAD = 11
 DAILY_THREAD = 22
 _ids = count(1000)
@@ -50,8 +50,12 @@ async def employee(
 
 
 async def forum(session: AsyncSession) -> None:
-    session.add(BotChat(chat_id=CHAT, title="Вымышленная команда", is_forum=True))
-    await session.flush()
+    """Темы форума в чате команды (сам чат уже создан и разрешён фикстурой maker)."""
+    if await session.get(BotChat, CHAT) is None:
+        session.add(
+            BotChat(chat_id=CHAT, title="Вымышленная команда", is_forum=True, approved=True)
+        )
+        await session.flush()
     session.add_all(
         [
             TopicBinding(

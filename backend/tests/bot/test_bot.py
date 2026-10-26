@@ -14,13 +14,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from teamtime.bot.app import build_dispatcher
-from teamtime.bot.keyboards import FixCb, StatusCb
+from teamtime.bot.keyboards import FixCb, MenuCb, StatusCb
 from teamtime.calc import StatusKind
 from teamtime.core.config import Settings
-from teamtime.db.models import DayStatus, ParseResultRow, Resolution, TopicBinding
+from teamtime.db.models import DayStatus, ParseResultRow, RawMessage, Resolution, TopicBinding
 from teamtime.services.facts import current_dailies, current_plans
 from tests import factories as f
-from tests.bot.fake_telegram import FakeSession, Telegram
+from tests.bot.fake_telegram import STRANGERS, FakeSession, Telegram
 from tests.conftest import TEST_DB
 
 pytestmark = pytest.mark.db
@@ -178,3 +178,47 @@ async def test_absent_today_and_vacation(tg: Telegram, maker) -> None:
     kinds = {(st.date, st.kind) for st in statuses}
     assert (date(2026, 10, 26), StatusKind.ABSENT) in kinds
     assert len(statuses) == 6
+
+
+# --- безопасность: бот публичный, найти и добавить его может кто угодно ----------------------
+
+
+async def test_foreign_group_cannot_write_plans(tg: Telegram, maker) -> None:
+    """Расписание сопоставляется по ФИО — из чужой группы его подменять нельзя."""
+    await tg.group(777, f.schedule_text("Петров П.П."), thread=None, chat=STRANGERS)
+    await tg.group(777, f.schedule_text("Петров П.П.") + "\n#расписание", chat=STRANGERS)
+    assert tg.session.calls == []  # ни реакций, ни ответов
+    async with maker() as s:
+        assert await current_plans(s, date(2026, 10, 26), date(2026, 11, 1)) == []
+        assert await s.scalar(select(RawMessage.id)) is None
+
+
+async def test_bind_in_new_chat_waits_for_admin_approval(tg: Telegram, maker) -> None:
+    tg.session.admins.add(601)
+    await tg.group(601, "/bind расписание", thread=11, chat=STRANGERS)
+    assert "не разрешён" in tg.session.texts()[-1]
+    await tg.group(777, f.schedule_text("Петров П.П."), thread=11, chat=STRANGERS)
+    async with maker() as s:
+        assert await current_plans(s, date(2026, 10, 26), date(2026, 11, 1)) == []
+
+
+async def test_team_commands_hidden_from_strangers(tg: Telegram) -> None:
+    await tg.group(501, f.daily_text("26.10.2026", "10:15 - 18:00", 80))
+    for command in ("/today", "/who"):
+        await tg.private(999, command)
+        answer = tg.session.texts()[-1]
+        assert "не привязан" in answer and "Иванов" not in answer
+    sent = len(tg.session.of(SendMessage))
+    await tg.group(777, "/today", chat=STRANGERS)
+    await tg.group(777, "/who", chat=STRANGERS)
+    assert len(tg.session.of(SendMessage)) == sent  # в чужой группе бот молчит
+    await tg.press(999, MenuCb(action="today").pack())
+    assert "Иванов" not in tg.session.texts()[-1]
+
+
+async def test_telegram_name_is_text_not_html_in_group_reply(tg: Telegram) -> None:
+    evil = '<a href="https://evil.example/login">Подтвердите аккаунт</a>'
+    await tg.group(888, f.daily_text("23.10.2026"), name=evil)
+    reply = tg.session.texts()[-1]
+    assert "&lt;a href=" in reply  # имя показано как текст
+    assert '<a href="https://evil' not in reply

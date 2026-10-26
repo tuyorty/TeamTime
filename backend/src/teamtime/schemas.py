@@ -70,6 +70,18 @@ class TopicOut(Schema):
     chat_title: str = ""
 
 
+class ChatOut(Schema):
+    chat_id: int
+    title: str
+    is_forum: bool
+    approved: bool
+    topics: int = 0
+
+
+class ChatIn(BaseModel):
+    approved: bool
+
+
 class TopicIn(BaseModel):
     chat_id: int
     thread_id: int | None = None

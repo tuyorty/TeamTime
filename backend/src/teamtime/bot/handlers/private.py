@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from teamtime.bot import texts
-from teamtime.bot.handlers.commands import send_my_month, send_my_week
+from teamtime.bot.handlers.commands import send_my_month, send_my_week, send_today
 from teamtime.bot.identity import employee_for, not_linked_text
 from teamtime.bot.keyboards import (
     FixCb,
@@ -39,7 +39,7 @@ from teamtime.db.models import (
 )
 from teamtime.parsing import MessageKind, PlanDayKind, parse_daily
 from teamtime.parsing.text import DATE_RE, closest_year, format_seconds, parse_interval_list
-from teamtime.services import manual, reports
+from teamtime.services import manual
 from teamtime.services.facts import today_local
 from teamtime.services.settings import AppSettings
 
@@ -108,7 +108,7 @@ async def menu(
     elif callback_data.action == "month":
         await send_my_month(msg, session, settings, user)
     elif callback_data.action == "today":
-        await msg.answer(texts.format_today(await reports.today_report(session, settings)))
+        await send_today(msg, session, settings, user)
     elif callback_data.action == "absent":
         await msg.answer("Что отметить?", reply_markup=status_menu())
     elif callback_data.action == "fix":

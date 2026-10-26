@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 
 from teamtime.parsing import MessageKind
 from teamtime.services.ingest import IngestOutcome
@@ -39,6 +40,8 @@ def group_feedback(
         return GroupFeedback(reaction, reply)
 
     problem = outcome.problems[0].message if outcome.problems else "нужна проверка"
+    # В тексте проблемы бывает имя из Telegram или строка из сообщения — только как текст.
+    problem = escape(f"{problem[0].upper()}{problem[1:]}")
     link = fix_link(bot_username, outcome.parse_result_id)
     tail = f' <a href="{link}">Исправить в боте</a>' if link else ""
-    return GroupFeedback(cfg.reaction_warn, f"{problem[0].upper()}{problem[1:]}.{tail}")
+    return GroupFeedback(cfg.reaction_warn, f"{problem}.{tail}")

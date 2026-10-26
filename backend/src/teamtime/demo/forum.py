@@ -16,7 +16,9 @@ from teamtime.demo.constants import (
 
 async def ensure_demo_forum(session: AsyncSession) -> None:
     if await session.get(BotChat, DEMO_CHAT_ID) is None:
-        session.add(BotChat(chat_id=DEMO_CHAT_ID, title=DEMO_CHAT_TITLE, is_forum=True))
+        session.add(
+            BotChat(chat_id=DEMO_CHAT_ID, title=DEMO_CHAT_TITLE, is_forum=True, approved=True)
+        )
         await session.flush()
     for thread, kind, title in (
         (SCHEDULE_THREAD_ID, TopicKind.SCHEDULE, "расписание"),
