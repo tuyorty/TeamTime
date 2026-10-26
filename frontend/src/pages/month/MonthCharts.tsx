@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import type { Month } from "@/api/types";
 import { TooltipBox } from "@/components/charts/ChartTooltip";
+import { planFactShape } from "@/components/charts/PlanFactBar";
 import { axisProps, chart } from "@/components/charts/theme";
 import { Avatar } from "@/components/domain/Avatar";
 import { Badge } from "@/components/ui/badge";
@@ -70,13 +71,26 @@ function WeeksChart({ data }: { data: Month }) {
   );
 }
 
+const historyShape = planFactShape({
+  outlineKey: "norm",
+  fillKey: "total",
+  outlineColor: chart.ink3,
+  fillColor: chart.accent,
+  fillRatio: 0.6,
+  radius: 4,
+});
+
 function HistoryChart({ data }: { data: Month }) {
-  const rows = data.history.map((h) => ({ ...h, total: h.total_sec / H, norm: h.norm_sec / H }));
+  const rows = data.history.map((h) => {
+    const total = Math.max(0, h.total_sec) / H;
+    const norm = h.norm_sec / H;
+    return { ...h, total, norm, outer: Math.max(total, norm) };
+  });
   return (
     <Panel title="Сравнение месяцев" description="Итого команды (заливка) и сумма норм (контур)">
       <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} barGap={-30} barCategoryGap="30%">
+          <BarChart data={rows} barCategoryGap="30%">
             <CartesianGrid vertical={false} stroke={chart.line} />
             <XAxis dataKey="label" {...axisProps} />
             <YAxis {...axisProps} width={40} />
@@ -97,8 +111,7 @@ function HistoryChart({ data }: { data: Month }) {
                 );
               }}
             />
-            <Bar dataKey="norm" fill="transparent" stroke={chart.ink3} radius={[4, 4, 0, 0]} barSize={30} isAnimationActive={false} />
-            <Bar dataKey="total" fill={chart.accent} radius={[4, 4, 0, 0]} barSize={18} isAnimationActive={false} />
+            <Bar dataKey="outer" shape={historyShape} activeBar={historyShape} maxBarSize={44} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>

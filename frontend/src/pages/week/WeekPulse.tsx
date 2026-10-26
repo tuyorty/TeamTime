@@ -4,6 +4,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import type { Week } from "@/api/types";
 import { TooltipBox } from "@/components/charts/ChartTooltip";
+import { planFactShape } from "@/components/charts/PlanFactBar";
 import { axisProps, chart } from "@/components/charts/theme";
 import { Avatar } from "@/components/domain/Avatar";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,15 @@ const ICON = { late: AlarmClock, early_leave: LogOut, undertime: Hourglass, miss
 const LABEL = { late: "опоздание", early_leave: "ранний уход", undertime: "недоработка", missing: "нет дейлика" };
 const TONE = { late: "late", early_leave: "deviation", undertime: "deviation", missing: "neutral" } as const;
 
+const pulseShape = planFactShape({
+  outlineKey: "plan",
+  fillKey: "fact",
+  outlineColor: chart.ink3,
+  fillColor: chart.accent,
+  fillRatio: 0.6,
+  radius: 4,
+});
+
 /** «Пульс недели»: сколько часов план и факт по дням, и где они разошлись. */
 export function WeekPulse({ data }: { data: Week }) {
   const planned = useMemo(
@@ -29,7 +39,16 @@ export function WeekPulse({ data }: { data: Week }) {
       data.days.map((d, i) => {
         const plan = data.rows.reduce((s, r) => s + (r.cells[i]!.plan?.planned_sec ?? 0), 0);
         const fact = data.day_totals[i]!.worked_sec;
-        return { day: WEEKDAYS_SHORT[weekday(d)]!, date: d, plan: plan / 3600, fact: fact / 3600, late: data.day_totals[i]!.late_count };
+        return {
+          day: WEEKDAYS_SHORT[weekday(d)]!,
+          date: d,
+          plan: plan / 3600,
+          fact: fact / 3600,
+          outer: Math.max(plan, fact) / 3600,
+          late: data.day_totals[i]!.late_count,
+          planned: data.day_totals[i]!.planned_count,
+          reported: data.day_totals[i]!.worked_count,
+        };
       }),
     [data],
   );
@@ -59,7 +78,7 @@ export function WeekPulse({ data }: { data: Week }) {
       >
         <div className="h-48" role="img" aria-label="План и факт часов команды по дням недели">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={planned} barGap={-22} barCategoryGap="30%">
+            <BarChart data={planned} barCategoryGap="30%">
               <CartesianGrid vertical={false} stroke={chart.line} />
               <XAxis dataKey="day" {...axisProps} />
               <YAxis {...axisProps} width={28} tickFormatter={(v: number) => `${v}`} />
@@ -74,14 +93,14 @@ export function WeekPulse({ data }: { data: Week }) {
                       rows={[
                         { label: "План", value: hm(p.plan * 3600) },
                         { label: "Факт", value: hm(p.fact * 3600), color: chart.accent },
+                        { label: "Дейликов", value: p.planned ? `${p.reported} из ${p.planned}` : p.reported },
                         { label: "Опоздали", value: p.late },
                       ]}
                     />
                   );
                 }}
               />
-              <Bar dataKey="plan" name="План" fill="transparent" stroke={chart.ink3} strokeWidth={1} radius={[4, 4, 0, 0]} barSize={22} isAnimationActive={false} />
-              <Bar dataKey="fact" name="Факт" fill={chart.accent} radius={[4, 4, 0, 0]} barSize={14} isAnimationActive={false} />
+              <Bar dataKey="outer" shape={pulseShape} activeBar={pulseShape} maxBarSize={36} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>

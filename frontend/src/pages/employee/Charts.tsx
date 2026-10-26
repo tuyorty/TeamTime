@@ -5,12 +5,23 @@ import {
 
 import type { EmployeeDetail } from "@/api/types";
 import { TooltipBox } from "@/components/charts/ChartTooltip";
+import { planFactShape } from "@/components/charts/PlanFactBar";
 import { axisProps, chart } from "@/components/charts/theme";
 import { Panel } from "@/components/ui/panel";
 import { Segmented } from "@/components/ui/segmented";
 import { WEEKDAYS_SHORT, ddmm, hm, weekday } from "@/lib/format";
 
 const H = 3600;
+
+const daysShape = planFactShape({ outlineKey: "plan", fillKey: "fact", outlineColor: chart.ink3, fillColor: chart.accent, fillRatio: 0.6 });
+const weeksShape = planFactShape({
+  outlineKey: "fact",
+  fillKey: "result",
+  outlineColor: chart.accent,
+  fillColor: chart.accent,
+  fillRatio: 0.6,
+  radius: 4,
+});
 
 /** Часы: план контуром, факт заливкой — та же грамматика, что у полосы дня. */
 export function HoursChart({ data }: { data: EmployeeDetail }) {
@@ -26,7 +37,8 @@ export function HoursChart({ data }: { data: EmployeeDetail }) {
           fact: (d.fact?.worked_sec ?? 0) / H,
           result: (d.fact?.result_sec ?? 0) / H,
           missing: d.state === "missing",
-        })),
+        }))
+        .map((r) => ({ ...r, outer: Math.max(r.plan, r.fact) })),
     [data.days],
   );
   const weeks = data.weeks.map((w) => ({
@@ -36,6 +48,7 @@ export function HoursChart({ data }: { data: EmployeeDetail }) {
     fact: w.worked_sec / H,
     result: w.result_sec / H,
     missing: false,
+    outer: w.worked_sec / H,
   }));
   const rows = mode === "days" ? days : weeks;
   return (
@@ -56,7 +69,7 @@ export function HoursChart({ data }: { data: EmployeeDetail }) {
     >
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} barGap={mode === "days" ? -10 : -24} barCategoryGap={mode === "days" ? "18%" : "35%"}>
+          <BarChart data={rows} barCategoryGap={mode === "days" ? "18%" : "35%"}>
             <CartesianGrid vertical={false} stroke={chart.line} />
             <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" minTickGap={18} />
             <YAxis {...axisProps} width={28} />
@@ -77,17 +90,14 @@ export function HoursChart({ data }: { data: EmployeeDetail }) {
                 );
               }}
             />
-            {mode === "days" ? (
-              <>
-                <Bar dataKey="plan" fill="transparent" stroke={chart.ink3} radius={[3, 3, 0, 0]} barSize={10} isAnimationActive={false} />
-                <Bar dataKey="fact" fill={chart.accent} radius={[3, 3, 0, 0]} barSize={6} isAnimationActive={false} />
-              </>
-            ) : (
-              <>
-                <Bar dataKey="fact" fill="transparent" stroke={chart.accent} radius={[4, 4, 0, 0]} barSize={24} isAnimationActive={false} />
-                <Bar dataKey="result" fill={chart.accent} radius={[4, 4, 0, 0]} barSize={16} isAnimationActive={false} />
-              </>
-            )}
+            <Bar
+              key={mode}
+              dataKey="outer"
+              shape={mode === "days" ? daysShape : weeksShape}
+              activeBar={mode === "days" ? daysShape : weeksShape}
+              maxBarSize={mode === "days" ? 16 : 40}
+              isAnimationActive={false}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
