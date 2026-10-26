@@ -11,7 +11,7 @@ from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -385,7 +385,20 @@ async def month_report(
     for _ in range(history):
         months.append((y, m))
         y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    first_data = await session.scalar(
+        select(func.min(Daily.work_date)).where(Daily.retracted_at.is_(None))
+    )
     for hy, hm_ in reversed(months):
+        if (
+            first_data
+            and (hy, hm_) < (first_data.year, first_data.month)
+            and (hy, hm_)
+            != (
+                year,
+                month,
+            )
+        ):
+            continue
         if (hy, hm_) == (year, month):
             summaries = [r.summary for r in rows]
         else:
@@ -700,8 +713,6 @@ async def plans_report(
 
 
 async def pending_inbox_count(session: AsyncSession) -> int:
-    from sqlalchemy import func
-
     return (
         await session.scalar(
             select(func.count())

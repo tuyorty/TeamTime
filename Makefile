@@ -3,7 +3,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 PY      := backend/.venv/bin/python
-BACKEND := cd backend &&
+BACKEND := cd backend && export PYTHONPATH=src &&
 WEB     := cd frontend &&
 COMPOSE := docker compose
 TEST_DB ?= postgresql+asyncpg://teamtime:teamtime@localhost:5433/teamtime_test

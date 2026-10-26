@@ -98,7 +98,7 @@ async def test_golden_month_from_messages(session: AsyncSession) -> None:
         (8, "3:20"),
     ]
     assert month.scale.problems == []
-    assert [h.month for h in month.history] == [9, 10]
+    assert [h.month for h in month.history] == [10]  # сентябрь пустой — в историю не попадает
     kinds = {(d.date.day, d.kind) for d in month.deviations}
     assert (8, "late") in kinds and (7, "missing_daily") in kinds
 

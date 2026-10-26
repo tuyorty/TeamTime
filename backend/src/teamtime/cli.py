@@ -56,9 +56,24 @@ def bot_run() -> None:
 def demo_seed(
     if_empty: bool = typer.Option(False, "--if-empty", help="Только если в базе нет сотрудников."),
     force: bool = typer.Option(False, "--force", help="Очистить данные и загрузить заново."),
+    weeks: int = typer.Option(9, min=1, max=26, help="Сколько недель истории."),
+    seed: int = typer.Option(7, help="Зерно генератора: одно и то же даёт одни и те же данные."),
 ) -> None:
     """Загрузить вымышленных сотрудников и несколько недель сообщений."""
-    typer.echo("Демо-данные ещё не реализованы.")
+    import asyncio
+
+    from teamtime.db.session import session_scope
+    from teamtime.demo.seed import seed_demo
+
+    async def go() -> bool:
+        async with session_scope() as session:
+            return await seed_demo(session, weeks=weeks, seed=seed, force=force, if_empty=if_empty)
+
+    try:
+        done = asyncio.run(go())
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("Демо-данные загружены." if done else "В базе уже есть данные, демо не загружено.")
 
 
 if __name__ == "__main__":
