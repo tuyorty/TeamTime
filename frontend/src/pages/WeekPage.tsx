@@ -81,6 +81,13 @@ export default function WeekPage() {
       return true;
     });
   }, [data, filter, query]);
+  // Фильтр оставляет людей, у кого за неделю есть нужные дни, а остальные дни приглушает:
+  // иначе при опозданиях почти у всех таблица выглядела бы так же, как без фильтра.
+  const dim = useMemo<((c: DayCell) => boolean) | undefined>(() => {
+    if (filter === "deviations") return (c) => !hasDeviation(c);
+    if (filter === "missing") return (c) => c.state !== "missing";
+    return undefined;
+  }, [filter]);
 
   const axis = useMemo(() => axisFor(data?.rows.flatMap((r) => r.cells) ?? []), [data]);
   const selectedRef = useMemo(() => {
@@ -170,6 +177,12 @@ export default function WeekPage() {
             { value: "missing", label: "Без дейлика" },
           ]}
         />
+        {data && (filter !== "all" || query.trim()) ? (
+          <span className="text-[12px] text-ink-3 tnum">
+            {count(rows.length, ["сотрудник", "сотрудника", "сотрудников"])} из {data.rows.length}
+            {filter !== "all" ? ", остальные дни приглушены" : ""}
+          </span>
+        ) : null}
         <Legend />
       </div>
 
@@ -180,10 +193,10 @@ export default function WeekPage() {
       ) : (
         <div className={cn("transition-opacity", isPlaceholderData && "opacity-60")}>
           <div className="hidden md:block">
-            <WeekTable data={data} rows={rows} axis={axis} density={density} onOpen={open} />
+            <WeekTable data={data} rows={rows} axis={axis} density={density} dim={dim} onOpen={open} />
           </div>
           <div className="md:hidden">
-            <WeekMobile data={data} rows={rows} axis={axis} onOpen={open} />
+            <WeekMobile data={data} rows={rows} axis={axis} dim={dim} onOpen={open} />
           </div>
           <div className="mt-2 flex flex-wrap justify-between gap-2">
             <TruncationNote />
@@ -335,6 +348,7 @@ function DayCellButton({
   axis,
   density,
   today,
+  dimmed = false,
   onOpen,
 }: {
   employeeId: number;
@@ -342,6 +356,7 @@ function DayCellButton({
   axis: Axis;
   density: Density;
   today: string;
+  dimmed?: boolean;
   onOpen: (e: number, d: string) => void;
 }) {
   const flashed = useFlashed(employeeId, cell.date);
@@ -353,6 +368,7 @@ function DayCellButton({
         className={cn(
           "grid h-full w-full gap-1.5 px-2.5 text-left transition-colors hover:bg-surface-2/70 focus-visible:-outline-offset-2",
           density === "compact" ? "py-2" : "py-2.5",
+          dimmed && "opacity-30 hover:opacity-100",
         )}
       >
         <DayStrip cell={cell} axis={axis} height={density === "compact" ? 10 : 14} />
@@ -367,12 +383,14 @@ function WeekTable({
   rows,
   axis,
   density,
+  dim,
   onOpen,
 }: {
   data: Week;
   rows: WeekRow[];
   axis: Axis;
   density: Density;
+  dim?: (c: DayCell) => boolean;
   onOpen: (e: number, d: string) => void;
 }) {
   return (
@@ -423,7 +441,7 @@ function WeekTable({
                 <EmployeeCell employee={r.employee} row={r} planHref={`/plans/${data.iso_year}/${data.iso_week}`} />
               </th>
               {r.cells.map((c) => (
-                <DayCellButton key={c.date} employeeId={r.employee.id} cell={c} axis={axis} density={density} today={data.today} onOpen={onOpen} />
+                <DayCellButton key={c.date} employeeId={r.employee.id} cell={c} axis={axis} density={density} today={data.today} dimmed={dim?.(c)} onOpen={onOpen} />
               ))}
               <td className="border-l border-line px-3 py-2.5 text-right align-top whitespace-nowrap tnum">
                 <div className="text-[14px] font-semibold">{hm(r.totals.worked_sec)}</div>
@@ -482,11 +500,13 @@ function WeekMobile({
   data,
   rows,
   axis,
+  dim,
   onOpen,
 }: {
   data: Week;
   rows: WeekRow[];
   axis: Axis;
+  dim?: (c: DayCell) => boolean;
   onOpen: (e: number, d: string) => void;
 }) {
   const initial = data.days.includes(data.today) ? data.days.indexOf(data.today) : 0;
@@ -521,7 +541,11 @@ function WeekMobile({
             const c = r.cells[day]!;
             return (
               <li key={r.employee.id}>
-                <button type="button" onClick={() => onOpen(r.employee.id, date)} className="grid w-full gap-2 px-3 py-3 text-left">
+                <button
+                  type="button"
+                  onClick={() => onOpen(r.employee.id, date)}
+                  className={cn("grid w-full gap-2 px-3 py-3 text-left", dim?.(c) && "opacity-30")}
+                >
                   <div className="flex items-center gap-2">
                     <Avatar employee={r.employee} size={24} />
                     <span className="text-[14px] font-medium">{r.employee.short_name}</span>
