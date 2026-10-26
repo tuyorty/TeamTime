@@ -50,7 +50,7 @@ export function MonthHeatmap({ data, today }: { data: EmployeeDetail; today: str
                 role="gridcell"
                 aria-label={title(c)}
                 className={cn(
-                  "relative flex aspect-square min-h-8 items-start justify-start rounded-[4px] p-1 text-[11px] tnum",
+                  "relative flex h-11 items-start justify-start rounded-[4px] p-1 text-[11px] tnum",
                   c.fact ? "text-ink" : "bg-surface-2 text-ink-3",
                   !c.fact && c.status && c.status !== "remote" && "hatch-absence",
                   c.state === "missing" && "border border-dashed border-ink-3 bg-transparent",

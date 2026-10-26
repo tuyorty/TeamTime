@@ -71,6 +71,8 @@ class IncomingMessage:
     source: Source = Source.TELEGRAM
     chat_title: str = ""
     is_forum: bool = False
+    topic_hint: MessageKind | None = None
+    """Тип темы, если привязки нет (импорт: тема узнаётся по названию)."""
 
 
 @dataclass(slots=True)
@@ -119,7 +121,7 @@ async def ingest(
 ) -> IngestOutcome:
     settings = settings or await load_settings(session)
     binding = await topic_binding(session, msg.chat_id, msg.thread_id)
-    hint = TOPIC_TO_KIND.get(binding.kind) if binding else None
+    hint = TOPIC_TO_KIND.get(binding.kind) if binding else msg.topic_hint
 
     raw = await session.scalar(
         select(RawMessage).where(
@@ -128,7 +130,7 @@ async def ingest(
     )
     is_edit = False
     if raw is None:
-        if binding is None and detect_kind(msg.text) is MessageKind.UNKNOWN:
+        if hint is None and detect_kind(msg.text) is MessageKind.UNKNOWN:
             return IngestOutcome(skipped="not_relevant")
         await _ensure_chat(session, msg)
         raw = RawMessage(

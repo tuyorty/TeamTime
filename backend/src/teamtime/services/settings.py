@@ -53,6 +53,14 @@ class PenaltySettings(BaseModel):
         )
 
 
+# Bot API разрешает только эти эмодзи в ReactionTypeEmoji (сверено с документацией 2026-10-26).
+ALLOWED_REACTIONS = frozenset(
+    "❤ 👍 👎 🔥 🥰 👏 😁 🤔 🤯 😱 🤬 😢 🎉 🤩 🤮 💩 🙏 👌 🕊 🤡 🥱 🥴 😍 🐳 ❤‍🔥 🌚 🌭 💯 🤣 ⚡ 🍌 "
+    "🏆 💔 🤨 😐 🍓 🍾 💋 🖕 😈 😴 😭 🤓 👻 👨‍💻 👀 🎃 🙈 😇 😨 🤝 ✍ 🤗 🫡 🎅 🎄 ☃ 💅 🤪 🗿 🆒 💘 "
+    "🙉 🦄 😘 💊 🙊 😎 👾 🤷‍♂ 🤷 🤷‍♀ 😡".split()
+)
+
+
 class BotSettings(BaseModel):
     feedback: Literal["reaction", "reply"] = Field(
         "reaction", description="Как отмечать разобранные сообщения в теме"
@@ -62,6 +70,13 @@ class BotSettings(BaseModel):
     reaction_edit: str = "✍"
     reminders_enabled: bool = False
     reminder_hour: int = Field(21, ge=0, le=23, description="Во сколько напоминать о дейлике")
+
+    @field_validator("reaction_ok", "reaction_warn", "reaction_edit")
+    @classmethod
+    def _check_reaction(cls, v: str) -> str:
+        if v not in ALLOWED_REACTIONS:
+            raise ValueError(f"Telegram не разрешает реакцию {v!r}: выберите из списка Bot API")
+        return v
 
 
 class AppSettings(BaseModel):

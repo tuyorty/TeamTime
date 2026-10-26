@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, HTTPException, Path, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -308,3 +308,47 @@ async def put_settings(
     )  # fmt: skip
     await events.notify(session, "settings.changed")
     return SettingsOut(settings=body, warnings=body.penalty.scale().validate())
+
+
+# --- импорт истории ------------------------------------------------------------------------
+
+
+class ImportOut(BaseModel):
+    chat_title: str
+    chat_id: int
+    total: int
+    imported: int
+    unchanged: int
+    skipped: int
+    statuses: dict[str, int]
+    topics: dict[str, str]
+    errors: list[str]
+
+
+MAX_IMPORT_BYTES = 50 * 1024 * 1024
+
+
+@router.post("/import/telegram", summary="Импорт экспорта Telegram Desktop (result.json)")
+async def import_telegram(
+    file: UploadFile, session: SessionDep, settings: AppSettingsDep, actor: AdminDep
+) -> ImportOut:
+    from teamtime.importer.telegram import ExportFormatError, import_export, load_export
+
+    data = await file.read(MAX_IMPORT_BYTES + 1)
+    if len(data) > MAX_IMPORT_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Файл больше 50 МБ: используйте CLI")
+    try:
+        report = await import_export(session, load_export(data), settings=settings)
+    except ExportFormatError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    await audit.record(
+        session,
+        actor=actor,
+        action="import.telegram",
+        entity_type="import",
+        entity_id=report.chat_id,
+        after={k: v for k, v in report.as_dict().items() if k != "errors"},
+        reason=file.filename or "",
+    )
+    await events.notify(session, "settings.changed")
+    return ImportOut(**report.as_dict())

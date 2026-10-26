@@ -1,0 +1,106 @@
+{
+ "name": "Вымышленная команда",
+ "type": "private_supergroup",
+ "id": 1234567890,
+ "messages": [
+  {
+   "id": 2,
+   "type": "service",
+   "date": "2026-10-01T10:00:00",
+   "date_unixtime": "1790830800",
+   "actor": "Админ",
+   "actor_id": "user1",
+   "action": "topic_created",
+   "title": "Расписание",
+   "text": ""
+  },
+  {
+   "id": 3,
+   "type": "service",
+   "date": "2026-10-01T10:00:05",
+   "date_unixtime": "1790830805",
+   "actor": "Админ",
+   "actor_id": "user1",
+   "action": "topic_created",
+   "title": "Дейлики",
+   "text": ""
+  },
+  {
+   "id": 10,
+   "type": "message",
+   "date": "2026-10-18T21:00:00",
+   "date_unixtime": "1792339200",
+   "from": "🦊 лис",
+   "from_id": "user501",
+   "reply_to_message_id": 2,
+   "text": [
+    "Спринт 19.10 - 24.10\nИванов И.И.\n\nПн: 10:00 - 18:00\nВт: 10:00 - 18:00\n\n- задача\n\n",
+    {
+     "type": "hashtag",
+     "text": "#расписание"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "message",
+   "date": "2026-10-19T19:00:00",
+   "date_unixtime": "1792418400",
+   "edited": "2026-10-19T19:05:00",
+   "edited_unixtime": "1792418700",
+   "from": "🦊 лис",
+   "from_id": "user501",
+   "reply_to_message_id": 3,
+   "text": "19.10.2026\n10:20 - 18:00\nЭффективность: 90%\n\n- сделал"
+  },
+  {
+   "id": 12,
+   "type": "message",
+   "date": "2026-10-19T19:10:00",
+   "date_unixtime": "1792419000",
+   "from": "Петя",
+   "from_id": "user502",
+   "reply_to_message_id": 11,
+   "text": "отличная работа!"
+  },
+  {
+   "id": 13,
+   "type": "message",
+   "date": "2026-10-20T19:00:00",
+   "date_unixtime": "1792504800",
+   "from": "🦊 лис",
+   "from_id": "user501",
+   "reply_to_message_id": 12,
+   "text": [
+    {
+     "type": "plain",
+     "text": "20.10.2026\n"
+    },
+    {
+     "type": "bold",
+     "text": "11:00 - 19:00"
+    },
+    "\nЭффективность: 80%"
+   ]
+  },
+  {
+   "id": 14,
+   "type": "message",
+   "date": "2026-10-20T20:00:00",
+   "date_unixtime": "1792508400",
+   "from": "Петя",
+   "from_id": "user502",
+   "text": "кто завтра в офисе?"
+  },
+  {
+   "id": 15,
+   "type": "message",
+   "date": "2026-10-20T20:00:00",
+   "date_unixtime": "1792508400",
+   "from": "Петя",
+   "from_id": "user502",
+   "photo": "photos/1.jpg",
+   "text": ""
+  }
+ ]
+}

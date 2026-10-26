@@ -107,7 +107,7 @@ export function EfficiencyChart({ data }: { data: EmployeeDetail }) {
           <LineChart data={rows} margin={{ top: 8, right: 8 }}>
             <CartesianGrid vertical={false} stroke={chart.line} />
             <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" minTickGap={18} />
-            <YAxis {...axisProps} width={32} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={(v: number) => `${v}%`} />
+            <YAxis {...axisProps} width={40} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={(v: number) => `${v}%`} />
             {avg !== null ? <ReferenceLine y={avg} stroke={chart.ink3} strokeDasharray="4 4" /> : null}
             <Tooltip
               content={({ active, payload }) => {

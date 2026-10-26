@@ -250,7 +250,7 @@ function NotesPanel({ data }: { data: EmployeeDetail }) {
             const S = n.status ? STATUS[n.status] : null;
             return (
               <li key={i} className="flex items-start gap-2.5 text-[13px]">
-                <span className="w-16 shrink-0 text-ink-3 tnum">
+                <span className="w-[4.5rem] shrink-0 whitespace-nowrap text-ink-3 tnum">
                   {WEEKDAYS_SHORT[weekday(n.date)]} {ddmm(n.date)}
                 </span>
                 {S ? (

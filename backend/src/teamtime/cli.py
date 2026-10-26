@@ -31,6 +31,38 @@ def version() -> None:
     typer.echo(__version__)
 
 
+import_app = typer.Typer(help="Импорт истории.", no_args_is_help=True)
+app.add_typer(import_app, name="import")
+
+
+@import_app.command("telegram")
+def import_telegram(
+    path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, help="result.json из Telegram Desktop"
+    ),
+    chat_id: int | None = typer.Option(None, help="Переопределить chat_id (вид Bot API: -100…)"),
+) -> None:
+    """Импортировать экспорт чата. Повторный запуск ничего не дублирует."""
+    import asyncio
+    import json as _json
+
+    from teamtime.db.session import session_scope
+    from teamtime.importer.telegram import ExportFormatError, import_export, load_export
+
+    raw = path.read_bytes()
+
+    async def go() -> dict[str, object]:
+        async with session_scope() as session:
+            report = await import_export(session, load_export(raw), chat_id=chat_id)
+            return report.as_dict()
+
+    try:
+        result = asyncio.run(go())
+    except ExportFormatError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(_json.dumps(result, ensure_ascii=False, indent=2))
+
+
 @db_app.command("upgrade")
 def db_upgrade(revision: str = typer.Argument("head")) -> None:
     """Применить миграции (по умолчанию до последней)."""

@@ -282,7 +282,7 @@ function Calculator({ data }: { data: Month }) {
         </label>
         <div className="rounded-lg bg-bg p-4">
           <div className="text-[12px] text-ink-2">Штраф, Опоздания(−)</div>
-          <div className="font-display text-[40px] font-semibold leading-tight text-late-ink tnum" aria-live="polite">
+          <div role="status" aria-label="Рассчитанный штраф" className="font-display text-[40px] font-semibold leading-tight text-late-ink tnum">
             {result ? hm(result.penalty_sec) : "…"}
           </div>
           <div className="text-[13px] text-ink-2">

@@ -8,6 +8,7 @@ export function ThemedToaster() {
     <Toaster
       theme={isDark ? "dark" : "light"}
       position="bottom-right"
+      containerAriaLabel="Уведомления"
       offset={{ bottom: 24, right: 24 }}
       mobileOffset={{ bottom: 80 }}
       toastOptions={{

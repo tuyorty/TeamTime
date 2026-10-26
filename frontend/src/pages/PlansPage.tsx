@@ -150,7 +150,7 @@ export default function PlansPage() {
                       )}
                       {r.current ? (
                         <p className="mt-2 text-[12px] text-ink-3">
-                          Дейлики: {r.days_with_daily} из {r.days_planned} дней с планом
+                          Дней с планом: {r.days_planned}, с дейликом: {r.days_with_daily}
                           {r.done_tasks.length ? `, сделано пунктов: ${r.done_tasks.length}` : ""}
                         </p>
                       ) : null}

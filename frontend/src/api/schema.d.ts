@@ -500,6 +500,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/import/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Импорт экспорта Telegram Desktop (result.json) */
+        post: operations["import_telegram_api_v1_admin_import_telegram_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export/weeks/{iso_year}/{iso_week}.{fmt}": {
         parameters: {
             query?: never;
@@ -648,6 +665,11 @@ export interface components {
             admin_enabled: boolean;
             /** Demo Password Hint */
             demo_password_hint: boolean;
+        };
+        /** Body_import_telegram_api_v1_admin_import_telegram_post */
+        Body_import_telegram_api_v1_admin_import_telegram_post: {
+            /** File */
+            file: string;
         };
         /** BotSettings */
         BotSettings: {
@@ -1009,6 +1031,31 @@ export interface components {
              * Format: date-time
              */
             last_seen_at: string;
+        };
+        /** ImportOut */
+        ImportOut: {
+            /** Chat Title */
+            chat_title: string;
+            /** Chat Id */
+            chat_id: number;
+            /** Total */
+            total: number;
+            /** Imported */
+            imported: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Skipped */
+            skipped: number;
+            /** Statuses */
+            statuses: {
+                [key: string]: number;
+            };
+            /** Topics */
+            topics: {
+                [key: string]: string;
+            };
+            /** Errors */
+            errors: string[];
         };
         /** InboxItem */
         InboxItem: {
@@ -2831,6 +2878,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_telegram_api_v1_admin_import_telegram_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_telegram_api_v1_admin_import_telegram_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportOut"];
                 };
             };
             /** @description Validation Error */

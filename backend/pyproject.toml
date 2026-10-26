@@ -59,7 +59,7 @@ ignore = [
 "datetime.datetime.now".msg = "Используйте teamtime.core.clock.now(): время должно приходить снаружи"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["DTZ001", "PT011", "PT018"]
+"tests/**" = ["DTZ001", "PT011", "PT018", "ASYNC240"]
 "src/teamtime/core/clock.py" = ["TID251"]
 "migrations/**" = ["N999"]
 

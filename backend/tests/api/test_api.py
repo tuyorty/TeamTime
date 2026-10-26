@@ -188,3 +188,23 @@ async def test_inbox_flow(admin: httpx.AsyncClient, maker) -> None:
     )
     assert r.status_code == 200
     assert (await admin.get("/inbox")).json()["counts"]["pending"] == 0
+
+
+async def test_import_upload(admin: httpx.AsyncClient, maker) -> None:
+    from pathlib import Path
+
+    async with maker() as s:
+        await f.employee(s, "Иванов И.И.", tg_id=501)
+        await s.commit()
+    data = (Path(__file__).resolve().parents[1] / "fixtures" / "telegram_export.json").read_bytes()
+    files = {"file": ("result.json", data, "application/json")}
+    r = await admin.post("/admin/import/telegram", files=files, headers=ADMIN_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["imported"] == 4
+    bad = await admin.post(
+        "/admin/import/telegram",
+        files={"file": ("x.json", b"{}", "application/json")},
+        headers=ADMIN_HEADERS,
+    )
+    assert bad.status_code == 422
+    assert (await admin.get("/audit")).json()[0]["action"] == "import.telegram"
