@@ -177,18 +177,29 @@ function InboxCard({ item }: { item: InboxItem }) {
           <div className="mt-1 flex flex-wrap gap-2">
             {fixHref ? (
               <Button asChild size="sm" variant="primary">
-                <Link to={fixHref}>
-                  <Pencil /> Исправить
+                <Link to={fixHref} title="Открыть этот день в табеле и вручную поправить время и e%. Правка пишется в аудит.">
+                  <Pencil /> Исправить в табеле
                 </Link>
               </Button>
             ) : null}
             {p.resolution === "pending" && d && !p.employee_unresolved ? (
-              <Button size="sm" onClick={() => resolve.mutate("accepted")} disabled={resolve.isPending}>
+              <Button
+                size="sm"
+                title="Данные уже учтены. Убрать запись из инбокса, ничего не меняя."
+                onClick={() => resolve.mutate("accepted")}
+                disabled={resolve.isPending}
+              >
                 <Check /> Принять как есть
               </Button>
             ) : null}
             {p.resolution === "pending" ? (
-              <Button size="sm" variant="ghost" onClick={() => resolve.mutate("ignored")} disabled={resolve.isPending}>
+              <Button
+                size="sm"
+                variant="ghost"
+                title="Это не дейлик и не расписание. Убрать из инбокса; данные из сообщения не учитываются."
+                onClick={() => resolve.mutate("ignored")}
+                disabled={resolve.isPending}
+              >
                 <EyeOff /> Игнорировать
               </Button>
             ) : (
@@ -196,9 +207,19 @@ function InboxCard({ item }: { item: InboxItem }) {
                 Вернуть в инбокс
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={() => reparse.mutate()} disabled={reparse.isPending}>
+            <Button
+              size="sm"
+              variant="ghost"
+              title="Разобрать исходное сообщение заново текущей версией бота: после обновления парсера, добавления сотрудника или привязки аккаунта."
+              onClick={() => reparse.mutate()}
+              disabled={reparse.isPending}
+            >
               <RotateCw /> Переразобрать
             </Button>
+            <p className="basis-full text-[12px] leading-snug text-ink-3">
+              «Исправить в табеле» — поправить цифры дня вручную. «Принять как есть» — данные верны, убрать из инбокса.
+              «Переразобрать» — прочитать сообщение заново, если бот обновился или в справочнике появился сотрудник.
+            </p>
           </div>
         ) : (
           <p className="text-[12px] text-ink-3">Исправить, принять или игнорировать можно в режиме админа.</p>

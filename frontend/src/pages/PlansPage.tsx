@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ClipboardList, GitCompareArrows } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ClipboardList, GitCompareArrows } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
@@ -136,18 +136,7 @@ export default function PlansPage() {
                       );
                     })}
                     <td className="border-l border-line px-3 py-2.5">
-                      {r.current?.tasks.length ? (
-                        <ul className="grid gap-0.5">
-                          {r.current.tasks.map((t, i) => (
-                            <li key={i} className="flex gap-1.5">
-                              <span className="mt-[7px] size-1.5 shrink-0 rounded-full border border-ink-3" />
-                              {t}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <span className="text-ink-3">—</span>
-                      )}
+                      {r.current?.tasks.length ? <TaskList tasks={r.current.tasks} /> : <span className="text-ink-3">—</span>}
                       {r.current ? (
                         <p className="mt-2 text-[12px] text-ink-3">
                           Дней с планом: {r.days_planned}, с дейликом: {r.days_with_daily}
@@ -174,6 +163,42 @@ export default function PlansPage() {
 }
 
 /** Различия версий: какие дни поменялись между соседними версиями. */
+const COLLAPSED_TASKS = 3;
+/** Длиннее — в свёрнутом виде обрезается многоточием. */
+const LONG_TASK = 70;
+
+/** Задачи спринта: свёрнуто — первые пункты в одну строку, чтобы строки табеля не разъезжались. */
+function TaskList({ tasks }: { tasks: string[] }) {
+  const [open, setOpen] = useState(false);
+  const collapsible = tasks.length > COLLAPSED_TASKS || tasks.some((t) => t.length > LONG_TASK);
+  const shown = open || !collapsible ? tasks : tasks.slice(0, COLLAPSED_TASKS);
+  const hidden = tasks.length - shown.length;
+  return (
+    <div className="grid justify-items-start gap-1">
+      <ul className="grid w-full gap-0.5">
+        {shown.map((t, i) => (
+          <li key={i} className="flex min-w-0 gap-1.5" title={open ? undefined : t}>
+            <span className="mt-[7px] size-1.5 shrink-0 rounded-full border border-ink-3" />
+            <span className={cn("min-w-0", !open && collapsible && "truncate")}>{t}</span>
+          </li>
+        ))}
+      </ul>
+      {collapsible ? (
+        <Button
+          size="sm"
+          variant="link"
+          className="h-auto text-[12px]"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <ChevronDown className={cn("!size-3.5 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+          {open ? "Свернуть" : hidden > 0 ? `Ещё ${hidden} · развернуть` : "Развернуть"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function VersionsDiff({ row, days }: { row: PlanRow; days: string[] }) {
   const versions = [...row.versions].reverse();
   return (
