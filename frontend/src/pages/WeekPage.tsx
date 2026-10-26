@@ -401,8 +401,12 @@ function WeekTable({
               >
                 <div className="flex items-baseline gap-1.5 text-[13px]">
                   <span className={cn("font-semibold", i >= 5 ? "text-ink-2" : "text-ink")}>{WEEKDAYS_SHORT[i]}</span>
-                  <span className="text-ink-3 tnum">{dayMonthShort(d)}</span>
-                  {d === data.today ? <span className="ml-auto text-[11px] font-medium text-accent-ink">сегодня</span> : null}
+                  <span className="whitespace-nowrap text-ink-3 tnum">{dayMonthShort(d)}</span>
+                  {d === data.today ? (
+                    <span className="ml-auto size-1.5 shrink-0 self-center rounded-full bg-accent" title="Сегодня">
+                      <span className="sr-only">сегодня</span>
+                    </span>
+                  ) : null}
                 </div>
                 <AxisTicks axis={axis} className="mt-1" />
               </th>

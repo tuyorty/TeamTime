@@ -56,7 +56,9 @@ export function SummaryTab({ data }: { data: Month }) {
               <th scope="row" className="px-3 py-2 text-left text-[12px] font-medium text-ink-3">Команда</th>
               <td className={cn(td, "text-right")}>{hm(sum((s) => s.worked_sec))}</td>
               <td className={cn(td, "text-right")}>{hm(sum((s) => s.result_sec))}</td>
-              <td className={cn(td, "text-right text-late-ink")}>−{hm(sum((s) => s.penalty_sec))}</td>
+              <td className={cn(td, "text-right", sum((s) => s.penalty_sec) > 0 ? "text-late-ink" : "text-ink-3")}>
+                {sum((s) => s.penalty_sec) > 0 ? `−${hm(sum((s) => s.penalty_sec))}` : "—"}
+              </td>
               <td className={cn(td, "text-right font-semibold")}>{hm(sum((s) => s.total_sec))}</td>
               <td className={cn(td, "text-right text-ink-2")}>{hm(sum((s) => s.norm_sec))}</td>
               <td />

@@ -29,17 +29,27 @@ export function NumTh({ children, className, title }: { children: React.ReactNod
   );
 }
 
-/** Полоса выполнения нормы: заливка — Итого, вертикальная риска — норма. Шкала общая для всех строк. */
+/**
+ * Полоса выполнения нормы: заливка — Итого, риска — норма. Шкала общая для всех строк.
+ * Сверх нормы — тот же цвет светлее, отделённый от нормы зазором, чтобы переработка читалась отдельно.
+ */
 export function NormBar({ total, norm, max }: { total: number; norm: number; max: number }) {
   const pct = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
   const over = total > norm;
   return (
-    <div className="relative h-2.5 w-full min-w-24 rounded-full bg-surface-2" aria-hidden>
-      <div className="absolute inset-y-0 left-0 rounded-full bg-accent/80" style={{ width: pct(Math.min(total, norm)) }} />
+    <div className="relative h-2 w-full min-w-24" aria-hidden>
+      <div className="absolute inset-0 rounded-full bg-surface-2" />
+      <div
+        className={cn("absolute inset-y-0 left-0 bg-accent", over ? "rounded-l-full" : "rounded-full")}
+        style={{ width: pct(Math.min(total, norm)) }}
+      />
       {over ? (
-        <div className="absolute inset-y-0 rounded-r-full bg-accent" style={{ left: pct(norm), width: `calc(${pct(total)} - ${pct(norm)})` }} />
+        <div
+          className="absolute inset-y-0 rounded-r-full bg-accent/45"
+          style={{ left: `calc(${pct(norm)} + 3px)`, width: `max(0px, calc(${pct(total)} - ${pct(norm)} - 3px))` }}
+        />
       ) : null}
-      <div className="absolute -inset-y-1 w-0.5 rounded bg-ink" style={{ left: pct(norm) }} />
+      <div className="absolute -inset-y-[3px] w-px -translate-x-1/2 bg-ink-2" style={{ left: pct(norm) }} />
     </div>
   );
 }

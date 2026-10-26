@@ -165,7 +165,8 @@ function TeamDay({ data, onOpen }: { data: Today; onOpen: (r: DayRef) => void })
 
 /** Неделя одной строкой: сколько часов набрано по дням и сколько дейликов пришло. */
 function WeekStrip({ data }: { data: Today }) {
-  const max = Math.max(1, ...data.week_pulse.map((d) => d.worked_sec));
+  // Не меньше рабочего дня, чтобы один короткий день не выглядел «полным».
+  const max = Math.max(8 * 3600, ...data.week_pulse.map((d) => d.worked_sec));
   return (
     <div className="mt-1 border-t border-line px-4 pt-3 pb-3">
       <div className="mb-2 flex items-center justify-between">
@@ -177,8 +178,11 @@ function WeekStrip({ data }: { data: Today }) {
       <div className="grid grid-cols-7 gap-2">
         {data.week_pulse.map((d, i) => (
           <div key={d.date} className="grid gap-1 text-center">
-            <div className="flex h-12 items-end justify-center rounded-sm bg-surface-2/70" aria-hidden>
-              <div className="w-3/5 rounded-t-[3px] bg-accent" style={{ height: `${(d.worked_sec / max) * 100}%` }} />
+            <div className="mx-auto flex h-12 w-2.5 items-end overflow-hidden rounded-full bg-surface-2" aria-hidden>
+              <div
+                className={cn("w-full rounded-full", d.date === data.date ? "bg-accent" : "bg-accent/70")}
+                style={{ height: `${(d.worked_sec / max) * 100}%` }}
+              />
             </div>
             <span className={cn("text-[11px] text-ink-3", d.date === data.date && "font-semibold text-ink")}>
               {WEEKDAYS_SHORT[i]}

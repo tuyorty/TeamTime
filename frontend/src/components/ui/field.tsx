@@ -39,7 +39,7 @@ export function Field({
   const id = React.useId();
   const hintId = `${id}-hint`;
   return (
-    <div className={cn("grid gap-1.5", className)}>
+    <div className={cn("grid content-start gap-1.5", className)}>
       <label htmlFor={id} className="text-[13px] font-medium text-ink">
         {label}
       </label>
@@ -78,13 +78,13 @@ export function Switch({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative h-5 w-9 rounded-full transition-colors",
+          "relative h-5 w-9 shrink-0 rounded-full transition-colors",
           checked ? "bg-accent" : "bg-surface-3",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 size-4 rounded-full bg-surface shadow transition-transform",
+            "absolute top-0.5 left-0 size-4 rounded-full bg-surface shadow transition-transform",
             checked ? "translate-x-[18px]" : "translate-x-0.5",
           )}
         />
