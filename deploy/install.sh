@@ -65,7 +65,15 @@ fi
 [ -n "$(get_env POSTGRES_PASSWORD)" ] || set_env POSTGRES_PASSWORD "$(random 24)"
 [ -n "$(get_env SESSION_SECRET)" ] || set_env SESSION_SECRET "$(random 32)"
 
-[ -n "$(get_env ADMIN_PASSWORD)" ] || warn "ADMIN_PASSWORD пуст: режим админа на сайте будет выключен"
+case "$(get_env DEMO)" in
+  1|true|True|TRUE) die "В .env включён DEMO: это режим с вымышленными данными, паролем demo и открытым эмулятором чата. Уберите DEMO из рабочего .env" ;;
+esac
+admin_pw="$(get_env ADMIN_PASSWORD)"
+if [ -z "$admin_pw" ]; then
+  warn "ADMIN_PASSWORD пуст: режим админа на сайте будет выключен"
+elif [ "${#admin_pw}" -lt 12 ]; then
+  warn "ADMIN_PASSWORD короче 12 символов: сайт открыт всей сети, возьмите пароль длиннее"
+fi
 
 # --- 5. Порт --------------------------------------------------------------------------------
 port="$(get_env WEB_PORT)"; port="${port:-8090}"
