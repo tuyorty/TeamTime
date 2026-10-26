@@ -43,8 +43,13 @@ def db_upgrade(revision: str = typer.Argument("head")) -> None:
 
 @bot_app.command("run")
 def bot_run() -> None:
-    """Запустить бота (long polling)."""
-    typer.echo("Бот ещё не реализован.")
+    """Запустить бота (long polling). Без BOT_TOKEN завершается с кодом 0."""
+    import asyncio
+
+    from teamtime.bot.app import run
+    from teamtime.core.config import get_settings
+
+    asyncio.run(run(get_settings()))
 
 
 @demo_app.command("seed")
