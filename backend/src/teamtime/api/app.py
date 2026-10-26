@@ -51,6 +51,11 @@ def create_app(settings: Settings | None = None, *, realtime: bool = True) -> Fa
         if realtime:
             await app.state.broadcaster.start()
         log.info("api.started", version=__version__, demo=settings.demo)
+        if settings.admin_enabled and not settings.session_secret:
+            log.warning(
+                "api.session_secret_missing",
+                detail="SESSION_SECRET не задан: ключ случайный, вход сбросится при перезапуске",
+            )
         try:
             yield
         finally:

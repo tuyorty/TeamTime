@@ -46,7 +46,9 @@ ConfigDep = Annotated[Settings, Depends(get_config)]
 
 
 def serializer(config: Settings) -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(config.session_secret.get_secret_value(), salt="teamtime-admin")
+    return URLSafeTimedSerializer(
+        config.signing_key, salt=f"xtime-admin:{config.password_fingerprint}"
+    )
 
 
 def is_admin(request: Request, config: ConfigDep) -> bool:

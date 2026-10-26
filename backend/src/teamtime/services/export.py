@@ -129,9 +129,21 @@ def month_late_rows(month: MonthOut) -> tuple[list[str], list[list[Any]]]:
 # --- форматы -------------------------------------------------------------------------------
 
 
+# Текст из Telegram (задачи, заметки) пишет любой участник чата. Ячейку, которая начинается
+# с этих символов, Excel и LibreOffice выполняют как формулу (=HYPERLINK, =WEBSERVICE…).
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def _defuse(text: str) -> str:
+    """Текст, который табличный редактор не примет за формулу (рекомендация OWASP)."""
+    return f"'{text}" if text.startswith(FORMULA_START) else text
+
+
 def _csv_value(v: Any) -> str:
     if v is None:
         return ""
+    if isinstance(v, str):
+        return _defuse(v)
     if isinstance(v, Duration | TimeOfDay):
         return format_hm(int(v))
     if isinstance(v, date):
@@ -165,7 +177,9 @@ def _write_sheet(ws: Any, header: Sequence[str], rows: Sequence[Sequence[Any]]) 
         r = ws.max_row
         for col, v in enumerate(row, 1):
             cell = ws.cell(row=r, column=col)
-            if isinstance(v, Duration):
+            if isinstance(v, str) and cell.data_type == "f":
+                cell.data_type = "s"  # openpyxl принял «=…» за формулу: храним как текст
+            elif isinstance(v, Duration):
                 cell.number_format = DURATION_FMT
             elif isinstance(v, TimeOfDay):
                 cell.number_format = TIME_FMT

@@ -7,12 +7,15 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_EPHEMERAL_KEY = secrets.token_urlsafe(32)
 
 
 class Settings(BaseSettings):
@@ -39,9 +42,10 @@ class Settings(BaseSettings):
     admin_password: SecretStr | None = Field(
         default=None, description="Пароль режима админа. Пусто — режим админа выключен."
     )
-    session_secret: SecretStr = Field(
-        default=SecretStr("dev-insecure-secret-change-me"),
-        description="Ключ подписи cookie-сессии.",
+    session_secret: SecretStr | None = Field(
+        default=None,
+        description="Ключ подписи cookie-сессии. Не задан — случайный на каждый запуск "
+        "(сессии админа сбрасываются при перезапуске).",
     )
     session_max_age_hours: int = 12
 
@@ -63,6 +67,22 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "console"
+
+    @property
+    def signing_key(self) -> str:
+        """Ключ подписи сессий. Без SESSION_SECRET — случайный на процесс, а не известная
+        строка из репозитория: иначе любой мог бы подписать себе cookie админа."""
+        if self.session_secret and self.session_secret.get_secret_value():
+            return self.session_secret.get_secret_value()
+        return _EPHEMERAL_KEY
+
+    @property
+    def password_fingerprint(self) -> str:
+        """Отпечаток пароля админа: смена пароля делает недействительными все сессии."""
+        import hashlib
+
+        password = self.admin_password.get_secret_value() if self.admin_password else ""
+        return hashlib.sha256(f"xtime-session:{password}".encode()).hexdigest()[:16]
 
     @property
     def admin_enabled(self) -> bool:
