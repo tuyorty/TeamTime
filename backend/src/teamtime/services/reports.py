@@ -477,7 +477,10 @@ async def feed(session: AsyncSession, limit: int = 20) -> list[FeedItem]:
         .join(RawMessageVersion, ParseResultRow.message_version_id == RawMessageVersion.id)
         .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
         .where(ParseResultRow.is_latest, ParseResultRow.kind != MessageKind.UNKNOWN)
-        .order_by(RawMessageVersion.received_at.desc(), ParseResultRow.id.desc())
+        .order_by(
+            func.coalesce(RawMessageVersion.edited_at, RawMessage.sent_at).desc(),
+            ParseResultRow.id.desc(),
+        )
         .limit(limit)
         .options(selectinload(ParseResultRow.employee))
     )

@@ -62,8 +62,13 @@ def demo_seed(
     """Загрузить вымышленных сотрудников и несколько недель сообщений."""
     import asyncio
 
+    from teamtime.core import clock
+    from teamtime.core.config import get_settings
     from teamtime.db.session import session_scope
     from teamtime.demo.seed import seed_demo
+
+    if (frozen := get_settings().demo_now) is not None:
+        clock.freeze(frozen)
 
     async def go() -> bool:
         async with session_scope() as session:

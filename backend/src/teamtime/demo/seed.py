@@ -38,7 +38,8 @@ from teamtime.services.settings import AppSettings, load_settings, save_settings
 log = get_logger(__name__)
 
 DAY_ABBR = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-PALETTE = ("teal", "violet", "amber", "sky", "rose", "lime", "indigo", "orange")
+# Слоты категориальной палитры фронтенда (frontend/src/lib/colors.ts), в её порядке.
+PALETTE = ("blue", "orange", "aqua", "yellow", "magenta", "green", "violet", "red")
 
 # fmt: off
 TASKS = (

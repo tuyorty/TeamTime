@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from teamtime import __version__
 from teamtime.api.realtime import Broadcaster
 from teamtime.api.routers import admin, auth, events, export, read
+from teamtime.core import clock
 from teamtime.core.config import Settings, get_settings
 from teamtime.core.logging import configure_logging, get_logger
 from teamtime.db.session import get_sessionmaker
@@ -38,6 +39,8 @@ TAGS = [
 def create_app(settings: Settings | None = None, *, realtime: bool = True) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level, settings.log_format)
+    if settings.demo_now is not None:
+        clock.freeze(settings.demo_now)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

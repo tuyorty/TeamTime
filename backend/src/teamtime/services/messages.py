@@ -96,7 +96,8 @@ async def inbox(session: AsyncSession, view: str = "pending", limit: int = 100) 
             ParseResultRow.kind != MessageKind.UNKNOWN,
             ParseResultRow.resolution.in_(resolutions),
         )
-        .order_by(RawMessageVersion.received_at.desc())
+        .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
+        .order_by(func.coalesce(RawMessageVersion.edited_at, RawMessage.sent_at).desc())
         .limit(limit)
         .options(selectinload(ParseResultRow.employee))
     )

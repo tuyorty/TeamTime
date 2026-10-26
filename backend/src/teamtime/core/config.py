@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
@@ -49,6 +50,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     demo: bool = Field(default=False, description="Демо-режим: эмулятор чата, пароль админа demo.")
+    demo_now: datetime | None = Field(
+        default=None,
+        description="Заморозить «сейчас» (ISO с часовым поясом) — для скриншотов и e2e на демо.",
+    )
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "console"

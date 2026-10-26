@@ -1,0 +1,185 @@
+@import "tailwindcss";
+@import "@fontsource-variable/golos-text";
+@import "@fontsource-variable/geologica";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Токены дизайн-системы (docs/design.md). Контраст пар проверяет scripts/check-contrast.mjs —
+ * он читает значения прямо из этого файла, поэтому правьте цвета только здесь.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --surface-2: #eef1ef;
+  --surface-3: #e4e9e6;
+  --ink: #17201c;
+  --ink-2: #4f5a55;
+  --ink-3: #616c66;
+  --line: #dde2df;
+  --line-strong: #c9d0cc;
+  --accent: #0e8065;
+  --accent-ink: #0b6b54;
+  --accent-soft: #e2f2ec;
+  --on-accent: #ffffff;
+  --late: #d6403a;
+  --late-ink: #b3322d;
+  --late-soft: #fbe9e8;
+  --absence: #4a6fd6;
+  --absence-ink: #3a5bb8;
+  --absence-soft: #e8eefb;
+  --deviation: #b98600;
+  --deviation-ink: #8a5c00;
+  --deviation-soft: #fbf1dc;
+  --focus: #0e8065;
+  --shadow: 0 1px 2px rgb(16 24 20 / 0.06), 0 8px 24px -12px rgb(16 24 20 / 0.18);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #121715;
+  --surface: #1a211e;
+  --surface-2: #212925;
+  --surface-3: #2a332e;
+  --ink: #e7ece9;
+  --ink-2: #a9b4ae;
+  --ink-3: #87928c;
+  --line: #2b3430;
+  --line-strong: #3a4540;
+  --accent: #1a9e7a;
+  --accent-ink: #5fd0ad;
+  --accent-soft: #163a30;
+  --on-accent: #06140f;
+  --late: #e4575c;
+  --late-ink: #f08a8b;
+  --late-soft: #3a1f20;
+  --absence: #6683e6;
+  --absence-ink: #9db0f2;
+  --absence-soft: #1f2846;
+  --deviation: #b58f00;
+  --deviation-ink: #e0bb4a;
+  --deviation-soft: #352c10;
+  --focus: #5fd0ad;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-late: var(--late);
+  --color-late-ink: var(--late-ink);
+  --color-late-soft: var(--late-soft);
+  --color-absence: var(--absence);
+  --color-absence-ink: var(--absence-ink);
+  --color-absence-soft: var(--absence-soft);
+  --color-deviation: var(--deviation);
+  --color-deviation-ink: var(--deviation-ink);
+  --color-deviation-soft: var(--deviation-soft);
+  --font-sans: "Golos Text Variable", "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Geologica Variable", "Geologica", "Golos Text Variable", system-ui, sans-serif;
+  --shadow-panel: var(--shadow);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "tnum" 1;
+  }
+  body {
+    min-height: 100dvh;
+    background: var(--bg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Штриховка «нет дейлика» и выходных: состояние без цвета. */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--ink-3) 28%, transparent) 0 1.5px,
+      transparent 1.5px 6px
+    );
+  }
+  .hatch-absence {
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--absence) 30%, transparent) 0 1.5px,
+      transparent 1.5px 7px
+    );
+  }
+}
+
+@keyframes flash-row {
+  from {
+    background-color: var(--accent-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.flash {
+  animation: flash-row 2.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+  }
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}
