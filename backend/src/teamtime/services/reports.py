@@ -578,8 +578,9 @@ async def employee_report(
 ) -> EmployeeDetailOut:
     today = today_local(settings)
     end = end or today
-    start = start or (end - timedelta(days=end.weekday()) - timedelta(weeks=7))
     month_first, month_last = month_bounds(today.year, today.month)
+    # По умолчанию восемь недель, но так, чтобы текущий месяц попал целиком (для хитмапа).
+    start = start or min(end - timedelta(days=end.weekday()) - timedelta(weeks=7), month_first)
     lo, hi = min(start, month_first), max(end, month_last)
     all_cells = await load_cells(session, settings, lo, hi, [employee.id])
     cells = [all_cells[(employee.id, d)] for d in date_range(start, end)]

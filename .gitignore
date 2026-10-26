@@ -31,3 +31,6 @@ exports/
 .DS_Store
 .idea/
 .vscode/
+
+# iCloud не синхронизирует *.nosync: там живут venv и node_modules
+*.nosync
