@@ -6,14 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>xTime</title>
-    <script>
-      // Тема ставится до первой отрисовки, чтобы не мигал светлый фон.
-      try {
-        const t = localStorage.getItem("tt-theme");
-        const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-        document.documentElement.classList.toggle("dark", dark);
-      } catch {}
-    </script>
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>
