@@ -245,6 +245,55 @@ class TestTasksAndNoise:
         assert spans(r) == ["10:00-18:00"]
         assert r.daily is not None and r.daily.tasks == ("созвон 12:00 - 13:00",)
 
+    def test_free_text_after_header_is_a_task(self) -> None:
+        r = daily(
+            dedent("""\
+            21.10.2026
+            09:20 - 19:50
+            Эффективность: 100%
+
+            Разбирался с картой отклонений
+            -Добавил проверку слоёв
+            -Починил регистрацию моделей
+
+            #дейли
+        """)
+        )
+        assert r.status is ParseStatus.OK, codes(r)
+        assert r.daily is not None
+        assert r.daily.tasks == (
+            "Разбирался с картой отклонений",
+            "Добавил проверку слоёв",
+            "Починил регистрацию моделей",
+        )
+
+    def test_blank_line_starts_new_task(self) -> None:
+        r = daily(
+            dedent("""\
+            21.10.2026
+            10:00 - 18:00
+            Эффективность: 90%
+
+            - первый пункт
+            продолжение первого
+
+            Upd: вернулся вечером
+            - второй пункт
+        """)
+        )
+        assert r.daily is not None
+        assert r.daily.tasks == (
+            "первый пункт продолжение первого",
+            "Upd: вернулся вечером",
+            "второй пункт",
+        )
+
+    def test_text_after_tag_is_ignored(self) -> None:
+        r = daily("21.10.2026\n10:00 - 18:00\nЭфф: 80%\n\n- пункт\n\n#дейли\n\nвечером ещё заеду")
+        assert r.status is ParseStatus.OK
+        assert r.daily is not None and r.daily.tasks == ("пункт",)
+        assert "text_after_tag" in codes(r)
+
     @pytest.mark.parametrize(
         "text",
         ["", "\n\n", "ок", "23.10.2026", "#дейли", "Эффективность: 80%", "🚀", "- - -"],

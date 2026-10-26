@@ -77,11 +77,33 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
     efficiency: int | None = None
     tasks: list[str] = []
     in_tasks = False
+    # Шапка (дата, время, эффективность) закончилась: дальше свободный текст — это пункты.
+    header_done = False
+    # Пустая строка рвёт продолжение пункта: следующий текст без «-» — новый пункт.
+    after_blank = False
+    after_tag = False
 
     for line_no, raw, line in split_lines(text):
         content = strip_hashtags(line)
         if not content:
+            if line and DAILY_TAGS & {fold(t) for t in hashtags(line)} and tasks:
+                after_tag = True  # строка «#дейли» закрывает дейлик
+            if not line and intervals:
+                header_done = True
+            after_blank = True
             continue
+        if after_tag:
+            issues.append(
+                Issue(
+                    "text_after_tag",
+                    Severity.INFO,
+                    "Текст после хэштега дейлика не учтён",
+                    line_no,
+                    raw,
+                )
+            )
+            break
+        was_blank, after_blank = after_blank, False
 
         folded = fold(content)
         if (
@@ -151,6 +173,8 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                         )
                     )
                 efficiency = round(value)
+            if intervals:
+                header_done = True
             continue
 
         if not in_tasks:
@@ -212,8 +236,13 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
             )
             continue
 
-        if in_tasks and tasks:
+        if in_tasks and tasks and not was_blank:
             tasks[-1] = f"{tasks[-1]} {content}"
+            continue
+
+        if header_done and work_date is not None:
+            in_tasks = True
+            tasks.append(content)
             continue
 
         issues.append(

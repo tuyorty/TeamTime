@@ -9,6 +9,7 @@ from teamtime.parsing.text import (
     hashtags,
     normalize_line,
     parse_interval,
+    parse_interval_list,
 )
 
 
@@ -64,3 +65,19 @@ def test_bullet_text(line: str, expected: str | None) -> None:
 
 def test_hashtags_are_folded_and_unique() -> None:
     assert hashtags("#Дейли и снова #дейли, #расписание") == ("дейли", "расписание")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "09:00 - 14:00 и 15:30 - 16:00",
+        "09:00 - 14:00 + 15:30 - 16:00",
+        "09:00-14:00+15:30-16:00",
+        "09:00 - 14:00 & 15:30 - 16:00",
+        "09:00 - 14:00 И 15:30 - 16:00",
+    ],
+)
+def test_interval_list_word_and_plus_separators(text: str) -> None:
+    parsed = parse_interval_list(text)
+    assert parsed is not None
+    assert [(p.interval.start, p.interval.end) for p in parsed] == [(32400, 50400), (55800, 57600)]

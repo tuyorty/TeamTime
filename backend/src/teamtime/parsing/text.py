@@ -89,11 +89,14 @@ def parse_interval(token: str) -> ParsedInterval | None:
     )
 
 
-_LIST_SEP = re.compile(r"\s*[;,]\s*")
+_LIST_SEP = re.compile(r"\s*[;,+&]\s*|\s+и\s+", re.IGNORECASE)
 
 
 def parse_interval_list(text: str) -> list[ParsedInterval] | None:
-    """Строка из одного или нескольких интервалов через «;» или «,». None, если это не она."""
+    """Строка из одного или нескольких интервалов через «;», «,», «+», «&» или «и».
+
+    None, если это не она.
+    """
     parts = [p for p in _LIST_SEP.split(text.strip()) if p]
     if not parts:
         return None
