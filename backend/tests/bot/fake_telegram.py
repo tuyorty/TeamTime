@@ -36,7 +36,7 @@ from aiogram.types import (
 
 from teamtime.core import clock
 
-BOT_USER = User(id=42, is_bot=True, first_name="TeamTime", username="teamtime_test_bot")
+BOT_USER = User(id=42, is_bot=True, first_name="xTime", username="teamtime_test_bot")
 GROUP = Chat(id=-1001234567890, type="supergroup", title="Вымышленная команда", is_forum=True)
 
 

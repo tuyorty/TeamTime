@@ -30,7 +30,7 @@ async def test_health_and_openapi(client: httpx.AsyncClient) -> None:
     r = await client.get("/health")
     assert r.json()["db"] == "ok"
     spec = (await client.get("/openapi.json")).json()
-    assert spec["info"]["title"] == "TeamTime API"
+    assert spec["info"]["title"] == "xTime API"
     assert "/api/v1/weeks/{iso_year}/{iso_week}" in spec["paths"]
 
 

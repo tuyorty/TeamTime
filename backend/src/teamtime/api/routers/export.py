@@ -37,7 +37,7 @@ async def week(
     fmt: Fmt,
 ) -> Response:
     data = await reports.week_report(session, settings, iso_year, iso_week)
-    name = f"teamtime-{iso_year}-w{iso_week:02d}"
+    name = f"xtime-{iso_year}-w{iso_week:02d}"
     if fmt == "csv":
         return _file(export.to_csv(export.DAY_HEADER, export.week_day_rows(data)), fmt, name)
     grid_header, grid_rows = export.week_grid_rows(data)
@@ -60,7 +60,7 @@ async def month(
     fmt: Fmt,
 ) -> Response:
     data = await reports.month_report(session, settings, year, month, history=1)
-    name = f"teamtime-{year}-{month:02d}"
+    name = f"xtime-{year}-{month:02d}"
     summary_header, summary_rows = export.month_summary_rows(data)
     if fmt == "csv":
         return _file(export.to_csv(summary_header, summary_rows), fmt, name)

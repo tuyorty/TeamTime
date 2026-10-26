@@ -1,4 +1,4 @@
-# TeamTime — частые команды. `make help` покажет список.
+# xTime — частые команды. `make help` покажет список.
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 

@@ -59,7 +59,7 @@ def create_app(settings: Settings | None = None, *, realtime: bool = True) -> Fa
             log.info("api.stopped")
 
     app = FastAPI(
-        title="TeamTime API",
+        title="xTime API",
         version=__version__,
         description=(
             "Табель команды из сообщений Telegram: планы, дейлики, отчёты.\n\n"

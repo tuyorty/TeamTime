@@ -23,7 +23,7 @@ function Logo() {
         <rect x="6" y="8.5" width="12.5" height="5" rx="1.5" fill="var(--accent)" />
         <rect x="1.5" y="6.5" width="4.5" height="9" rx="2.5" fill="var(--late)" />
       </svg>
-      TeamTime
+      xTime
     </span>
   );
 }
