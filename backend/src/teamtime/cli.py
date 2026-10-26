@@ -23,6 +23,16 @@ def _alembic_ini() -> Path:
     raise typer.BadParameter("Не найден alembic.ini: запустите из папки backend/")
 
 
+@app.callback()
+def main() -> None:
+    """Общая настройка логов для всех команд."""
+    from teamtime.core.config import get_settings
+    from teamtime.core.logging import configure_logging
+
+    settings = get_settings()
+    configure_logging(settings.log_level, settings.log_format)
+
+
 @app.command()
 def version() -> None:
     """Показать версию."""

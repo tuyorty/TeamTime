@@ -6,3 +6,4 @@
 .coverage
 htmlcov
 tests
+*.nosync

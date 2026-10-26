@@ -45,10 +45,11 @@ dev-db: ## Поднять только PostgreSQL (порт 5433) для лок�
 	@sleep 3
 	docker exec teamtime-dev-db createdb -U teamtime teamtime_test || true
 
-dev-api: ## API с автоперезагрузкой
-	$(BACKEND) DATABASE_URL=postgresql+asyncpg://teamtime:teamtime@localhost:5433/teamtime DEMO=1 \
-	  .venv/bin/teamtime db upgrade && DATABASE_URL=postgresql+asyncpg://teamtime:teamtime@localhost:5433/teamtime \
-	  DEMO=1 .venv/bin/uvicorn teamtime.api.app:app --reload
+DEV_DB := postgresql+asyncpg://teamtime:teamtime@localhost:5433/teamtime
+
+dev-api: ## API с демо-данными (миграции и seed при пустой базе)
+	$(BACKEND) export DATABASE_URL=$(DEV_DB) DEMO=1 && .venv/bin/teamtime db upgrade \
+	  && .venv/bin/teamtime demo seed --if-empty && .venv/bin/uvicorn teamtime.api.app:app --reload --reload-dir src
 
 dev-web: ## Фронтенд с HMR
 	$(WEB) npm run dev

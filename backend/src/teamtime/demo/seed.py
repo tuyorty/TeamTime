@@ -52,6 +52,8 @@ TASKS = (
     "макеты для лендинга", "логирование ошибок", "разбирался с падением сборки", "экспорт в Excel",
 )
 # fmt: on
+ABSENT_TODAY = 4
+"""Индекс сотрудника, который сегодня написал боту «не приду»."""
 VIBE_NOTES = (
     "по вайбу",
     "по вайбу с 16:30 до вечера",
@@ -351,9 +353,10 @@ class Seeder:
                         await self.send(
                             p, self.schedule_text(p, monday, plan), SCHEDULE_THREAD_ID, resend
                         )
-                await self.week_of_dailies(
-                    p, monday, plan, idx, sick_days if p is sick_person else []
-                )
+                skip = sick_days if p is sick_person else []
+                if p is people[ABSENT_TODAY]:
+                    skip = [*skip, self.today]  # «не приду сегодня» — и дейлика за сегодня нет
+                await self.week_of_dailies(p, monday, plan, idx, skip)
 
         # Статусы: отпуск, больничный, удалёнка, «не приду».
         await manual.set_status_range(
@@ -390,7 +393,7 @@ class Seeder:
                 )
         await manual.set_status(
             self.session,
-            employee_id=people[4].employee.id,
+            employee_id=people[ABSENT_TODAY].employee.id,
             day=self.today,
             kind=StatusKind.ABSENT,
             note="К врачу",

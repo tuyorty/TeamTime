@@ -22,7 +22,7 @@ const PRESENCE: Record<TodayRow["presence"], { label: string; order: number }> =
   on_site: { label: "на месте по плану", order: 0 },
   remote: { label: "на удалёнке", order: 1 },
   expected_later: { label: "придёт позже", order: 2 },
-  left: { label: "день по плану закончился", order: 3 },
+  left: { label: "план закончился", order: 3 },
   no_plan: { label: "без плана", order: 4 },
   absent: { label: "отсутствует", order: 5 },
 };
