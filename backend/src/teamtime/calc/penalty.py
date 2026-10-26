@@ -30,7 +30,7 @@ class PenaltyScale:
     """Значение штрафа на втором пороге (22,5)."""
     tail_slope: Fraction = Fraction(4)
 
-    def penalty(self, late: Seconds) -> Seconds:
+    def penalty(self, late: Seconds | int) -> Seconds:
         """Штраф в секундах за суммарное опоздание ``late`` (секунды)."""
         x = Fraction(late) / HOUR
         if x <= 0:

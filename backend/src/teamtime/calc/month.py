@@ -62,7 +62,7 @@ def overtime_bonus(overtime: Seconds, hourly_rate: Decimal) -> Decimal:
 def summarize_month(
     days: Iterable[DayResult],
     *,
-    norm: Seconds,
+    norm: Seconds | int,
     hourly_rate: Decimal,
     scale: PenaltyScale = DEFAULT_SCALE,
 ) -> MonthSummary:
