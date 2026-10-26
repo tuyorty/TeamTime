@@ -81,9 +81,9 @@ function KeyNumbers({ data }: { data: Today }) {
     { label: "опоздали по дейликам", value: c.late ?? 0, tone: (c.late ?? 0) > 0 ? "text-late-ink" : "" },
   ];
   return (
-    <section aria-label="Ключевые числа дня" className="flex flex-wrap gap-y-3 rounded-lg border border-line bg-surface px-1 py-3">
+    <section aria-label="Ключевые числа дня" className="grid grid-cols-2 gap-y-4 rounded-lg border border-line bg-surface px-1 py-3 sm:grid-cols-3 xl:flex">
       {items.map((it) => (
-        <div key={it.label} className="flex min-w-[9.5rem] flex-1 flex-col gap-0.5 border-line px-4 [&:not(:first-child)]:border-l">
+        <div key={it.label} className="flex flex-1 flex-col gap-0.5 border-line px-4 xl:min-w-[9.5rem] xl:[&:not(:first-child)]:border-l">
           <span className={cn("font-display tnum leading-none", it.strong ? "text-[34px] font-semibold" : "text-[26px] font-medium", it.tone)}>
             {it.value}
           </span>
