@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -388,6 +388,43 @@ async def save_employee(
     )
     await events.notify(session, "employee.changed", employee_id=employee.id)
     return employee
+
+
+@dataclass(slots=True)
+class DeleteReport:
+    dailies: int
+    plans: int
+
+
+async def delete_employee(session: AsyncSession, employee: Employee, *, actor: str) -> DeleteReport:
+    """Удалить сотрудника вместе с его планами, дейликами и статусами дней.
+
+    Исходные сообщения остаются: они неизменяемы. Привязанные аккаунты Telegram и разборы
+    сообщений отвязываются (ON DELETE SET NULL), поэтому новые сообщения от этих людей снова
+    попадут в инбокс. Удаляем одним запросом, чтобы каскады отработала сама база.
+    """
+    dailies = await session.scalar(
+        select(func.count()).select_from(Daily).where(Daily.employee_id == employee.id)
+    )
+    plans = await session.scalar(
+        select(func.count())
+        .select_from(SchedulePlan)
+        .where(SchedulePlan.employee_id == employee.id)
+    )
+    report = DeleteReport(dailies=dailies or 0, plans=plans or 0)
+    await audit.record(
+        session,
+        actor=actor,
+        action="employee.delete",
+        entity_type="employee",
+        entity_id=employee.id,
+        before={**_employee_snapshot(employee), "dailies": report.dailies, "plans": report.plans},
+    )
+    employee_id = employee.id
+    session.expunge(employee)
+    await session.execute(delete(Employee).where(Employee.id == employee_id))
+    await events.notify(session, "employee.changed", employee_id=employee_id)
+    return report
 
 
 # --- привязка аккаунтов и инбокс -----------------------------------------------------------

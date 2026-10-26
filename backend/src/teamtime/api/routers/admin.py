@@ -55,6 +55,15 @@ async def update_employee(
     return EmployeeOut.model_validate(e)
 
 
+@router.delete("/employees/{employee_id}", summary="Удалить сотрудника с его планами и дейликами")
+async def delete_employee(employee_id: int, session: SessionDep, actor: AdminDep) -> OkOut:
+    e = await session.get(Employee, employee_id)
+    if e is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Сотрудник не найден")
+    report = await manual.delete_employee(session, e, actor=actor)
+    return OkOut(detail=f"Удалено: дейликов {report.dailies}, версий планов {report.plans}")
+
+
 # --- аккаунты Telegram ---------------------------------------------------------------------
 
 

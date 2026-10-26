@@ -110,6 +110,20 @@ async def test_admin_employee_crud_and_validation(admin: httpx.AsyncClient) -> N
     assert bad.status_code == 422
 
 
+async def test_admin_delete_employee_cascades(admin: httpx.AsyncClient, maker) -> None:
+    emp_id = await seed(maker)
+    assert (await admin.get("/weeks/2026/44")).json()["rows"]
+    r = await admin.delete(f"/admin/employees/{emp_id}", headers=ADMIN_HEADERS)
+    assert r.status_code == 200, r.text
+    assert "дейликов" in r.json()["detail"]
+    assert (await admin.get("/weeks/2026/44")).json()["rows"] == []
+    gone = await admin.delete(f"/admin/employees/{emp_id}", headers=ADMIN_HEADERS)
+    assert gone.status_code == 404
+    audit = (await admin.get("/audit")).json()
+    items = audit["items"] if isinstance(audit, dict) else audit
+    assert any(a["action"] == "employee.delete" for a in items)
+
+
 async def test_admin_fix_fact_and_settings(admin: httpx.AsyncClient, maker) -> None:
     emp_id = await seed(maker)
     r = await admin.put(

@@ -1,4 +1,4 @@
-import { Plus, UserPen } from "lucide-react";
+import { Plus, Trash2, UserPen } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 
@@ -133,6 +133,12 @@ function EmployeeForm({
     { success: employee ? "Сотрудник сохранён" : "Сотрудник добавлен", invalidate: [[...keys.employees(true)], ["employees"], ["week"], ["month"]] },
   );
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const remove = useAdminMutation(() => api.delete<{ detail: string }>(`/admin/employees/${employee!.id}`), {
+    success: (r) => `Сотрудник удалён. ${r.detail}`,
+    invalidate: [[...keys.employees(true)], ["employees"], ["week"], ["month"], ["today"], ["plans"], ["inbox"], [...keys.identities]],
+  });
+
   return (
     <form
       className="grid gap-3"
@@ -171,7 +177,30 @@ function EmployeeForm({
         <span className="size-4 rounded-full" style={{ background: employeeColor(form.color, employee?.id ?? 1, isDark) }} />
         <Switch checked={form.is_active} onChange={set("is_active")} label="Активен (показывается в табеле)" />
       </div>
+      {employee && confirmDelete ? (
+        <div role="alert" className="grid gap-2 rounded-md border border-late/40 bg-late-soft/60 p-3 text-[13px]">
+          <p className="font-medium text-late-ink">Удалить {employee.short_name}?</p>
+          <p className="text-ink-2">
+            Вместе с сотрудником удалятся его планы, дейлики и статусы дней. Исходные сообщения останутся, а привязанный
+            аккаунт Telegram отвяжется. Отменить удаление нельзя. Если человек просто ушёл из команды, лучше выключить
+            «Активен»: история сохранится.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+              Не удалять
+            </Button>
+            <Button size="sm" variant="danger" disabled={remove.isPending} onClick={() => remove.mutate(undefined, { onSuccess: onDone })}>
+              <Trash2 /> Удалить навсегда
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="mt-2 flex justify-end gap-2">
+        {employee && !confirmDelete ? (
+          <Button variant="danger" className="mr-auto" onClick={() => setConfirmDelete(true)}>
+            <Trash2 /> Удалить
+          </Button>
+        ) : null}
         <Button variant="ghost" onClick={onDone}>
           Отмена
         </Button>
