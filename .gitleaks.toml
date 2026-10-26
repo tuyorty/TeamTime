@@ -1,0 +1,14 @@
+title = "TeamTime gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Заведомо фиктивные значения в демо и тестах"
+regexes = [
+  '''dev-insecure-secret-change-me''',
+  '''123456:TEST-TOKEN''',
+]
+paths = [
+  '''frontend/package-lock\.json''',
+]

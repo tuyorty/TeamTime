@@ -1,0 +1,59 @@
+name: teamtime
+
+x-backend: &backend
+  build: ./backend
+  image: teamtime-backend:local
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-teamtime}:${POSTGRES_PASSWORD:-teamtime}@db:5432/${POSTGRES_DB:-teamtime}
+    LOG_FORMAT: json
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-teamtime}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-teamtime}
+      POSTGRES_DB: ${POSTGRES_DB:-teamtime}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    <<: *backend
+    command: ["api"]
+    restart: unless-stopped
+
+  bot:
+    <<: *backend
+    command: ["bot"]
+    depends_on:
+      api:
+        condition: service_healthy
+    # Без BOT_TOKEN бот пишет об этом в лог и завершается с кодом 0 — перезапуска не будет.
+    restart: on-failure
+    healthcheck:
+      disable: true
+
+  web:
+    build: ./frontend
+    image: teamtime-web:local
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

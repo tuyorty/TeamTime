@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "teamtime"
+version = "0.1.0"
+description = "TeamTime: табель команды из сообщений Telegram"
+requires-python = ">=3.12,<3.14"
+license = "MIT"
+dependencies = [
+    "fastapi>=0.162,<1",
+    "uvicorn[standard]>=0.54",
+    "sqlalchemy[asyncio]>=2.1,<2.2",
+    "asyncpg>=0.32",
+    "alembic>=1.20",
+    "pydantic>=2.13,<3",
+    "pydantic-settings>=2.16",
+    "aiogram>=3.31,<4",
+    "itsdangerous>=2.2",
+    "structlog>=26.1",
+    "openpyxl>=3.1",
+    "faker>=40",
+    "typer>=0.27",
+    "python-multipart>=0.0.32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "pytest-cov>=6",
+    "httpx>=0.28",
+    "ruff>=0.17",
+    "mypy>=2.4",
+]
+
+[project.scripts]
+teamtime = "teamtime.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/teamtime"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "SIM", "RUF", "ASYNC", "PT", "RET", "TID"]
+ignore = [
+    "RUF001",  # кириллица в строках — намеренно
+    "RUF002",
+    "RUF003",
+    "B008",    # Depends() в аргументах FastAPI
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "Используйте teamtime.core.clock.now(): время должно приходить снаружи"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["DTZ001", "PT011", "PT018"]
+"src/teamtime/core/clock.py" = ["TID251"]
+"migrations/**" = ["N999"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+packages = ["teamtime"]
+
+[[tool.mypy.overrides]]
+module = ["openpyxl.*", "faker.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-ra --strict-markers"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+markers = ["db: тесты, которым нужна PostgreSQL (TEST_DATABASE_URL)"]
+
+[tool.coverage.run]
+source = ["teamtime"]
+branch = true
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true

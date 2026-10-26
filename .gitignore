@@ -1,0 +1,33 @@
+# окружение и секреты
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+
+# node
+node_modules/
+dist/
+playwright-report/
+test-results/
+frontend/e2e/.auth/
+
+# данные: реальные экспорты Telegram в репозиторий не попадают
+result.json
+exports/
+*.sqlite
+
+# ос и редакторы
+.DS_Store
+.idea/
+.vscode/
