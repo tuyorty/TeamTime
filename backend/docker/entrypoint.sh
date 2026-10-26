@@ -1,8 +1,8 @@
 #!/bin/sh
-# Точка входа контейнера бэкенда: api | bot | любая команда teamtime.
+# Точка входа контейнера бэкенда: api | bot | любая команда teamtime (например «bot check»).
 set -eu
 
-case "${1:-api}" in
+case "${*:-api}" in
   api)
     teamtime db upgrade
     if [ "${DEMO:-0}" = "1" ] || [ "${DEMO:-false}" = "true" ]; then

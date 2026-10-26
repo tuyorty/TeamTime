@@ -1,0 +1,64 @@
+# xTime на сервере: готовые образы из архива релиза, без сборки и без доступа к Docker Hub.
+# Настройки — в .env рядом (шаблон .env.example). Запуск и обновление — ./install.sh.
+name: xtime
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-backend: &backend
+  image: xtime-backend:${XTIME_TAG:-current}
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://xtime:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@db:5432/xtime
+    LOG_FORMAT: json
+  depends_on:
+    db:
+      condition: service_healthy
+  logging: *logging
+  restart: unless-stopped
+
+services:
+  db:
+    image: xtime-db:${XTIME_TAG:-current}
+    environment:
+      POSTGRES_USER: xtime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: xtime
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xtime -d xtime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+    restart: unless-stopped
+
+  api:
+    <<: *backend
+    command: ["api"]
+
+  bot:
+    <<: *backend
+    command: ["bot"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  web:
+    image: xtime-web:${XTIME_TAG:-current}
+    ports:
+      - "${WEB_PORT:-8090}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logging
+    restart: unless-stopped
+
+volumes:
+  pgdata:

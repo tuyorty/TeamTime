@@ -93,6 +93,10 @@ docker compose up -d --build
 
 Все переменные описаны в [.env.example](.env.example). Секреты задаются только через `.env`, сам файл в репозиторий не попадает.
 
+### Сервер в локальной сети
+
+`make release` собирает один архив с образами приложения и PostgreSQL, `make deploy HOST=user@сервер` копирует его на сервер и запускает установку. Серверу не нужны Docker Hub, PyPI и npm, а для бота нужен только исходящий доступ к `api.telegram.org` (или прокси в `TELEGRAM_PROXY`). Установка, обновление и бэкапы описаны в [deploy/README.md](deploy/README.md).
+
 ## Настройка бота
 
 1. Создайте бота у [@BotFather](https://t.me/BotFather), запишите токен в `BOT_TOKEN`, а имя без `@` — в `BOT_USERNAME`.

@@ -9,6 +9,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
@@ -47,6 +48,28 @@ def build_dispatcher(maker: async_sessionmaker[AsyncSession], config: Settings) 
     return dp
 
 
+def _session(config: Settings) -> AiohttpSession:
+    return AiohttpSession(proxy=config.telegram_proxy, timeout=60)
+
+
+async def check(config: Settings) -> tuple[bool, str]:
+    """Один запрос getMe: доступен ли api.telegram.org и верен ли токен."""
+    if config.bot_token is None:
+        return False, "BOT_TOKEN не задан"
+    via = f" через прокси {config.telegram_proxy.split('@')[-1]}" if config.telegram_proxy else ""
+    session = _session(config)
+    try:
+        bot = Bot(config.bot_token.get_secret_value(), session=session)
+        me = await asyncio.wait_for(bot.get_me(), timeout=20)
+    except TelegramUnauthorizedError:
+        return False, f"Telegram доступен{via}, но токен неверный: проверьте BOT_TOKEN"
+    except Exception as exc:  # любая причина недоступности — её и покажем
+        return False, f"Нет связи с api.telegram.org{via}: {type(exc).__name__}: {exc}"
+    finally:
+        await session.close()
+    return True, f"Связь с Telegram есть{via}, бот @{me.username}"
+
+
 async def run(config: Settings) -> None:
     configure_logging(config.log_level, config.log_format)
     if config.bot_token is None:
@@ -56,10 +79,12 @@ async def run(config: Settings) -> None:
     maker = get_sessionmaker(engine)
     bot = Bot(
         config.bot_token.get_secret_value(),
-        session=AiohttpSession(timeout=60),
+        session=_session(config),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True),
     )
     dp = build_dispatcher(maker, config)
+    if config.telegram_proxy:
+        log.info("bot.proxy", proxy=config.telegram_proxy.split("@")[-1])  # без логина и пароля
     me = await bot.get_me()
     log.info("bot.started", username=me.username)
     if config.bot_username is None:

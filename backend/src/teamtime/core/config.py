@@ -30,6 +30,12 @@ class Settings(BaseSettings):
         default=None, description="Имя бота без @, нужно для deep link «Исправить в боте»."
     )
 
+    telegram_proxy: str | None = Field(
+        default=None,
+        description="Прокси до api.telegram.org, если с сервера он недоступен напрямую: "
+        "http://host:port или socks5://user:pass@host:port.",
+    )
+
     admin_password: SecretStr | None = Field(
         default=None, description="Пароль режима админа. Пусто — режим админа выключен."
     )

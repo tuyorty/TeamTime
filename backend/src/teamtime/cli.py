@@ -94,6 +94,19 @@ def bot_run() -> None:
     asyncio.run(run(get_settings()))
 
 
+@bot_app.command("check")
+def bot_check() -> None:
+    """Проверить связь с Telegram и токен тем же путём, что и бот (с TELEGRAM_PROXY, если задан)."""
+    import asyncio
+
+    from teamtime.bot.app import check
+    from teamtime.core.config import get_settings
+
+    ok, message = asyncio.run(check(get_settings()))
+    typer.echo(message)
+    raise typer.Exit(0 if ok else 1)
+
+
 @demo_app.command("seed")
 def demo_seed(
     if_empty: bool = typer.Option(False, "--if-empty", help="Только если в базе нет сотрудников."),

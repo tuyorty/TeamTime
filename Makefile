@@ -79,3 +79,30 @@ screenshots: ## Скриншоты для README (нужен стек с DEMO=1)
 	$(WEB) npm run screenshots
 
 check: lint typecheck test ## Всё, что делает CI
+
+# --- сервер ------------------------------------------------------------------
+# Релиз — один архив: образы под архитектуру сервера + deploy/. Серверу не нужен интернет,
+# кроме api.telegram.org для бота. Подробности — deploy/README.md.
+VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || date +%Y%m%d%H%M)
+PLATFORM ?= linux/amd64
+HOST     ?=
+DEST     ?= /opt/xtime
+RELEASE  := dist/xtime-$(VERSION)
+
+.PHONY: release deploy
+release: ## Собрать архив для сервера: make release [PLATFORM=linux/arm64]
+	docker buildx build --platform $(PLATFORM) --load -t xtime-backend:$(VERSION) -t xtime-backend:current backend
+	docker buildx build --platform $(PLATFORM) --load -t xtime-web:$(VERSION) -t xtime-web:current frontend
+	docker buildx build --platform $(PLATFORM) --load -t xtime-db:$(VERSION) -t xtime-db:current -f deploy/db.Dockerfile deploy
+	rm -rf $(RELEASE) && mkdir -p $(RELEASE)
+	cp deploy/docker-compose.yml deploy/.env.example deploy/install.sh deploy/backup.sh deploy/README.md $(RELEASE)/
+	echo $(VERSION) > $(RELEASE)/VERSION
+	docker save xtime-backend:$(VERSION) xtime-backend:current xtime-web:$(VERSION) xtime-web:current \
+	  xtime-db:$(VERSION) xtime-db:current | gzip > $(RELEASE)/images.tar.gz
+	tar -C dist -czf $(RELEASE).tar.gz xtime-$(VERSION)
+	@echo "Готово: $(RELEASE).tar.gz ($$(du -h $(RELEASE).tar.gz | cut -f1))"
+
+deploy: release ## Собрать и установить на сервер: make deploy HOST=user@сервер
+	@test -n "$(HOST)" || { echo "Укажите HOST=user@сервер"; exit 1; }
+	scp $(RELEASE).tar.gz $(HOST):/tmp/
+	ssh -t $(HOST) 'cd /tmp && tar -xzf xtime-$(VERSION).tar.gz && sudo ./xtime-$(VERSION)/install.sh $(DEST); rm -rf /tmp/xtime-$(VERSION) /tmp/xtime-$(VERSION).tar.gz'
