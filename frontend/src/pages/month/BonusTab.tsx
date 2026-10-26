@@ -5,12 +5,26 @@ import type { Month, MonthRow } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { hm, money } from "@/lib/format";
 
-import { NumTh, PersonCell, td, th } from "./shared";
+import { EmptyRows, PersonCell, SortTh, td } from "./shared";
+import { footLabel, sortRows, useSort } from "./sorting";
 
 /** «Премии за месяц»: переработка от месячной нормы × ставка, с расшифровкой по клику. */
-export function BonusTab({ data }: { data: Month }) {
+type Key = "name" | "total" | "norm" | "overtime" | "rate" | "bonus";
+const GET: Record<Key, (r: MonthRow) => number | string> = {
+  name: (r) => r.employee.short_name,
+  total: (r) => r.summary.total_sec,
+  norm: (r) => r.summary.norm_sec,
+  overtime: (r) => r.summary.overtime_sec,
+  rate: (r) => Number(r.summary.hourly_rate),
+  bonus: (r) => Number(r.summary.bonus),
+};
+
+export function BonusTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
   const [open, setOpen] = useState<number | null>(null);
-  const total = data.rows.reduce((s, r) => s + Number(r.summary.bonus), 0);
+  const { sort, toggle } = useSort<Key>();
+  const sorted = sortRows(rows, sort, GET);
+  const col = { sort, onSort: toggle };
+  const total = rows.reduce((s, r) => s + Number(r.summary.bonus), 0);
   return (
     <div className="grid gap-3">
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
@@ -18,18 +32,17 @@ export function BonusTab({ data }: { data: Month }) {
           <caption className="sr-only">Премии за переработку</caption>
           <thead className="border-b border-line bg-surface-2/60 text-left">
             <tr>
-              <th scope="col" className={th}>
-                Сотрудник
-              </th>
-              <NumTh>Итого</NumTh>
-              <NumTh>Норма</NumTh>
-              <NumTh>Переработка</NumTh>
-              <NumTh>Ставка, ₽/ч</NumTh>
-              <NumTh className="text-ink">Премия</NumTh>
+              <SortTh label="Сотрудник" sortKey="name" align="left" {...col} />
+              <SortTh label="Итого" sortKey="total" {...col} />
+              <SortTh label="Норма" sortKey="norm" {...col} />
+              <SortTh label="Переработка" sortKey="overtime" {...col} />
+              <SortTh label="Ставка, ₽/ч" sortKey="rate" {...col} />
+              <SortTh label="Премия" sortKey="bonus" className="text-ink" {...col} />
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r) => {
+            {sorted.length ? null : <EmptyRows colSpan={6} />}
+            {sorted.map((r) => {
               const s = r.summary;
               const expanded = open === r.employee.id;
               return (
@@ -79,7 +92,7 @@ export function BonusTab({ data }: { data: Month }) {
           <tfoot className="border-t border-line bg-surface-2/60">
             <tr>
               <th scope="row" colSpan={5} className="px-3 py-2 text-left text-[12px] font-medium text-ink-3">
-                Всего премий
+                {footLabel(rows.length, data.rows.length, "Всего премий")}
               </th>
               <td className={cn(td, "text-right font-semibold")}>{money(total)}</td>
             </tr>

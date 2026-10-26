@@ -1,8 +1,11 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { Link } from "react-router";
 
 import type { EmployeeBrief } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { cn } from "@/lib/cn";
+
+import type { SortState } from "./sorting";
 
 export function PersonCell({ employee, position }: { employee: EmployeeBrief; position?: string }) {
   return (
@@ -51,5 +54,62 @@ export function NormBar({ total, norm, max }: { total: number; norm: number; max
       ) : null}
       <div className="absolute -inset-y-[3px] w-px -translate-x-1/2 bg-ink-2" style={{ left: pct(norm) }} />
     </div>
+  );
+}
+
+// --- сортировка таблиц месяца ----------------------------------------------------------------
+
+export function SortTh<K extends string>({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  title,
+  align = "right",
+  className,
+}: {
+  label: React.ReactNode;
+  sortKey: K;
+  sort: SortState<K> | null;
+  onSort: (key: K) => void;
+  title?: string;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const dir = sort?.key === sortKey ? sort.dir : null;
+  const Icon = dir === "desc" ? ArrowDown : dir === "asc" ? ArrowUp : ArrowUpDown;
+  return (
+    <th
+      scope="col"
+      title={title}
+      aria-sort={dir === "desc" ? "descending" : dir === "asc" ? "ascending" : "none"}
+      className={cn(th, align === "right" && "text-right", className)}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "group inline-flex items-center gap-1 rounded-sm hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+          align === "right" && "flex-row-reverse",
+          dir && "text-ink",
+        )}
+      >
+        {label}
+        <Icon
+          aria-hidden
+          className={cn("size-3.5 shrink-0", !dir && "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60")}
+        />
+      </button>
+    </th>
+  );
+}
+
+export function EmptyRows({ colSpan }: { colSpan: number }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-3 py-6 text-center text-[13px] text-ink-2">
+        Под фильтр никто не подходит.
+      </td>
+    </tr>
   );
 }

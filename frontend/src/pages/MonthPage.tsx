@@ -13,6 +13,8 @@ import { cn } from "@/lib/cn";
 import { MONTHS, parseDate, shiftMonth } from "@/lib/format";
 
 import { BonusTab } from "./month/BonusTab";
+import { MonthFilters } from "./month/filters";
+import { useMonthFilter } from "./month/useMonthFilter";
 import { LatenessTab } from "./month/LatenessTab";
 import { MonthCharts } from "./month/MonthCharts";
 import { SummaryTab } from "./month/SummaryTab";
@@ -32,6 +34,7 @@ export default function MonthPage() {
   const year = Number(params.year ?? now.getFullYear());
   const month = Number(params.month ?? now.getMonth() + 1);
   const { data, error, refetch, isPlaceholderData } = useMonth(year, month);
+  const filter = useMonthFilter(data?.rows ?? []);
   const tab = search.get("tab") ?? "summary";
 
   const go = (delta: number) => {
@@ -102,14 +105,17 @@ export default function MonthPage() {
                 </TabsTrigger>
               ))}
             </TabsList>
-            <TabsContent value="summary" className="pt-4">
-              <SummaryTab data={data} />
+            <div className="pt-4">
+              <MonthFilters state={filter} total={data.rows.length} />
+            </div>
+            <TabsContent value="summary" className="pt-3">
+              <SummaryTab data={data} rows={filter.visible} />
             </TabsContent>
-            <TabsContent value="late" className="pt-4">
-              <LatenessTab data={data} />
+            <TabsContent value="late" className="pt-3">
+              <LatenessTab data={data} rows={filter.visible} />
             </TabsContent>
-            <TabsContent value="bonus" className="pt-4">
-              <BonusTab data={data} />
+            <TabsContent value="bonus" className="pt-3">
+              <BonusTab data={data} rows={filter.visible} />
             </TabsContent>
           </Tabs>
           <TruncationNote />

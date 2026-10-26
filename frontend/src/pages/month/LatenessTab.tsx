@@ -19,12 +19,13 @@ import { WEEKDAYS_SHORT, clock, count, ddmm, hm, weekday } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 
 import { curve, penaltyHours } from "./penalty";
-import { NumTh, PersonCell, td, th } from "./shared";
+import { EmptyRows, PersonCell, SortTh, td } from "./shared";
+import { sortRows, useSort } from "./sorting";
 
-export function LatenessTab({ data }: { data: Month }) {
+export function LatenessTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
   return (
     <div className="grid gap-5">
-      <LatenessTable data={data} />
+      <LatenessTable rows={rows} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <PenaltyChart data={data} />
         <Calculator data={data} />
@@ -33,23 +34,36 @@ export function LatenessTab({ data }: { data: Month }) {
   );
 }
 
-function LatenessTable({ data }: { data: Month }) {
+type LateKey = "name" | "count" | "sum" | "penalty" | "extra";
+const LATE_GET: Record<LateKey, (r: MonthRow) => number | string> = {
+  name: (r) => r.employee.short_name,
+  count: (r) => r.summary.late_count,
+  sum: (r) => r.summary.late_total_sec,
+  penalty: (r) => r.summary.penalty_sec,
+  extra: (r) => r.summary.penalty_sec - r.summary.late_total_sec,
+};
+
+function LatenessTable({ rows }: { rows: MonthRow[] }) {
   const [open, setOpen] = useState<number | null>(null);
+  const { sort, toggle } = useSort<LateKey>();
+  const sorted = sortRows(rows, sort, LATE_GET);
+  const col = { sort, onSort: toggle };
   return (
     <div className="overflow-x-auto rounded-lg border border-line bg-surface">
       <table className="w-full min-w-[640px] border-collapse">
         <caption className="sr-only">Опоздания за месяц</caption>
         <thead className="border-b border-line bg-surface-2/60 text-left">
           <tr>
-            <th scope="col" className={th}>Сотрудник</th>
-            <NumTh title="Дней с опозданием больше нуля">Количество</NumTh>
-            <NumTh title="Сумма опозданий за месяц">Сумма</NumTh>
-            <NumTh title="Опоздания(−): штраф по шкале">Штраф</NumTh>
-            <NumTh title="Насколько штраф больше суммы опозданий">Надбавка шкалы</NumTh>
+            <SortTh label="Сотрудник" sortKey="name" align="left" {...col} />
+            <SortTh label="Количество" sortKey="count" title="Дней с опозданием больше нуля" {...col} />
+            <SortTh label="Сумма" sortKey="sum" title="Сумма опозданий за месяц" {...col} />
+            <SortTh label="Штраф" sortKey="penalty" title="Опоздания(−): штраф по шкале" {...col} />
+            <SortTh label="Надбавка шкалы" sortKey="extra" title="Насколько штраф больше суммы опозданий" {...col} />
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((r) => {
+          {sorted.length ? null : <EmptyRows colSpan={5} />}
+          {sorted.map((r) => {
             const s = r.summary;
             const expanded = open === r.employee.id;
             const extra = s.penalty_sec - s.late_total_sec;

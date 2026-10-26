@@ -1,13 +1,29 @@
-import type { Month } from "@/api/types";
+import type { Month, MonthRow } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { hm, percent } from "@/lib/format";
 
-import { NormBar, NumTh, PersonCell, td, th } from "./shared";
+import { EmptyRows, NormBar, PersonCell, SortTh, td } from "./shared";
+import { footLabel, sortRows, useSort } from "./sorting";
 
 /** «Итог за месяц» — первая таблица исходного листа: Часы(+), Часы(e%), Опоздания(−), Итого. */
-export function SummaryTab({ data }: { data: Month }) {
+type Key = "name" | "worked" | "result" | "penalty" | "total" | "norm" | "progress";
+const GET: Record<Key, (r: MonthRow) => number | string> = {
+  name: (r) => r.employee.short_name,
+  worked: (r) => r.summary.worked_sec,
+  result: (r) => r.summary.result_sec,
+  penalty: (r) => r.summary.penalty_sec,
+  total: (r) => r.summary.total_sec,
+  norm: (r) => r.summary.norm_sec,
+  progress: (r) => r.summary.norm_progress,
+};
+
+export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
+  const { sort, toggle } = useSort<Key>();
+  // Шкала полос — по всей команде, чтобы фильтр не менял масштаб.
   const max = Math.max(1, ...data.rows.map((r) => Math.max(r.summary.total_sec, r.summary.norm_sec))) * 1.05;
-  const sum = (f: (s: Month["rows"][number]["summary"]) => number) => data.rows.reduce((acc, r) => acc + f(r.summary), 0);
+  const sum = (f: (s: MonthRow["summary"]) => number) => rows.reduce((acc, r) => acc + f(r.summary), 0);
+  const sorted = sortRows(rows, sort, GET);
+  const col = { sort, onSort: toggle };
   return (
     <div className="grid gap-3">
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
@@ -15,17 +31,18 @@ export function SummaryTab({ data }: { data: Month }) {
           <caption className="sr-only">Итог за месяц по сотрудникам</caption>
           <thead className="border-b border-line bg-surface-2/60 text-left">
             <tr>
-              <th scope="col" className={th}>Сотрудник</th>
-              <NumTh title="Сумма часов по дням">Часы(+)</NumTh>
-              <NumTh title="Сумма итогов по дням: часы × e%">Часы(e%)</NumTh>
-              <NumTh title="Штраф за опоздания по прогрессивной шкале">Опоздания(−)</NumTh>
-              <NumTh className="text-ink">Итого</NumTh>
-              <NumTh>Норма</NumTh>
-              <th scope="col" className={cn(th, "w-[22%]")}>Выполнение нормы</th>
+              <SortTh label="Сотрудник" sortKey="name" align="left" {...col} />
+              <SortTh label="Часы(+)" sortKey="worked" title="Сумма часов по дням" {...col} />
+              <SortTh label="Часы(e%)" sortKey="result" title="Сумма итогов по дням: часы × e%" {...col} />
+              <SortTh label="Опоздания(−)" sortKey="penalty" title="Штраф за опоздания по прогрессивной шкале" {...col} />
+              <SortTh label="Итого" sortKey="total" className="text-ink" {...col} />
+              <SortTh label="Норма" sortKey="norm" {...col} />
+              <SortTh label="Выполнение нормы" sortKey="progress" align="left" className="w-[22%]" {...col} />
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r) => {
+            {sorted.length ? null : <EmptyRows colSpan={7} />}
+            {sorted.map((r) => {
               const s = r.summary;
               return (
                 <tr key={r.employee.id} className="border-b border-line last:border-b-0">
@@ -53,7 +70,9 @@ export function SummaryTab({ data }: { data: Month }) {
           </tbody>
           <tfoot className="border-t border-line bg-surface-2/60">
             <tr className="text-[13px] tnum">
-              <th scope="row" className="px-3 py-2 text-left text-[12px] font-medium text-ink-3">Команда</th>
+              <th scope="row" className="px-3 py-2 text-left text-[12px] font-medium text-ink-3">
+                {footLabel(rows.length, data.rows.length, "Команда")}
+              </th>
               <td className={cn(td, "text-right")}>{hm(sum((s) => s.worked_sec))}</td>
               <td className={cn(td, "text-right")}>{hm(sum((s) => s.result_sec))}</td>
               <td className={cn(td, "text-right", sum((s) => s.penalty_sec) > 0 ? "text-late-ink" : "text-ink-3")}>
