@@ -74,23 +74,23 @@ export default function PlansPage() {
         </EmptyState>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-          <table className="w-full min-w-[1080px] table-fixed border-collapse text-[13px]">
+          <table className="w-full min-w-[960px] table-fixed border-collapse text-[13px]">
             <colgroup>
-              <col className="w-[13rem]" />
+              <col className="w-[11.5rem]" />
               {data.days.map((d) => (
                 <col key={d} />
               ))}
-              <col className="w-[16rem]" />
+              <col className="w-[18rem]" />
             </colgroup>
             <thead className="border-b border-line bg-surface-2/60 text-left text-[12px] text-ink-3">
               <tr>
-                <th scope="col" className="px-3 py-2 font-medium">Сотрудник</th>
+                <th scope="col" className="px-3 py-1.5 font-medium">Сотрудник</th>
                 {data.days.map((d, i) => (
-                  <th key={d} scope="col" className="border-l border-line px-2.5 py-2 font-medium">
+                  <th key={d} scope="col" className="border-l border-line px-2 py-1.5 font-medium">
                     {WEEKDAYS_SHORT[i]} <span className="font-normal tnum">{dayMonthShort(d)}</span>
                   </th>
                 ))}
-                <th scope="col" className="border-l border-line px-3 py-2 font-medium">Задачи спринта</th>
+                <th scope="col" className="border-l border-line px-3 py-1.5 font-medium">Задачи спринта</th>
               </tr>
             </thead>
             <tbody>
@@ -98,25 +98,29 @@ export default function PlansPage() {
                 const days = r.current ? byDate(r.current) : new Map<string, PlanDay>();
                 return (
                   <tr key={r.employee.id} className="border-b border-line align-top last:border-b-0">
-                    <th scope="row" className="px-3 py-2.5 text-left font-normal">
-                      <div className="flex items-center gap-2">
-                        <Avatar employee={r.employee} size={24} />
-                        <span className="truncate font-medium">{r.employee.short_name}</span>
+                    <th scope="row" className="px-3 py-1.5 text-left font-normal">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Avatar employee={r.employee} size={20} />
+                        <span
+                          className="truncate font-medium"
+                          title={r.current ? `Версия ${r.current.version}, ${SOURCE[r.current.source]}` : "Расписания нет"}
+                        >
+                          {r.employee.short_name}
+                        </span>
+                        {!r.current ? <span className="shrink-0 text-[11px] text-ink-3">нет плана</span> : null}
+                        {r.current && r.versions.length > 1 ? (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="ml-auto size-6 shrink-0 text-ink-3"
+                            aria-label={`Что менялось: ${r.versions.length} версии`}
+                            title={`Что менялось: версий ${r.versions.length}`}
+                            onClick={() => setDiff(r)}
+                          >
+                            <GitCompareArrows className="!size-3.5" />
+                          </Button>
+                        ) : null}
                       </div>
-                      {r.current ? (
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-8 text-[12px] text-ink-3">
-                          <span>
-                            версия {r.current.version}, {SOURCE[r.current.source]}
-                          </span>
-                          {r.versions.length > 1 ? (
-                            <Button size="sm" variant="link" className="h-auto text-[12px]" onClick={() => setDiff(r)}>
-                              <GitCompareArrows className="!size-3.5" /> что менялось
-                            </Button>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="mt-1 pl-8 text-[12px] text-ink-3">расписания нет</div>
-                      )}
                     </th>
                     {data.days.map((d) => {
                       const p = days.get(d);
@@ -124,25 +128,28 @@ export default function PlansPage() {
                         <td
                           key={d}
                           className={cn(
-                            "border-l border-line px-2.5 py-2.5 tnum",
+                            "border-l border-line px-2 py-1.5 text-[12px] leading-5 tnum",
                             !p && "text-ink-3",
                             p?.kind === "off" && "hatch text-ink-2",
-                            p?.kind === "note" && "italic text-ink-2",
+                            p?.kind === "note" && "truncate italic text-ink-2",
                             p?.note_has_time && "text-deviation-ink",
                           )}
+                          title={p?.kind === "note" ? dayText(p) : undefined}
                         >
                           {dayText(p)}
                         </td>
                       );
                     })}
-                    <td className="border-l border-line px-3 py-2.5">
+                    <td
+                      className="border-l border-line px-3 py-1.5"
+                      title={
+                        r.current
+                          ? `Дней с планом: ${r.days_planned}, с дейликом: ${r.days_with_daily}` +
+                            (r.done_tasks.length ? `, сделано пунктов: ${r.done_tasks.length}` : "")
+                          : undefined
+                      }
+                    >
                       {r.current?.tasks.length ? <TaskList tasks={r.current.tasks} /> : <span className="text-ink-3">—</span>}
-                      {r.current ? (
-                        <p className="mt-2 text-[12px] text-ink-3">
-                          Дней с планом: {r.days_planned}, с дейликом: {r.days_with_daily}
-                          {r.done_tasks.length ? `, сделано пунктов: ${r.done_tasks.length}` : ""}
-                        </p>
-                      ) : null}
                     </td>
                   </tr>
                 );
@@ -162,43 +169,49 @@ export default function PlansPage() {
   );
 }
 
-/** Различия версий: какие дни поменялись между соседними версиями. */
-const COLLAPSED_TASKS = 3;
-/** Длиннее — в свёрнутом виде обрезается многоточием. */
-const LONG_TASK = 70;
-
-/** Задачи спринта: свёрнуто — первые пункты в одну строку, чтобы строки табеля не разъезжались. */
+/** Задачи спринта: свёрнуто — первый пункт в одну строку и счётчик остальных, чтобы вся
+ * команда помещалась на экран. Развёрнуто — весь список. */
 function TaskList({ tasks }: { tasks: string[] }) {
   const [open, setOpen] = useState(false);
-  const collapsible = tasks.length > COLLAPSED_TASKS || tasks.some((t) => t.length > LONG_TASK);
-  const shown = open || !collapsible ? tasks : tasks.slice(0, COLLAPSED_TASKS);
-  const hidden = tasks.length - shown.length;
+  const rest = tasks.length - 1;
+  const toggle = (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={() => setOpen((v) => !v)}
+      className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-[11px] text-accent-ink hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+      title={open ? "Свернуть" : "Показать все задачи"}
+    >
+      {open ? "свернуть" : `+${rest}`}
+      <ChevronDown className={cn("size-3 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+    </button>
+  );
+  if (!open) {
+    return (
+      <div className="flex min-w-0 items-center gap-1 text-[12px] leading-5">
+        <span className="min-w-0 truncate" title={tasks.join("\n")}>
+          {tasks[0]}
+        </span>
+        {rest > 0 || tasks[0]!.length > 40 ? toggle : null}
+      </div>
+    );
+  }
   return (
-    <div className="grid justify-items-start gap-1">
+    <div className="grid justify-items-start gap-0.5 text-[12px] leading-5">
       <ul className="grid w-full gap-0.5">
-        {shown.map((t, i) => (
-          <li key={i} className="flex min-w-0 gap-1.5" title={open ? undefined : t}>
-            <span className="mt-[7px] size-1.5 shrink-0 rounded-full border border-ink-3" />
-            <span className={cn("min-w-0", !open && collapsible && "truncate")}>{t}</span>
+        {tasks.map((t, i) => (
+          <li key={i} className="flex min-w-0 gap-1.5">
+            <span className="mt-[7px] size-1 shrink-0 rounded-full bg-ink-3" />
+            <span className="min-w-0">{t}</span>
           </li>
         ))}
       </ul>
-      {collapsible ? (
-        <Button
-          size="sm"
-          variant="link"
-          className="h-auto text-[12px]"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <ChevronDown className={cn("!size-3.5 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
-          {open ? "Свернуть" : hidden > 0 ? `Ещё ${hidden} · развернуть` : "Развернуть"}
-        </Button>
-      ) : null}
+      {toggle}
     </div>
   );
 }
 
+/** Различия версий: какие дни поменялись между соседними версиями. */
 function VersionsDiff({ row, days }: { row: PlanRow; days: string[] }) {
   const versions = [...row.versions].reverse();
   return (
