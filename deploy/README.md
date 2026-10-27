@@ -52,6 +52,27 @@ TELEGRAM_PROXY=socks5://user:pass@10.0.0.5:1080   # или http://host:port
 
 Проверить вручную: `docker compose run --rm --no-deps api bot check`.
 
+### SSH-туннель через свой сервер
+
+Если прокси нет, но есть сервер с доступом к Telegram и SSH-входом на него, туннель
+поднимается на этом сервере без установки чего-либо на релее. Служба работает
+от обычного пользователя, у которого лежит ключ. Шаблон службы —
+`xtime-tg-tunnel.service`, шаги установки в его шапке. Коротко:
+
+```
+# ключ ~/.ssh/xtime_tg у обычного пользователя, .pub — в authorized_keys на релее
+sed -e 's|LOCAL_USER|user|' -e 's|KEY_PATH|/home/user/.ssh/xtime_tg|' \
+  -e 's|USER@RELAY|user@relay.example|' /opt/xtime/xtime-tg-tunnel.service \
+  | sudo tee /etc/systemd/system/xtime-tg-tunnel.service >/dev/null
+sudo systemctl daemon-reload && sudo systemctl enable --now xtime-tg-tunnel
+curl --socks5-hostname 172.17.0.1:1080 -sI https://api.telegram.org | head -1
+```
+
+В `.env`: `TELEGRAM_PROXY=socks5://172.17.0.1:1080`, затем `install.sh`. Адрес Telegram
+определяется на стороне релея, так что DNS этого сервера не мешает. Если `curl` отвечает,
+а `bot check` нет, файрвол не пускает контейнеры к туннелю:
+`sudo ufw allow from 172.16.0.0/12 to any port 1080 proto tcp`.
+
 ## Бэкапы
 
 ```

@@ -95,7 +95,8 @@ release: ## Собрать архив для сервера: make release [PLATF
 	docker buildx build --platform $(PLATFORM) --load -t xtime-web:$(VERSION) -t xtime-web:current frontend
 	docker buildx build --platform $(PLATFORM) --load -t xtime-db:$(VERSION) -t xtime-db:current -f deploy/db.Dockerfile deploy
 	rm -rf $(RELEASE) && mkdir -p $(RELEASE)
-	cp deploy/docker-compose.yml deploy/.env.example deploy/install.sh deploy/backup.sh deploy/README.md $(RELEASE)/
+	cp deploy/docker-compose.yml deploy/.env.example deploy/install.sh deploy/backup.sh deploy/README.md \
+	  deploy/xtime-tg-tunnel.service $(RELEASE)/
 	echo $(VERSION) > $(RELEASE)/VERSION
 	docker save xtime-backend:$(VERSION) xtime-backend:current xtime-web:$(VERSION) xtime-web:current \
 	  xtime-db:$(VERSION) xtime-db:current | gzip > $(RELEASE)/images.tar.gz

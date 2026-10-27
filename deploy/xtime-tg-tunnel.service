@@ -1,0 +1,32 @@
+# SSH-туннель до Telegram через свой сервер, у которого есть доступ к api.telegram.org.
+# Нужен, только если с этого сервера Telegram закрыт. Подробности — README.md, «Если Telegram недоступен».
+#
+# Туннель запускается от обычного пользователя этого сервера, у которого лежит ключ.
+# Установка:
+#   1. ключ без пароля, например: ssh-keygen -t ed25519 -f ~/.ssh/xtime_tg -N ""
+#      публичный ключ добавить на релей-сервер в ~/.ssh/authorized_keys
+#      проверка от этого пользователя: ssh -i ~/.ssh/xtime_tg USER@RELAY true
+#      (без пароля; на вопрос о ключе хоста ответить yes)
+#   2. заменить ниже LOCAL_USER, KEY_PATH (полный путь) и USER@RELAY,
+#      скопировать файл в /etc/systemd/system/
+#   3. sudo systemctl daemon-reload && sudo systemctl enable --now xtime-tg-tunnel
+#   4. в .env: TELEGRAM_PROXY=socks5://172.17.0.1:1080
+#
+# 172.17.0.1 — адрес сервера в сети Docker: туннель доступен контейнерам, но не виден снаружи.
+
+[Unit]
+Description=xTime: SSH-туннель до Telegram
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=LOCAL_USER
+ExecStart=/usr/bin/ssh -N -i KEY_PATH \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+  -o ExitOnForwardFailure=yes -o BatchMode=yes \
+  -D 172.17.0.1:1080 USER@RELAY
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -24,6 +24,7 @@ docker info >/dev/null 2>&1 || die "Docker недоступен этому по�
 mkdir -p "$DEST/backups"
 if [ "$SRC" != "$DEST" ]; then
   cp "$SRC/docker-compose.yml" "$SRC/.env.example" "$SRC/install.sh" "$SRC/backup.sh" "$SRC/README.md" "$DEST/"
+  [ -f "$SRC/xtime-tg-tunnel.service" ] && cp "$SRC/xtime-tg-tunnel.service" "$DEST/"
   [ -f "$SRC/VERSION" ] && cp "$SRC/VERSION" "$DEST/"
 fi
 chmod +x "$DEST/install.sh" "$DEST/backup.sh"
