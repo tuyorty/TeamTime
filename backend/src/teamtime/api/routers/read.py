@@ -14,6 +14,7 @@ from teamtime import __version__
 from teamtime.api.deps import AppSettingsDep, ConfigDep, IsAdminDep, SessionDep
 from teamtime.core import clock
 from teamtime.db.models import AuditLog, Employee, TelegramIdentity
+from teamtime.parsing import MessageKind
 from teamtime.schemas import (
     AuditOut,
     DayCellOut,
@@ -163,8 +164,20 @@ async def message(session: SessionDep, raw_id: int) -> MessageOut:
 async def inbox(
     session: SessionDep,
     view: Annotated[str, Query(pattern="^(pending|resolved|auto)$")] = "pending",
+    employee: Annotated[
+        str | None, Query(pattern=r"^(\d+|none)$", description="id сотрудника или none")
+    ] = None,
+    problem: Annotated[str | None, Query(pattern="^(failed|partial|unlinked)$")] = None,
+    kind: Annotated[MessageKind | None, Query()] = None,
 ) -> InboxOut:
-    return await messages.inbox(session, view)
+    return await messages.inbox(
+        session,
+        view,
+        employee=int(employee) if employee and employee.isdigit() else None,
+        unlinked=employee == "none",
+        problem=problem,
+        kind=kind,
+    )
 
 
 @router.get("/search", tags=["служебное"], summary="Поиск по людям, дням и задачам")

@@ -449,6 +449,8 @@ class InboxItem(BaseModel):
 class InboxOut(BaseModel):
     items: list[InboxItem]
     counts: dict[str, int]
+    total: int = 0
+    """Сколько записей подходит под фильтры (в items — не больше лимита)."""
 
 
 # --- поиск ---------------------------------------------------------------------------------

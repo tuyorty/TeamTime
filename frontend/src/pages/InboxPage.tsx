@@ -1,4 +1,4 @@
-import { Check, CheckCheck, EyeOff, Inbox, Link2, Pencil, RotateCw } from "lucide-react";
+import { Check, CheckCheck, EyeOff, Inbox, Link2, Pencil, RotateCw, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -23,13 +24,43 @@ const VIEWS = [
   { value: "auto", label: "Разобраны сами" },
 ] as const;
 
+const PROBLEMS = [
+  { value: "", label: "Все" },
+  { value: "failed", label: "Не разобрано" },
+  { value: "partial", label: "С вопросами" },
+  { value: "unlinked", label: "Без сотрудника" },
+] as const;
+
+const KINDS = [
+  { value: "", label: "Все типы" },
+  { value: "daily", label: "Дейлики" },
+  { value: "schedule", label: "Расписания" },
+] as const;
+
+const FILTER_KEYS = ["employee", "problem", "kind"] as const;
+
 const RESOLUTION = { accepted: "принято как есть", fixed: "исправлено", ignored: "не учитывается", auto: "разобрано", pending: "ждёт" };
 
 export default function InboxPage() {
   const [search, setSearch] = useSearchParams();
   const view = search.get("view") ?? "pending";
-  const { data, error, refetch } = useInbox(view);
+  const filter = new URLSearchParams(
+    FILTER_KEYS.flatMap((k) => (search.get(k) ? [[k, search.get(k)!]] : [])),
+  ).toString();
+  const { data, error, refetch } = useInbox(view, filter);
   const counts = useInbox("pending").data?.counts;
+  const admin = useIsAdmin();
+  const employees = useEmployees().data ?? [];
+  const reparseAll = useAdminMutation(() => api.post<{ detail: string }>("/admin/inbox/reparse"), {
+    success: (r) => `Переразобрано, ушло из инбокса: ${r.detail}`,
+  });
+
+  function setParam(key: (typeof FILTER_KEYS)[number] | "view", value: string) {
+    const next = new URLSearchParams(search);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSearch(next, { replace: true });
+  }
 
   return (
     <div className="grid gap-5">
@@ -37,7 +68,7 @@ export default function InboxPage() {
         title="Инбокс"
         subtitle="Сообщения, в которых бот сомневается: непонятные строки, не найден сотрудник, нет эффективности"
       />
-      <Tabs value={view} onValueChange={(v) => setSearch({ view: v })}>
+      <Tabs value={view} onValueChange={(v) => setParam("view", v)}>
         <TabsList>
           {VIEWS.map((v) => (
             <TabsTrigger key={v.value} value={v.value}>
@@ -47,6 +78,63 @@ export default function InboxPage() {
           ))}
         </TabsList>
       </Tabs>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label="Сотрудник"
+          className="w-full sm:w-52"
+          value={search.get("employee") ?? ""}
+          onChange={(e) => setParam("employee", e.target.value)}
+        >
+          <option value="">Все сотрудники</option>
+          <option value="none">Сотрудник не определён</option>
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.short_name}
+            </option>
+          ))}
+        </Select>
+        <Segmented
+          label="Проблема"
+          value={search.get("problem") ?? ""}
+          onChange={(v) => setParam("problem", v)}
+          options={PROBLEMS.map((p) => ({ value: p.value, label: p.label }))}
+        />
+        <Select aria-label="Тип сообщения" className="w-full sm:w-36" value={search.get("kind") ?? ""} onChange={(e) => setParam("kind", e.target.value)}>
+          {KINDS.map((k) => (
+            <option key={k.value} value={k.value}>
+              {k.label}
+            </option>
+          ))}
+        </Select>
+        {filter ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const next = new URLSearchParams(search);
+              FILTER_KEYS.forEach((k) => next.delete(k));
+              setSearch(next, { replace: true });
+            }}
+          >
+            <X /> Сбросить
+          </Button>
+        ) : null}
+        <span className="text-[12px] text-ink-3 tnum">
+          {data ? (data.total > data.items.length ? `Показано ${data.items.length} из ${data.total}` : `Найдено: ${data.total}`) : null}
+        </span>
+        {admin && view === "pending" ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="sm:ml-auto"
+            title="Прочитать заново все сообщения, которые ждут решения: после обновления бота, добавления сотрудников или привязки аккаунтов."
+            onClick={() => reparseAll.mutate(undefined)}
+            disabled={reparseAll.isPending}
+          >
+            <RotateCw className={cn(reparseAll.isPending && "animate-spin")} /> {reparseAll.isPending ? "Переразбираем…" : "Переразобрать всё"}
+          </Button>
+        ) : null}
+      </div>
       {error ? (
         <ErrorState error={error} onRetry={() => refetch()} />
       ) : !data ? (
@@ -56,8 +144,10 @@ export default function InboxPage() {
           ))}
         </div>
       ) : !data.items.length ? (
-        <EmptyState icon={view === "pending" ? CheckCheck : Inbox} title={view === "pending" ? "Всё разобрано" : "Пусто"}>
-          {view === "pending"
+        <EmptyState icon={view === "pending" && !filter ? CheckCheck : Inbox} title={filter ? "Ничего не найдено" : view === "pending" ? "Всё разобрано" : "Пусто"}>
+          {filter
+            ? "Под эти фильтры ничего не подходит."
+            : view === "pending"
             ? "Бот понял все сообщения. Новые вопросы появятся здесь сами."
             : "Здесь будут записи, когда они появятся."}
         </EmptyState>
@@ -155,10 +245,7 @@ function InboxCard({ item }: { item: InboxItem }) {
             );
           })}
         </pre>
-        <span className="text-[12px] text-ink-3">
-          Отправитель в Telegram: {m.author_name || "неизвестен"}
-          {p.resolution !== "pending" ? `, ${RESOLUTION[p.resolution]}` : ""}
-        </span>
+        {p.resolution !== "pending" ? <span className="text-[12px] text-ink-3">Решение: {RESOLUTION[p.resolution]}</span> : null}
       </div>
       <div className="grid content-start gap-3">
         {general.length ? (

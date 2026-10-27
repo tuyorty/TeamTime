@@ -501,6 +501,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/inbox/reparse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Переразобрать всё, что ждёт решения */
+        post: operations["reparse_all_api_v1_admin_inbox_reparse_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/inbox/{parse_id}/reparse": {
         parameters: {
             query?: never;
@@ -648,6 +665,12 @@ export interface components {
              * @default 0
              */
             undertime_tolerance_min: number;
+            /**
+             * Plan Notice Hours
+             * @description За сколько часов до начала дня правка расписания применяется без админа
+             * @default 12
+             */
+            plan_notice_hours: number;
             /**
              * Weekly Off
              * @description 0 — пн, 6 — вс
@@ -1136,6 +1159,11 @@ export interface components {
             counts: {
                 [key: string]: number;
             };
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** IssueOut */
         IssueOut: {
@@ -2273,6 +2301,10 @@ export interface operations {
         parameters: {
             query?: {
                 view?: string;
+                /** @description id сотрудника или none */
+                employee?: string | null;
+                problem?: string | null;
+                kind?: components["schemas"]["MessageKind"] | null;
             };
             header?: never;
             path?: never;
@@ -2958,6 +2990,37 @@ export interface operations {
                 "application/json": components["schemas"]["ResolveIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reparse_all_api_v1_admin_inbox_reparse_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

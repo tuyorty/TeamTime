@@ -86,16 +86,36 @@ INBOX_FILTERS = {
 }
 
 
-async def inbox(session: AsyncSession, view: str = "pending", limit: int = 100) -> InboxOut:
+async def inbox(
+    session: AsyncSession,
+    view: str = "pending",
+    limit: int = 100,
+    *,
+    employee: int | None = None,
+    unlinked: bool = False,
+    problem: str | None = None,
+    kind: MessageKind | None = None,
+) -> InboxOut:
+    """Записи инбокса. Фильтры: сотрудник (или «не определён»), вид проблемы, тип сообщения."""
     resolutions = INBOX_FILTERS.get(view, INBOX_FILTERS["pending"])
+    where = [
+        ParseResultRow.is_latest,
+        ParseResultRow.kind != MessageKind.UNKNOWN,
+        ParseResultRow.resolution.in_(resolutions),
+    ]
+    if employee is not None:
+        where.append(ParseResultRow.employee_id == employee)
+    if unlinked or problem == "unlinked":
+        where.append(ParseResultRow.employee_unresolved)
+    if problem in {"failed", "partial"}:
+        where.append(ParseResultRow.status == ParseStatus(problem))
+    if kind is not None:
+        where.append(ParseResultRow.kind == kind)
+    total = await session.scalar(select(func.count()).select_from(ParseResultRow).where(*where))
     rows = await session.execute(
         select(ParseResultRow, RawMessageVersion)
         .join(RawMessageVersion, ParseResultRow.message_version_id == RawMessageVersion.id)
-        .where(
-            ParseResultRow.is_latest,
-            ParseResultRow.kind != MessageKind.UNKNOWN,
-            ParseResultRow.resolution.in_(resolutions),
-        )
+        .where(*where)
         .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
         .order_by(func.coalesce(RawMessageVersion.edited_at, RawMessage.sent_at).desc())
         .limit(limit)
@@ -129,4 +149,4 @@ async def inbox(session: AsyncSession, view: str = "pending", limit: int = 100) 
                 counts[view_name] += n
         if resolution is Resolution.PENDING and status is not ParseStatus.OK:
             counts[status.value] += n
-    return InboxOut(items=items, counts=counts)
+    return InboxOut(items=items, counts=counts, total=total or 0)

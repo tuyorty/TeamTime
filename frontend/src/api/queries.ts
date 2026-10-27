@@ -17,7 +17,7 @@ export const keys = {
   employee: (id: number, start?: string, end?: string) => ["employee", id, start, end] as const,
   calendar: (start: string, end: string) => ["calendar", start, end] as const,
   message: (id: number) => ["message", id] as const,
-  inbox: (view: string) => ["inbox", view] as const,
+  inbox: (view: string, filter = "") => ["inbox", view, filter] as const,
   identities: ["identities"] as const,
   topics: ["topics"] as const,
   chats: ["chats"] as const,
@@ -86,8 +86,12 @@ export const useMessage = (id: number | null | undefined) =>
     enabled: !!id,
   });
 
-export const useInbox = (view: string) =>
-  useQuery({ queryKey: keys.inbox(view), queryFn: () => api.get<Inbox>(`/inbox?view=${view}`) });
+/** ``filter`` — готовая строка параметров фильтров (employee, problem, kind) без «?». */
+export const useInbox = (view: string, filter = "") =>
+  useQuery({
+    queryKey: keys.inbox(view, filter),
+    queryFn: () => api.get<Inbox>(`/inbox?view=${view}${filter ? `&${filter}` : ""}`),
+  });
 
 export const useIdentities = () =>
   useQuery({ queryKey: keys.identities, queryFn: () => api.get<Identity[]>("/identities") });

@@ -208,7 +208,7 @@ async def test_demo_emulator(client: httpx.AsyncClient, maker) -> None:
     )
     body = r.json()
     assert body["reaction"] == "🤔"
-    assert "Исправить в боте" in body["reply"]
+    assert "исправить в боте" in body["reply"]
 
 
 async def test_inbox_flow(admin: httpx.AsyncClient, maker) -> None:
@@ -221,6 +221,13 @@ async def test_inbox_flow(admin: httpx.AsyncClient, maker) -> None:
     assert inbox["counts"]["pending"] == 1
     item = inbox["items"][0]
     assert item["parse"]["status"] == "partial"
+    emp = item["parse"]["employee"]["id"]
+    assert (await admin.get(f"/inbox?employee={emp}&problem=partial&kind=daily")).json()[
+        "total"
+    ] == 1
+    assert (await admin.get("/inbox?problem=failed")).json()["total"] == 0
+    assert (await admin.get("/inbox?employee=none")).json()["total"] == 0
+    assert (await admin.get("/inbox?kind=schedule")).json()["items"] == []
     r = await admin.post(
         f"/admin/inbox/{item['parse']['id']}/resolve",
         json={"resolution": "accepted"},
