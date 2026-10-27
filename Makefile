@@ -100,7 +100,7 @@ release: ## Собрать архив для сервера: make release [PLATF
 	echo $(VERSION) > $(RELEASE)/VERSION
 	docker save xtime-backend:$(VERSION) xtime-backend:current xtime-web:$(VERSION) xtime-web:current \
 	  xtime-db:$(VERSION) xtime-db:current | gzip > $(RELEASE)/images.tar.gz
-	tar -C dist -czf $(RELEASE).tar.gz xtime-$(VERSION)
+	COPYFILE_DISABLE=1 tar --no-xattrs -C dist -czf $(RELEASE).tar.gz xtime-$(VERSION)
 	@echo "Готово: $(RELEASE).tar.gz ($$(du -h $(RELEASE).tar.gz | cut -f1))"
 
 deploy: release ## Собрать и установить на сервер: make deploy HOST=user@сервер
