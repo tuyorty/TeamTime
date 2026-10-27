@@ -17,15 +17,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from teamtime.bot import texts
+from teamtime.bot.feedback import issue_text
 from teamtime.bot.handlers.commands import send_my_month, send_my_week, send_today
 from teamtime.bot.identity import employee_for, not_linked_text
 from teamtime.bot.keyboards import (
+    MENU,
     FixCb,
     MenuCb,
     StatusCb,
     efficiency_menu,
     fix_menu,
-    main_menu,
+    reply_menu,
     status_menu,
 )
 from teamtime.calc import STATUS_LABELS, StatusKind
@@ -37,7 +39,7 @@ from teamtime.db.models import (
     RawMessageVersion,
     Resolution,
 )
-from teamtime.parsing import MessageKind, PlanDayKind, parse_daily
+from teamtime.parsing import Issue, MessageKind, PlanDayKind, Severity, parse_daily
 from teamtime.parsing.text import DATE_RE, closest_year, format_seconds, parse_interval_list
 from teamtime.services import manual
 from teamtime.services.facts import today_local
@@ -87,7 +89,32 @@ async def start(message: Message, session: AsyncSession, state: FSMContext) -> N
     if employee is None:
         await message.answer(f"{hello}\n\n{not_linked_text(message.from_user)}\n\n{texts.HELP}")
         return
-    await message.answer(f"{hello}\n\n{texts.HELP}", reply_markup=main_menu())
+    await message.answer(f"{hello}\n\n{texts.HELP}", reply_markup=reply_menu())
+
+
+async def run_menu(
+    action: str, msg: Message, session: AsyncSession, settings: AppSettings, user: User
+) -> None:
+    if action == "week":
+        await send_my_week(msg, session, settings, user)
+    elif action == "month":
+        await send_my_month(msg, session, settings, user)
+    elif action == "today":
+        await send_today(msg, session, settings, user)
+    elif action == "absent":
+        await msg.answer("Что отметить?", reply_markup=status_menu())
+    elif action == "fix":
+        await list_fixes(msg, session, user)
+
+
+@router.message(F.text.in_(MENU))
+async def menu_button(
+    message: Message, session: AsyncSession, settings: AppSettings, state: FSMContext
+) -> None:
+    """Кнопка постоянного меню. Прерывает начатое исправление: человек передумал."""
+    await state.clear()
+    if message.from_user and message.text:
+        await run_menu(MENU[message.text], message, session, settings, message.from_user)
 
 
 @router.callback_query(MenuCb.filter())
@@ -99,20 +126,8 @@ async def menu(
     state: FSMContext,
 ) -> None:
     await query.answer()
-    msg = query.message
-    if not isinstance(msg, Message):
-        return
-    user = query.from_user
-    if callback_data.action == "week":
-        await send_my_week(msg, session, settings, user)
-    elif callback_data.action == "month":
-        await send_my_month(msg, session, settings, user)
-    elif callback_data.action == "today":
-        await send_today(msg, session, settings, user)
-    elif callback_data.action == "absent":
-        await msg.answer("Что отметить?", reply_markup=status_menu())
-    elif callback_data.action == "fix":
-        await list_fixes(msg, session, user)
+    if isinstance(query.message, Message):
+        await run_menu(callback_data.action, query.message, session, settings, query.from_user)
 
 
 # --- статусы -------------------------------------------------------------------------------
@@ -301,11 +316,14 @@ async def show_fix(message: Message, session: AsyncSession, user: User, parse_id
         await message.answer("Это сообщение не найдено или прислано не вами.")
         return
     row, _raw, _employee = found
-    problems = [i["message"] for i in row.issues if i["severity"] != "info"]
-    notes = [i["message"] for i in row.issues if i["code"] == "note_has_time"]
+    issues = [
+        Issue(i["code"], Severity(i["severity"]), i["message"], i.get("line_no"), i.get("line"))
+        for i in row.issues
+        if i["severity"] != "info" or i["code"] == "note_has_time"
+    ]
     text = describe(row, ZoneInfo("UTC"))
-    if problems or notes:
-        text += "\n\n" + "\n".join(f"• {escape(p)}" for p in [*problems, *notes])
+    if issues:
+        text += "\n\n" + "\n".join(f"• {issue_text(i)}" for i in issues)
     if row.employee_unresolved:
         text += f"\n\n{not_linked_text(user)}"
         await message.answer(text)
@@ -503,4 +521,4 @@ async def fix_plan_day(message: Message, session: AsyncSession, state: FSMContex
 
 @router.message(F.text)
 async def fallback(message: Message) -> None:
-    await message.answer("Не понял. Вот что я умею:\n\n" + texts.HELP, reply_markup=main_menu())
+    await message.answer("Не понял. Вот что я умею:\n\n" + texts.HELP, reply_markup=reply_menu())

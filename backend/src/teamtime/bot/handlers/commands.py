@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from teamtime.bot import texts
 from teamtime.bot.identity import employee_for, not_linked_text, team_access
-from teamtime.bot.keyboards import main_menu
+from teamtime.bot.keyboards import reply_menu
 from teamtime.services import reports
 from teamtime.services.facts import today_local
 from teamtime.services.settings import AppSettings
@@ -20,7 +20,7 @@ router = Router(name="commands")
 @router.message(Command("help"))
 async def help_(message: Message) -> None:
     await message.answer(
-        texts.HELP, reply_markup=main_menu() if message.chat.type == "private" else None
+        texts.HELP, reply_markup=reply_menu() if message.chat.type == "private" else None
     )
 
 

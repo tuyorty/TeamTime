@@ -3,8 +3,22 @@
 from __future__ import annotations
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+MENU = {
+    "🗓 Моя неделя": "week",
+    "📊 Месяц": "month",
+    "👥 Сегодня": "today",
+    "🙅 Не приду": "absent",
+    "✏️ Исправить": "fix",
+}
+"""Кнопки постоянного меню в личке: подпись → действие (те же, что у MenuCb)."""
 
 
 class MenuCb(CallbackData, prefix="m"):
@@ -21,15 +35,16 @@ class StatusCb(CallbackData, prefix="st"):
     kind: str
 
 
-def main_menu() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    kb.button(text="Моя неделя", callback_data=MenuCb(action="week"))
-    kb.button(text="Месяц", callback_data=MenuCb(action="month"))
-    kb.button(text="Сегодня", callback_data=MenuCb(action="today"))
-    kb.button(text="Не приду / статус", callback_data=MenuCb(action="absent"))
-    kb.button(text="Исправить", callback_data=MenuCb(action="fix"))
-    kb.adjust(3, 2)
-    return kb.as_markup()
+def reply_menu() -> ReplyKeyboardMarkup:
+    """Постоянная панель под полем ввода в личке: всегда под рукой, ничего не нужно набирать."""
+    labels = list(MENU)
+    rows = [labels[0:2], labels[2:4], labels[4:]]
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=t) for t in row] for row in rows],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Выберите действие или пришлите сообщение",
+    )
 
 
 def status_menu() -> InlineKeyboardMarkup:

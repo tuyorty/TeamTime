@@ -218,9 +218,9 @@ export default function EmulatorPage() {
                   {m.reply ? (
                     <div className="ml-6 mt-2 flex w-fit max-w-full items-start gap-2 rounded-lg bg-accent-soft px-3 py-2 text-[13px]">
                       <Bot className="mt-0.5 size-4 shrink-0 text-accent-ink" />
-                      <span>
+                      <span className="whitespace-pre-line">
                         {strip(m.reply)}{" "}
-                        {m.reply.includes("Исправить в боте") ? (
+                        {m.reply.includes("исправить в боте") ? (
                           <span className="text-[12px] text-ink-3">(ссылка открывает личку бота)</span>
                         ) : null}
                       </span>

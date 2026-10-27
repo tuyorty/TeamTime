@@ -73,14 +73,24 @@ async def test_schedule_gets_ok_reaction_and_no_reply(tg: Telegram, maker) -> No
     assert len(plans) == 1
 
 
-async def test_problem_gets_thinking_reaction_and_one_line_with_deep_link(tg: Telegram) -> None:
-    await tg.group(501, "23.10.2026\n10:00 - 18:00\n- без эффективности")
+async def test_problem_reply_says_what_and_how_to_fix(tg: Telegram) -> None:
+    await tg.group(501, "23.10.2026\n10:00 - 18:00\nс обедом\n- без эффективности")
     assert reactions(tg) == ["🤔"]
     replies = tg.session.of(SendMessage)
     assert len(replies) == 1
-    assert "Исправить в боте" in replies[0].text
-    assert "https://t.me/teamtime_test_bot?start=fix_" in replies[0].text
-    assert replies[0].text.count("\n") == 0  # одна строка, без разборок в теме
+    text = replies[0].text
+    assert "строка «с обедом» — не понял, что это" in text
+    assert "Добавьте строку «Эффективность: 80%»" in text
+    assert "Отредактируйте сообщение" in text
+    assert "https://t.me/teamtime_test_bot?start=fix_" in text
+
+
+async def test_unlinked_account_is_not_blamed_on_author(tg: Telegram) -> None:
+    await tg.group(888, f.daily_text("23.10.2026"))
+    text = tg.session.of(SendMessage)[0].text
+    assert "не привязан" in text
+    assert "переписывать не нужно" in text
+    assert "Отредактируйте" not in text
 
 
 async def test_chatter_in_topic_is_ignored(tg: Telegram) -> None:
