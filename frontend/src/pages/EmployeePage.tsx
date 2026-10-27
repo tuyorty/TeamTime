@@ -1,6 +1,6 @@
 import { ArrowLeft, AtSign, Flame, ListChecks, NotebookPen, Target } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 
 import { useAudit, useEmployee, useMeta } from "@/api/queries";
 import type { EmployeeDetail } from "@/api/types";
@@ -9,19 +9,52 @@ import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
 import { ErrorState, TruncationNote } from "@/components/domain/feedback";
 import { STATUS } from "@/components/domain/states";
 import { Badge } from "@/components/ui/badge";
+import { Input, Select } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
-import { WEEKDAYS_SHORT, count, dateTime, ddmm, hm, money, percent, weekday } from "@/lib/format";
+import { WEEKDAYS_SHORT, count, dateTime, ddmm, hm, isoDate, money, parseDate, percent, rangeShort, weekday } from "@/lib/format";
 
 import { NormBar } from "./month/shared";
 import { EfficiencyChart, HoursChart, Punctuality } from "./employee/Charts";
 import { MonthHeatmap } from "./employee/Heatmap";
 
+/** Готовые периоды статистики. Пустое значение — по умолчанию сервера (8 недель). */
+const PERIODS = [
+  { value: "", label: "8 недель" },
+  { value: "3m", label: "3 месяца" },
+  { value: "6m", label: "Полгода" },
+  { value: "year", label: "С начала года" },
+  { value: "12m", label: "12 месяцев" },
+  { value: "custom", label: "Свой период" },
+] as const;
+
+/** Сервер отдаёт статистику не больше чем за год. */
+const MAX_DAYS = 370;
+
+function periodRange(period: string, today: string, from: string | null, to: string | null): [string, string] | null {
+  const end = parseDate(today);
+  const back = (months: number) => {
+    const d = new Date(end);
+    d.setMonth(d.getMonth() - months);
+    d.setDate(d.getDate() + 1);
+    return isoDate(d);
+  };
+  if (period === "3m") return [back(3), today];
+  if (period === "6m") return [back(6), today];
+  if (period === "12m") return [back(12), today];
+  if (period === "year") return [`${end.getFullYear()}-01-01`, today];
+  if (period === "custom" && from && to && from <= to) return [from, to];
+  return null;
+}
+
 export default function EmployeePage() {
   const id = Number(useParams().id);
-  const { data, error, refetch } = useEmployee(id);
+  const [search, setSearch] = useSearchParams();
   const today = useMeta().data?.today;
+  const period = search.get("period") ?? "";
+  const range = today ? periodRange(period, today, search.get("from"), search.get("to")) : null;
+  const { data, error, refetch } = useEmployee(id, range?.[0], range?.[1]);
   const [selected, setSelected] = useState<DayRef | null>(null);
 
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
@@ -61,9 +94,20 @@ export default function EmployeePage() {
             {!e.is_active ? <Badge>не активен</Badge> : null}
           </p>
         </div>
+        <PeriodPicker
+          period={period}
+          from={search.get("from") ?? data.start}
+          to={search.get("to") ?? data.end}
+          onChange={(next) => setSearch(next, { replace: true })}
+        />
       </header>
 
       <MonthStrip data={data} />
+
+      <p className="-mb-2 text-[13px] text-ink-2">
+        Статистика за {rangeShort(data.start, data.end)} {data.start.slice(0, 4) !== data.end.slice(0, 4) ? `${data.start.slice(0, 4)}–${data.end.slice(0, 4)}` : data.end.slice(0, 4)}
+        <span className="text-ink-3"> · итоги месяца выше — за текущий месяц</span>
+      </p>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <HoursChart data={data} />
@@ -84,6 +128,58 @@ export default function EmployeePage() {
       <HistoryPanel employeeId={e.id} />
       <TruncationNote />
       <DayDetailSheet value={selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}
+
+function PeriodPicker({
+  period,
+  from,
+  to,
+  onChange,
+}: {
+  period: string;
+  from: string;
+  to: string;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  const tooLong = (a: string, b: string) => (parseDate(b).getTime() - parseDate(a).getTime()) / 86_400_000 > MAX_DAYS;
+  const [error, setError] = useState<string | null>(null);
+  const setDates = (a: string, b: string) => {
+    if (!a || !b) return;
+    if (a > b) return setError("Начало позже конца");
+    if (tooLong(a, b)) return setError("Не больше года");
+    setError(null);
+    onChange({ period: "custom", from: a, to: b });
+  };
+  return (
+    <div className="grid gap-1.5 sm:ml-auto sm:justify-items-end">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label="Период статистики"
+          className="w-40"
+          value={period}
+          onChange={(e) => {
+            const v = e.target.value;
+            setError(null);
+            onChange(v === "custom" ? { period: v, from, to } : v ? { period: v } : {});
+          }}
+        >
+          {PERIODS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </Select>
+        {period === "custom" ? (
+          <>
+            <Input type="date" aria-label="Начало периода" className="w-36" value={from} onChange={(e) => setDates(e.target.value, to)} />
+            <span className="text-ink-3">–</span>
+            <Input type="date" aria-label="Конец периода" className="w-36" value={to} onChange={(e) => setDates(from, e.target.value)} />
+          </>
+        ) : null}
+      </div>
+      {error ? <span role="alert" className="text-[12px] text-late-ink">{error}</span> : null}
     </div>
   );
 }
