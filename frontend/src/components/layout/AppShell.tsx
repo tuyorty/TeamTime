@@ -1,6 +1,6 @@
 import { MoreHorizontal, Search } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 
 import { useInbox, useMeta } from "@/api/queries";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,14 @@ import { CommandPalette } from "./CommandPalette";
 import { NAV, type NavItem } from "./nav";
 import { ThemeMenu } from "./ThemeMenu";
 
+/** Логотип ведёт на «Сегодня», как во всех приложениях. */
 function Logo() {
   return (
-    <span className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-tight">
+    <Link
+      to="/"
+      aria-label="xTime — на главную, «Сегодня»"
+      className="-mx-1 -my-0.5 flex w-fit items-center gap-2 rounded-md px-1 py-0.5 font-display text-[16px] font-semibold tracking-tight hover:opacity-80"
+    >
       {/* Знак: полоса дня — контур плана и заливка факта. */}
       <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
         <rect x="1.5" y="6.5" width="19" height="9" rx="2.5" fill="none" stroke="var(--ink-3)" />
@@ -24,7 +29,7 @@ function Logo() {
         <rect x="1.5" y="6.5" width="4.5" height="9" rx="2.5" fill="var(--late)" />
       </svg>
       xTime
-    </span>
+    </Link>
   );
 }
 
