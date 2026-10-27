@@ -100,6 +100,7 @@ export function ImportTab() {
             <dt className="text-ink-3">Разобрано</dt>
             <dd>
               {report.statuses.ok ?? 0} без вопросов, {report.statuses.partial ?? 0} с вопросами, {report.statuses.failed ?? 0} не разобрано
+              {report.statuses.not_template ? <span className="text-ink-3">; ещё {report.statuses.not_template} — обычные реплики в теме</span> : null}
             </dd>
             <dt className="text-ink-3">Темы</dt>
             <dd>{Object.values(report.topics).join(", ") || "—"}</dd>

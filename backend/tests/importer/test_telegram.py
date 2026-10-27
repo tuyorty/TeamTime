@@ -55,7 +55,7 @@ async def test_import_uses_topics_and_is_idempotent(session: AsyncSession) -> No
     assert report.total == 6
     assert report.imported == 4  # расписание, два дейлика и реплика в теме дейликов
     assert report.skipped == 2  # болтовня вне тем и фото без текста
-    assert report.statuses == {"ok": 3, "failed": 1}
+    assert report.statuses == {"ok": 3, "not_template": 1}
 
     plans = await current_plans(session, date(2026, 10, 19), date(2026, 10, 25))
     assert len(plans) == 1

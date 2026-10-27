@@ -196,6 +196,10 @@ async def import_export(
             report.unchanged += 1
         else:
             report.imported += 1
-            report.statuses[outcome.status.value if outcome.status else "unknown"] += 1
+            # Реплика в привязанной теме сохраняется, но это не шаблон — не «не разобрано».
+            if outcome.kind is MessageKind.UNKNOWN:
+                report.statuses["not_template"] += 1
+            else:
+                report.statuses[outcome.status.value if outcome.status else "unknown"] += 1
     log.info("import.done", **{k: v for k, v in report.as_dict().items() if k != "errors"})
     return report
