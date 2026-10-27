@@ -143,7 +143,7 @@ def cell_out(cell: DayCell) -> DayCellOut:
         early_leave_sec=r.early_leave,
         undertime_sec=r.undertime,
         no_plan=r.no_plan,
-        flags=list(r.flags),
+        flags=[*r.flags, *(["plan_late_edit"] if cell.late_edit else [])],
         source=SourceRef(
             plan_id=plan.id if plan and cell.plan_day else None,
             plan_version=plan.version if plan and cell.plan_day else None,

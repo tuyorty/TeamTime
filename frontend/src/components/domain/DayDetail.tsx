@@ -85,6 +85,12 @@ export function DayDetail({ employee, cell }: { employee: EmployeeBrief; cell: D
           ) : (
             <span className="text-ink-3">не указан</span>
           )}
+          {cell.flags.includes("plan_late_edit") ? (
+            <p className="mt-1 text-[12px] text-deviation-ink">
+              Расписание поправили слишком поздно — действует прежний план. Чтобы учесть правку, примите её
+              в инбоксе или измените план вручную.
+            </p>
+          ) : null}
         </Row>
         <Row label="Факт">
           {f ? (

@@ -32,7 +32,7 @@ from teamtime.db.models import (
     SprintTask,
     TelegramIdentity,
 )
-from teamtime.parsing import Interval, PlanDayKind, person_key
+from teamtime.parsing import Interval, MessageKind, PlanDayKind, person_key
 from teamtime.parsing.schedule import NAME_RE
 from teamtime.services import audit, events
 from teamtime.services.facts import current_dailies, current_plans
@@ -532,3 +532,31 @@ async def reparse(
     )
     assert latest is not None
     return await interpret(session, raw, latest, settings, actor=actor)
+
+
+async def reparse_pending(session: AsyncSession, settings: AppSettings, *, actor: str) -> int:
+    """Переразобрать всё, что ждёт решения. Возвращает, сколько записей ушло из инбокса."""
+    ids = list(
+        await session.scalars(
+            select(ParseResultRow.id).where(
+                ParseResultRow.is_latest,
+                ParseResultRow.kind != MessageKind.UNKNOWN,
+                ParseResultRow.resolution == Resolution.PENDING,
+            )
+        )
+    )
+    left = 0
+    for parse_id in ids:
+        outcome = await reparse(session, parse_id, settings, actor=actor)
+        if not outcome.needs_attention:
+            left += 1
+    await audit.record(
+        session,
+        actor=actor,
+        action="inbox.reparse_all",
+        entity_type="inbox",
+        entity_id=0,
+        after={"total": len(ids), "resolved": left},
+    )
+    await events.notify(session, "inbox.changed")
+    return left

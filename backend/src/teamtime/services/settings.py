@@ -84,6 +84,12 @@ class AppSettings(BaseModel):
     late_tolerance_min: int = Field(0, ge=0, le=180, description="Допуск опоздания, минуты")
     early_tolerance_min: int = Field(0, ge=0, le=180)
     undertime_tolerance_min: int = Field(0, ge=0, le=600)
+    plan_notice_hours: int = Field(
+        12,
+        ge=0,
+        le=72,
+        description="За сколько часов до начала дня правка расписания применяется без админа",
+    )
     weekly_off: list[int] = Field(default_factory=lambda: [6], description="0 — пн, 6 — вс")
     holidays: list[date] = Field(default_factory=list)
     default_norm_hours: int = Field(160, ge=0, le=400)

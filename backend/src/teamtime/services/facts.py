@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import distinct_on
@@ -17,7 +18,18 @@ from sqlalchemy.orm import selectinload
 
 from teamtime.calc import DayResult, FactInput, PlanInput, compute_day
 from teamtime.core import clock
-from teamtime.db.models import Daily, DayStatus, Employee, PlanDay, SchedulePlan
+from teamtime.db.models import (
+    Daily,
+    DayStatus,
+    Employee,
+    ParseResultRow,
+    PlanDay,
+    RawMessage,
+    RawMessageVersion,
+    Resolution,
+    SchedulePlan,
+    Source,
+)
 from teamtime.parsing import Interval
 from teamtime.services.settings import AppSettings
 
@@ -31,6 +43,8 @@ class DayCell:
     plan_day: PlanDay | None
     daily: Daily | None
     status: DayStatus | None
+    late_edit: SchedulePlan | None = None
+    """Свежая версия плана, которая пришла после начала дня и для этого дня не учтена."""
 
 
 def date_range(start: date, end: date) -> Iterator[date]:
@@ -70,6 +84,127 @@ async def current_plans(
     if employee_ids is not None:
         q = q.where(SchedulePlan.employee_id.in_(list(employee_ids)))
     return list(await session.scalars(q))
+
+
+Stated = dict[int, datetime]
+"""id версии сообщения → когда её прислали (правка или исходная отправка)."""
+
+
+def stated_at(plan: SchedulePlan, sent: Stated) -> datetime | None:
+    """Когда человек сообщил этот план. None — правка админа на сайте, она действует всегда."""
+    if plan.source is Source.MANUAL:
+        return plan.created_at if plan.created_by.startswith("bot:") else None
+    if plan.source_version_id is None:
+        return plan.created_at
+    return sent.get(plan.source_version_id, plan.created_at)
+
+
+async def approved_plans(session: AsyncSession, plans: Iterable[SchedulePlan]) -> set[int]:
+    """Планы, чью позднюю правку админ подтвердил в инбоксе («Принять» или «Исправить»)."""
+    by_parse = {p.parse_result_id: p.id for p in plans if p.parse_result_id is not None}
+    if not by_parse:
+        return set()
+    rows = await session.scalars(
+        select(ParseResultRow.id).where(
+            ParseResultRow.id.in_(by_parse),
+            ParseResultRow.resolution.in_([Resolution.ACCEPTED, Resolution.FIXED]),
+        )
+    )
+    return {by_parse[r] for r in rows}
+
+
+async def message_times(session: AsyncSession, plans: Iterable[SchedulePlan]) -> Stated:
+    ids = {p.source_version_id for p in plans if p.source_version_id is not None}
+    if not ids:
+        return {}
+    rows = await session.execute(
+        select(RawMessageVersion.id, RawMessageVersion.edited_at, RawMessage.sent_at)
+        .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
+        .where(RawMessageVersion.id.in_(ids))
+    )
+    return {vid: edited or sent for vid, edited, sent in rows}
+
+
+async def plan_history(
+    session: AsyncSession, plans: list[SchedulePlan]
+) -> dict[int, list[SchedulePlan]]:
+    """Прежние версии (и отозванные правкой сообщения) для каждого актуального плана."""
+    if not plans:
+        return {}
+    rows = await session.scalars(
+        select(SchedulePlan)
+        .where(
+            SchedulePlan.employee_id.in_({p.employee_id for p in plans}),
+            SchedulePlan.week_start.in_({p.week_start for p in plans}),
+        )
+        .options(
+            selectinload(SchedulePlan.days),
+            selectinload(SchedulePlan.tasks),
+            selectinload(SchedulePlan.source_version),
+        )
+    )
+    by_week: dict[tuple[int, date], list[SchedulePlan]] = {}
+    for r in rows:
+        by_week.setdefault((r.employee_id, r.week_start), []).append(r)
+    return {
+        p.id: [o for o in by_week.get((p.employee_id, p.week_start), []) if o.version < p.version]
+        for p in plans
+    }
+
+
+def change_deadline(day: date, start_sec: int | None, notice_hours: int, tz: ZoneInfo) -> datetime:
+    """До какого момента правку плана дня можно прислать без подтверждения админа.
+
+    За ``notice_hours`` до начала дня по действующему плану: план с 10:00 и 12 часов — до 22:00
+    накануне. День без времени (выходной, заметка, нет плана) — до конца этого дня.
+    """
+    midnight = datetime.combine(day, time(), tz)
+    if start_sec is None:
+        return midnight + timedelta(days=1)
+    return midnight + timedelta(seconds=start_sec) - timedelta(hours=notice_hours)
+
+
+def plan_in_force(
+    day: date,
+    current: SchedulePlan,
+    older: list[SchedulePlan],
+    settings: AppSettings,
+    sent: Stated,
+    approved: set[int],
+) -> tuple[SchedulePlan, PlanDay | None, SchedulePlan | None]:
+    """План дня с учётом того, когда о правке предупредили.
+
+    Версии идут по времени, когда человек их прислал. Новая версия меняет день сама, если
+    пришла не позже чем за ``plan_notice_hours`` до начала дня по действующему плану. Позже —
+    только после подтверждения админа в инбоксе; до тех пор считается по прежнему плану. Первый
+    план недели и правки админа на сайте действуют всегда. Третье значение — свежая версия,
+    которая для этого дня ещё не действует (для подсказки на сайте).
+    """
+
+    def order(p: SchedulePlan) -> tuple[datetime, int]:
+        return (stated_at(p, sent) or p.created_at, p.version)
+
+    def day_of(p: SchedulePlan) -> PlanDay | None:
+        return next((d for d in p.days if d.date == day), None)
+
+    in_force: tuple[SchedulePlan, PlanDay | None] | None = None
+    for p in sorted([*older, current], key=order):
+        candidate = day_of(p)
+        if p is not current and candidate is None:
+            continue  # версия без этого дня (другой спринт) — не про него
+        when = stated_at(p, sent)
+        start = in_force[1].start_sec if in_force and in_force[1] else None
+        if (
+            in_force is None
+            or when is None
+            or p.id in approved
+            or when <= change_deadline(day, start, settings.plan_notice_hours, settings.tz)
+            or when == stated_at(in_force[0], sent)  # переразбор того же сообщения
+        ):
+            in_force = (p, candidate)
+    assert in_force is not None
+    plan, pday = in_force
+    return plan, pday, None if plan is current else current
 
 
 async def current_dailies(
@@ -141,13 +276,26 @@ async def load_cells(
     rules = settings.day_rules()
 
     plan_days: dict[tuple[int, date], tuple[SchedulePlan, PlanDay]] = {}
+    late_edits: dict[tuple[int, date], SchedulePlan] = {}
     plans = await current_plans(session, start, end, ids)
+    history = await plan_history(session, plans)
+    every = [*plans, *(o for h in history.values() for o in h)]
+    sent = await message_times(session, every)
+    approved = await approved_plans(session, every)
     for p in plans:
-        for d in p.days:
+        days = {d.date for d in p.days} | {d.date for o in history[p.id] for d in o.days}
+        for day in sorted(days):
             # Если недели двух планов пересекаются датами (длинный спринт), берём более свежий.
-            key = (p.employee_id, d.date)
-            if key not in plan_days or plan_days[key][0].created_at < p.created_at:
-                plan_days[key] = (p, d)
+            key = (p.employee_id, day)
+            if key in plan_days and plan_days[key][0].created_at >= p.created_at:
+                continue
+            used, chosen, ignored = plan_in_force(day, p, history[p.id], settings, sent, approved)
+            if chosen is None:
+                plan_days.pop(key, None)
+            else:
+                plan_days[key] = (used, chosen)
+            if ignored is not None:
+                late_edits[key] = ignored
     plans_by_week = {(p.employee_id, p.week_start): p for p in plans}
     dailies = {
         (d.employee_id, d.work_date): d for d in await current_dailies(session, start, end, ids)
@@ -175,5 +323,5 @@ async def load_cells(
                 rules,
                 today,
             )
-            cells[key] = DayCell(emp, day, result, plan, pday, daily, status)
+            cells[key] = DayCell(emp, day, result, plan, pday, daily, status, late_edits.get(key))
     return cells

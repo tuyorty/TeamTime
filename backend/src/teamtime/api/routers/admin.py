@@ -339,6 +339,12 @@ async def resolve(parse_id: int, body: ResolveIn, session: SessionDep, actor: Ad
     return OkOut()
 
 
+@router.post("/inbox/reparse", summary="Переразобрать всё, что ждёт решения")
+async def reparse_all(session: SessionDep, settings: AppSettingsDep, actor: AdminDep) -> OkOut:
+    left = await manual.reparse_pending(session, settings, actor=actor)
+    return OkOut(detail=str(left))
+
+
 @router.post("/inbox/{parse_id}/reparse", summary="Переразобрать сообщение текущим парсером")
 async def reparse(
     parse_id: int, session: SessionDep, settings: AppSettingsDep, actor: AdminDep

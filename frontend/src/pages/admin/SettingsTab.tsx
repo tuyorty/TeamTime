@@ -97,6 +97,13 @@ export function SettingsTab() {
           <p className="mt-2 text-[12px] text-ink-3">
             Опоздание в пределах допуска не считается, сверх допуска считается целиком.
           </p>
+          <Field
+            label="Предупредить об изменении расписания, ч"
+            hint="Правка, присланная раньше этого срока до начала дня, применяется сама. Позже — ждёт подтверждения в инбоксе."
+            className="mt-4 sm:w-72"
+          >
+            <Input inputMode="numeric" value={form.plan_notice_hours ?? 12} onChange={(e) => set("plan_notice_hours", Number(e.target.value) || 0)} />
+          </Field>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="Часовой пояс команды">
               <Select value={form.timezone} onChange={(e) => set("timezone", e.target.value)}>

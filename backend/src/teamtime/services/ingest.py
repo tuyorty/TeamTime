@@ -10,8 +10,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from teamtime.core import clock
 from teamtime.core.logging import get_logger
@@ -43,7 +44,10 @@ from teamtime.parsing import (
     detect_kind,
     parse_message,
 )
+from teamtime.parsing.schedule import WEEKDAY_SHORT
+from teamtime.parsing.types import ScheduleData
 from teamtime.services import events
+from teamtime.services.facts import change_deadline
 from teamtime.services.matching import (
     candidates_by_surname,
     employee_by_person,
@@ -281,6 +285,13 @@ async def interpret(
 
     employee, extra, candidates = await _resolve_employee(session, result, identity)
     outcome.issues.extend(extra)
+    if employee is not None and result.schedule is not None:
+        stated = version.edited_at or raw.sent_at
+        late = await late_change(
+            session, employee.id, result.schedule, version.id, stated, settings
+        )
+        if late is not None:
+            outcome.issues.append(late)
     outcome.candidates = [c.short_name for c in candidates]
     unresolved = employee is None
     status = _status(
@@ -334,6 +345,63 @@ async def interpret(
         parse_result_id=row.id,
     )
     return outcome
+
+
+async def late_change(
+    session: AsyncSession,
+    employee_id: int,
+    schedule: ScheduleData,
+    version_id: int,
+    stated: datetime,
+    settings: AppSettings,
+) -> Issue | None:
+    """Проблема «поздняя правка», если план какого-то дня поменяли позже срока предупреждения.
+
+    Сравнение с последней версией плана недели из другой версии сообщения: так переразбор того
+    же текста снова находит позднюю правку и не теряет её из инбокса.
+    """
+    previous = await session.scalar(
+        select(SchedulePlan)
+        .where(
+            SchedulePlan.employee_id == employee_id,
+            SchedulePlan.iso_year == schedule.iso_year,
+            SchedulePlan.iso_week == schedule.iso_week,
+            or_(
+                SchedulePlan.source_version_id.is_(None),
+                SchedulePlan.source_version_id != version_id,
+            ),
+        )
+        .order_by(SchedulePlan.version.desc())
+        .limit(1)
+        .options(selectinload(SchedulePlan.days))
+    )
+    if previous is None:
+        return None  # первый план недели действует всегда
+    old = {d.date: d for d in previous.days}
+    new = {d.date: d for d in schedule.days}
+    late: list[date] = []
+    for day in sorted(old.keys() | new.keys()):
+        before, after = old.get(day), new.get(day)
+        same = (
+            before is not None
+            and after is not None
+            and before.kind is after.kind
+            and [list(i) for i in before.intervals] == [[i.start, i.end] for i in after.intervals]
+            and (before.note or None) == (after.note or None)
+        )
+        start = before.start_sec if before else None
+        deadline = change_deadline(day, start, settings.plan_notice_hours, settings.tz)
+        if not same and stated > deadline:
+            late.append(day)
+    if not late:
+        return None
+    days = ", ".join(f"{WEEKDAY_SHORT[d.weekday()]} {d:%d.%m}" for d in late)
+    return Issue(
+        "late_change",
+        Severity.WARNING,
+        f"Расписание на {days} изменено позже чем за {settings.plan_notice_hours} ч до начала дня: "
+        "до подтверждения админа действует прежний план",
+    )
 
 
 def _status(issues: list[Issue], *, has_data: bool) -> ParseStatus:
