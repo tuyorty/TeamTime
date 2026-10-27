@@ -7,6 +7,9 @@ from teamtime.parsing.schedule import HEADER_RE, SCHEDULE_TAGS
 from teamtime.parsing.text import fold, hashtags, parse_interval_list, split_lines, strip_hashtags
 from teamtime.parsing.types import MessageKind
 
+PLAN_TAGS = {"дейлиплан", "дэйлиплан", "планнадень", "dailyplan"}
+"""Утренний план на день: не дейлик и не расписание, бот его пропускает."""
+
 
 def _first_lines(text: str, limit: int = 3) -> list[str]:
     lines = [strip_hashtags(norm) for _, _, norm in split_lines(text)]
@@ -16,17 +19,20 @@ def _first_lines(text: str, limit: int = 3) -> list[str]:
 def detect_kind(text: str, topic_hint: MessageKind | None = None) -> MessageKind:
     """Тип сообщения по содержимому, хэштегу и теме форума.
 
-    Содержимое — самый сильный сигнал: заголовок «Спринт …» однозначен, как и пара «дата +
-    интервалы» в начале. Затем хэштег, затем привязка темы. Обычная болтовня в теме даёт UNKNOWN,
-    чтобы бот не реагировал на «всем привет».
+    Хэштег утреннего плана (#дейлиплан) сразу даёт UNKNOWN. Дальше содержимое — самый сильный
+    сигнал: заголовок «Спринт …» однозначен, как и пара «дата + интервалы» в начале. Затем хэштег,
+    затем привязка темы. Обычная болтовня в теме даёт UNKNOWN, чтобы бот не реагировал на
+    «всем привет».
     """
+    tags = {fold(t) for t in hashtags(text)}
+    if tags & PLAN_TAGS:
+        return MessageKind.UNKNOWN
     head = _first_lines(text)
     if any(HEADER_RE.match(line) for line in head):
         return MessageKind.SCHEDULE
     if head and DATE_LINE_RE.match(head[0]) and any(_is_intervals(line) for line in head[1:]):
         return MessageKind.DAILY
 
-    tags = {fold(t) for t in hashtags(text)}
     if tags & SCHEDULE_TAGS:
         return MessageKind.SCHEDULE
     if tags & DAILY_TAGS:

@@ -20,6 +20,12 @@ from tests.parsing.conftest import SENT, TZ
         ("всем привет!", MessageKind.SCHEDULE, MessageKind.UNKNOWN),
         ("кто сегодня в офисе?", None, MessageKind.UNKNOWN),
         ("", None, MessageKind.UNKNOWN),
+        (
+            "03.03.2026\n\n- разобраться с потоками\n\n#дейлиплан",
+            MessageKind.DAILY,
+            MessageKind.UNKNOWN,
+        ),
+        ("Иванов И.И.\n18.02.2026\n10:00 - 18:00\n#ДейлиПлан", None, MessageKind.UNKNOWN),
     ],
 )
 def test_detect_kind(text: str, hint: MessageKind | None, expected: MessageKind) -> None:
