@@ -110,13 +110,13 @@ function LatenessTable({ rows }: { rows: MonthRow[] }) {
 
 function LateDays({ row }: { row: MonthRow }) {
   return (
-    <ul className="grid gap-1 py-1 pl-8 sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="grid gap-1.5 py-1 pl-8 sm:grid-cols-2 lg:grid-cols-3">
       {row.late_days.map((d) => (
-        <li key={d.date} className="flex items-center gap-2 text-[13px] tnum">
-          <span className="w-16 text-ink-2">
+        <li key={d.date} className="flex items-center gap-3 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] tnum">
+          <span className="shrink-0 whitespace-nowrap text-ink-2">
             {WEEKDAYS_SHORT[weekday(d.date)]} {ddmm(d.date)}
           </span>
-          <span className="text-ink-3">
+          <span className="min-w-0 truncate text-ink-3">
             план {clock(d.plan_start)}, пришёл {clock(d.fact_start)}
           </span>
           <span className="ml-auto font-medium text-late-ink">+{hm(d.late_sec)}</span>
@@ -194,6 +194,7 @@ function PenaltyChart({ data }: { data: Month }) {
               width={36}
             />
             <Tooltip
+              isAnimationActive={false}
               cursor={false}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as Point | { x: number; y: number } | undefined;
@@ -259,7 +260,9 @@ function Calculator({ data }: { data: Month }) {
   const extra = result ? result.penalty_sec - result.late_sec : 0;
   const s = data.scale;
   const zone = minutes / 60 <= s.soft_limit_h ? "linear" : minutes / 60 <= s.hard_limit_h ? "quad" : "steep";
-  const point = { x: minutes / 60, y: result ? result.penalty_sec / 3600 : penaltyHours(minutes / 60, s) };
+  // Точку считаем на месте той же формулой, что и кривая: ответ сервера приходит с задержкой,
+  // и пока ползунок двигается, точка шла бы мимо кривой.
+  const point = { x: minutes / 60, y: penaltyHours(minutes / 60, s) };
 
   return (
     <Panel title="Сколько штрафа за N часов" description="Калькулятор считает на сервере тем же кодом, что и таблица">

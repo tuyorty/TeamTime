@@ -9,6 +9,7 @@ import { api } from "@/api/client";
 import { keys, useMeta } from "@/api/queries";
 import type { SearchHit } from "@/api/types";
 import { useDebounced } from "@/hooks/useDebounced";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useTheme } from "@/lib/theme";
 
 import { NAV } from "./nav";
@@ -22,6 +23,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
   const { setPref, isDark } = useTheme();
   const demo = useMeta().data?.demo ?? false;
+  const admin = useIsAdmin();
   const [query, setQuery] = useState("");
   const q = useDebounced(query.trim(), 180);
   const search = useQuery({
@@ -77,7 +79,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               {q.length < 2 ? (
                 <>
                   <Command.Group heading="Разделы" className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-ink-3">
-                    {NAV.filter((n) => !n.demoOnly || demo).map((n) => (
+                    {NAV.filter((n) => (!n.demoOnly || demo) && (!n.adminOnly || admin)).map((n) => (
                       <Command.Item key={n.to} value={n.to} onSelect={() => go(n.to)} className={itemClass}>
                         <n.icon /> {n.label}
                       </Command.Item>

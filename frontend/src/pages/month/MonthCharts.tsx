@@ -47,6 +47,7 @@ function WeeksChart({ data }: { data: Month }) {
             <XAxis dataKey="week" {...axisProps} tickFormatter={(w: string) => `${w} нед.`} />
             <YAxis {...axisProps} width={36} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "var(--surface-2)" }}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as (typeof weeks)[number] | undefined;
@@ -95,6 +96,7 @@ function HistoryChart({ data }: { data: Month }) {
             <XAxis dataKey="label" {...axisProps} />
             <YAxis {...axisProps} width={40} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "var(--surface-2)" }}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as (typeof rows)[number] | undefined;
@@ -148,6 +150,7 @@ function LateDistribution({ data }: { data: Month }) {
             <XAxis dataKey="label" {...axisProps} interval={0} />
             <YAxis {...axisProps} width={28} allowDecimals={false} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "var(--surface-2)" }}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as (typeof counts)[number] | undefined;

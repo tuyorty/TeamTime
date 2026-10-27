@@ -19,7 +19,7 @@ Textarea.displayName = "Textarea";
 
 /** Нативный select: доступен с клавиатуры и на телефоне без лишнего JS. */
 export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, ...props }, ref) => <select ref={ref} className={cn(control, "pr-7", className)} {...props} />,
+  ({ className, ...props }, ref) => <select ref={ref} className={cn(control, "select-chevron pr-8", className)} {...props} />,
 );
 Select.displayName = "Select";
 

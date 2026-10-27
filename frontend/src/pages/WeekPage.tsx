@@ -308,18 +308,31 @@ function CellBody({ cell, density }: { cell: DayCell; density: Density }) {
       {density === "detailed" ? (
         <span className="text-ink-2">{span(f.start, f.end)}</span>
       ) : null}
-      <span className="flex flex-wrap items-baseline gap-x-1.5">
-        <span className="text-[13px] font-semibold text-ink">{hm(f.worked_sec)}</span>
+      <span className="block truncate">
+        <span className="mr-1.5 text-[13px] font-semibold text-ink">{hm(f.worked_sec)}</span>
         {f.efficiency !== null && f.efficiency !== undefined ? (
-          <span className="text-ink-3">
+          <span className="text-ink-3" title={`${f.efficiency}% = ${hm(f.result_sec)}`}>
             {f.efficiency}%{density === "detailed" ? <> = {hm(f.result_sec)}</> : null}
           </span>
         ) : (
           <span className="text-deviation-ink">e% ?</span>
         )}
       </span>
-      {density === "detailed" && (cell.late_sec || cell.early_leave_sec || cell.status === "remote" || cell.no_plan) ? (
-        <span className="flex flex-wrap gap-1">
+      {density === "detailed" ? (
+        // Строка отклонений есть всегда (пустая — невидимая): высота строк не прыгает между неделями.
+        <span
+          className="block min-h-4 truncate [&>*]:mr-1"
+          title={
+            [
+              cell.late_sec ? `опоздание ${hm(cell.late_sec)}` : "",
+              cell.early_leave_sec ? `ранний уход ${hm(cell.early_leave_sec)}` : "",
+              cell.status === "remote" ? "удалёнка" : "",
+              cell.no_plan ? "без плана" : "",
+            ]
+              .filter(Boolean)
+              .join(", ") || undefined
+          }
+        >
           {cell.late_sec ? (
             <span className="inline-flex items-center gap-0.5 font-medium text-late-ink">
               <DEVIATION.late.icon className="size-3" />+{hm(cell.late_sec)}
@@ -446,15 +459,16 @@ function WeekTable({
               <td className="border-l border-line px-3 py-2.5 text-right align-top whitespace-nowrap tnum">
                 <div className="text-[14px] font-semibold">{hm(r.totals.worked_sec)}</div>
                 <div className="text-[12px] text-ink-2">итог {hm(r.totals.result_sec)}</div>
-                {r.totals.planned_sec ? (
-                  <div className="text-[12px] text-ink-3">план {hm(r.totals.planned_sec)}</div>
-                ) : null}
-                {r.totals.late_count ? (
-                  <div className="inline-flex items-center gap-0.5 text-[12px] font-medium text-late-ink">
-                    <DEVIATION.late.icon className="size-3" />
-                    {r.totals.late_count}, {hm(r.totals.late_sec)}
-                  </div>
-                ) : null}
+                {/* План и опоздания занимают место всегда, чтобы строки не меняли высоту между неделями. */}
+                <div className="h-[18px] text-[12px] leading-[18px] text-ink-3">{r.totals.planned_sec ? `план ${hm(r.totals.planned_sec)}` : null}</div>
+                <div className="h-[18px] text-[12px] leading-[18px] font-medium text-late-ink">
+                  {r.totals.late_count ? (
+                    <span className="inline-flex items-center gap-0.5 align-top">
+                      <DEVIATION.late.icon className="size-3" />
+                      {r.totals.late_count}, {hm(r.totals.late_sec)}
+                    </span>
+                  ) : null}
+                </div>
               </td>
             </tr>
           ))}

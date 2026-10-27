@@ -83,6 +83,7 @@ export function WeekPulse({ data }: { data: Week }) {
               <XAxis dataKey="day" {...axisProps} />
               <YAxis {...axisProps} width={28} tickFormatter={(v: number) => `${v}`} />
               <Tooltip
+                isAnimationActive={false}
                 cursor={{ fill: "var(--surface-2)" }}
                 content={({ active, payload }) => {
                   const p = payload?.[0]?.payload as (typeof planned)[number] | undefined;

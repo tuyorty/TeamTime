@@ -10,6 +10,8 @@ export interface NavItem {
   /** Показывать в нижней панели на телефоне. */
   mobile?: boolean;
   demoOnly?: boolean;
+  /** Только в режиме админа. */
+  adminOnly?: boolean;
 }
 
 export const NAV: NavItem[] = [
@@ -20,6 +22,6 @@ export const NAV: NavItem[] = [
   { to: "/plans", label: "Планы", icon: ClipboardList },
   { to: "/calendar", label: "Календарь", icon: CalendarDays },
   { to: "/inbox", label: "Инбокс", icon: Inbox },
-  { to: "/admin", label: "Админка", icon: Settings2 },
+  { to: "/admin", label: "Админка", icon: Settings2, adminOnly: true },
   { to: "/demo", label: "Эмулятор чата", icon: MessagesSquare, demoOnly: true },
 ];

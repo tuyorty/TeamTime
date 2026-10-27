@@ -9,6 +9,7 @@ import { useConnection, useRealtime } from "@/lib/realtime";
 
 import { AdminButton } from "./AdminButton";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 import { CommandPalette } from "./CommandPalette";
 import { NAV, type NavItem } from "./nav";
@@ -51,7 +52,8 @@ function ConnectionDot() {
 
 function useNav(): NavItem[] {
   const demo = useMeta().data?.demo ?? false;
-  return NAV.filter((n) => !n.demoOnly || demo);
+  const admin = useIsAdmin();
+  return NAV.filter((n) => (!n.demoOnly || demo) && (!n.adminOnly || admin));
 }
 
 function InboxCount() {

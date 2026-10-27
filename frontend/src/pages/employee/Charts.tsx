@@ -74,6 +74,7 @@ export function HoursChart({ data }: { data: EmployeeDetail }) {
             <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" minTickGap={18} />
             <YAxis {...axisProps} width={28} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "var(--surface-2)" }}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as (typeof rows)[number] | undefined;
@@ -120,6 +121,7 @@ export function EfficiencyChart({ data }: { data: EmployeeDetail }) {
             <YAxis {...axisProps} width={40} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={(v: number) => `${v}%`} />
             {avg !== null ? <ReferenceLine y={avg} stroke={chart.ink3} strokeDasharray="4 4" /> : null}
             <Tooltip
+              isAnimationActive={false}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as (typeof rows)[number] | undefined;
                 if (!active || !p) return null;
@@ -170,6 +172,7 @@ export function Punctuality({ data }: { data: EmployeeDetail }) {
             <XAxis dataKey="label" {...axisProps} interval={0} fontSize={10} />
             <YAxis {...axisProps} width={24} allowDecimals={false} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "var(--surface-2)" }}
               content={({ active, payload }) => {
                 const p = payload?.[0]?.payload as (typeof counts)[number] | undefined;
