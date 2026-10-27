@@ -706,6 +706,11 @@ export interface components {
         Body_import_telegram_api_v1_admin_import_telegram_post: {
             /** File */
             file: string;
+            /**
+             * Since
+             * @description Только сообщения с этой даты
+             */
+            since?: string | null;
         };
         /** BotSettings */
         BotSettings: {
@@ -1103,6 +1108,8 @@ export interface components {
             unchanged: number;
             /** Skipped */
             skipped: number;
+            /** Older */
+            older: number;
             /** Statuses */
             statuses: {
                 [key: string]: number;

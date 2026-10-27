@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -51,6 +52,9 @@ def import_telegram(
         ..., exists=True, dir_okay=False, help="result.json из Telegram Desktop"
     ),
     chat_id: int | None = typer.Option(None, help="Переопределить chat_id (вид Bot API: -100…)"),
+    since: datetime | None = typer.Option(
+        None, formats=["%Y-%m-%d"], help="Только сообщения с этой даты, например 2026-01-01"
+    ),
 ) -> None:
     """Импортировать экспорт чата. Повторный запуск ничего не дублирует."""
     import asyncio
@@ -63,7 +67,9 @@ def import_telegram(
 
     async def go() -> dict[str, object]:
         async with session_scope() as session:
-            report = await import_export(session, load_export(raw), chat_id=chat_id)
+            report = await import_export(
+                session, load_export(raw), chat_id=chat_id, since=since.date() if since else None
+            )
             return report.as_dict()
 
     try:

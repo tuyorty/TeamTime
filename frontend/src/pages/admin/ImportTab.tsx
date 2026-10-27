@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import type { components } from "@/api/schema";
 import { Button } from "@/components/ui/button";
+import { Field, Input } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 
 type Report = components["schemas"]["ImportOut"];
@@ -12,6 +13,7 @@ export function ImportTab() {
   const input = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
+  const [since, setSince] = useState("");
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,7 @@ export function ImportTab() {
     setError(null);
     const body = new FormData();
     body.append("file", file);
+    if (since) body.append("since", since);
     try {
       const r = await fetch("/api/v1/admin/import/telegram", {
         method: "POST",
@@ -48,6 +51,13 @@ export function ImportTab() {
           <li>Формат — «Машиночитаемый JSON», медиа можно не выгружать.</li>
           <li>Загрузите получившийся result.json сюда или через CLI: teamtime import telegram result.json.</li>
         </ol>
+        <Field
+          label="Импортировать с даты"
+          hint="Пусто — вся история. Старые сообщения не трогаются, их можно догрузить позже."
+          className="mb-4 sm:w-64"
+        >
+          <Input type="date" value={since} onChange={(e) => setSince(e.target.value)} />
+        </Field>
         <div
           className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-line-strong px-4 py-8 text-center"
           onDragOver={(e) => e.preventDefault()}
@@ -81,6 +91,12 @@ export function ImportTab() {
             <dd>{report.unchanged}</dd>
             <dt className="text-ink-3">Пропущено</dt>
             <dd>{report.skipped} <span className="text-ink-3">(не в темах и без шаблона)</span></dd>
+            {report.older ? (
+              <>
+                <dt className="text-ink-3">Раньше даты</dt>
+                <dd>{report.older}</dd>
+              </>
+            ) : null}
             <dt className="text-ink-3">Разобрано</dt>
             <dd>
               {report.statuses.ok ?? 0} без вопросов, {report.statuses.partial ?? 0} с вопросами, {report.statuses.failed ?? 0} не разобрано

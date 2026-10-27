@@ -15,7 +15,9 @@ from teamtime.importer.telegram import (
     flatten_text,
     import_export,
     load_export,
+    topic_kind,
 )
+from teamtime.parsing import MessageKind
 from teamtime.services.facts import current_dailies, current_plans
 from teamtime.services.ingest import ingest
 from tests import factories as f
@@ -91,3 +93,27 @@ async def test_import_after_bot_does_not_duplicate(session: AsyncSession) -> Non
         .where(RawMessage.message_id == 11)
     )
     assert versions == 2
+
+
+@pytest.mark.parametrize(
+    ("title", "kind"),
+    [
+        ("Расписание", MessageKind.SCHEDULE),
+        ("Дейлики", MessageKind.DAILY),
+        ("Расписание и дейлики", None),
+        ("Важно", None),
+    ],
+)
+def test_topic_kind_ignores_shared_topic(title: str, kind: MessageKind | None) -> None:
+    assert topic_kind(title) is kind
+
+
+@pytest.mark.db
+async def test_import_since_skips_older_messages(session: AsyncSession) -> None:
+    await f.employee(session, "Иванов И.И.", tg_id=501)
+    report = await import_export(session, export(), since=date(2026, 10, 20))
+    assert report.older == 3  # расписание, дейлик за 19.10 и реплика к нему
+    assert report.imported == 1
+    assert report.skipped == 2  # болтовня вне тем и фото без текста
+    dailies = await current_dailies(session, date(2026, 10, 19), date(2026, 10, 20))
+    assert [d.work_date for d in dailies] == [date(2026, 10, 20)]

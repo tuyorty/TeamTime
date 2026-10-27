@@ -7,6 +7,8 @@ message_id)`` совпадает (``chat_id`` приводится к виду B
 Формат экспорта:
 - ``text`` — строка или список фрагментов (строки и объекты ``{"type", "text"}``);
 - время — ``date_unixtime`` / ``edited_unixtime`` (UTC), поле ``date`` без часового пояса не берём;
+- ``since`` — импортировать только сообщения с этой даты (по часовому поясу команды), старые
+  считаются в ``older`` и не трогаются;
 - темы форума — служебные сообщения ``action: "topic_created"``; сообщение в теме ссылается на
   корень темы или на другое сообщение этой темы через ``reply_to_message_id``.
 """
@@ -16,7 +18,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +45,7 @@ class ImportReport:
     imported: int = 0
     unchanged: int = 0
     skipped: int = 0
+    older: int = 0
     statuses: Counter[str] = field(default_factory=Counter)
     topics: dict[int, str] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
@@ -55,6 +58,7 @@ class ImportReport:
             "imported": self.imported,
             "unchanged": self.unchanged,
             "skipped": self.skipped,
+            "older": self.older,
             "statuses": dict(self.statuses),
             "topics": {str(k): v for k, v in self.topics.items()},
             "errors": self.errors[:20],
@@ -94,12 +98,13 @@ def author_id(raw: str | None) -> int | None:
 
 
 def topic_kind(title: str) -> MessageKind | None:
+    """Подсказка по названию темы. Общая тема («Расписание и дейлики») подсказки не даёт."""
     t = fold(title)
-    if "распис" in t or "спринт" in t or "schedule" in t:
-        return MessageKind.SCHEDULE
-    if "дейл" in t or "daily" in t or "отчет" in t:
-        return MessageKind.DAILY
-    return None
+    schedule = "распис" in t or "спринт" in t or "schedule" in t
+    daily = "дейл" in t or "daily" in t or "отчет" in t
+    if schedule == daily:
+        return None
+    return MessageKind.SCHEDULE if schedule else MessageKind.DAILY
 
 
 def _ts(value: str | int | None) -> datetime | None:
@@ -128,6 +133,7 @@ async def import_export(
     *,
     settings: AppSettings | None = None,
     chat_id: int | None = None,
+    since: date | None = None,
 ) -> ImportReport:
     settings = settings or await load_settings(session)
     report = ImportReport(chat_title=str(export.get("name", "")))
@@ -157,6 +163,9 @@ async def import_export(
         sent = _ts(m.get("date_unixtime"))
         if not text.strip() or sent is None:
             report.skipped += 1
+            continue
+        if since is not None and sent.astimezone(settings.tz).date() < since:
+            report.older += 1
             continue
         try:
             outcome = await ingest(
