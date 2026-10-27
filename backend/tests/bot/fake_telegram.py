@@ -30,6 +30,7 @@ from aiogram.types import (
     ChatMemberAdministrator,
     ChatMemberMember,
     Message,
+    RichMessage,
     Update,
     User,
 )
@@ -119,14 +120,17 @@ class Telegram:
         edit: bool = False,
         chat: Chat = GROUP,
         name: str = "Вымышленный",
+        rich: dict[str, Any] | None = None,
     ) -> int:
+        """``rich`` — «богатое» сообщение (rich_message) вместо обычного текста."""
         mid = message_id or next(self._message_ids)
         msg = Message(
             message_id=mid,
             date=datetime(2026, 10, 26, 6, 0, tzinfo=UTC),
             chat=chat,
             from_user=self.user(uid, name),
-            text=text,
+            text=None if rich else text,
+            rich_message=RichMessage.model_validate(rich) if rich else None,
             message_thread_id=thread,
             is_topic_message=thread is not None,
             edit_date=int(datetime(2026, 10, 26, 6, 30, tzinfo=UTC).timestamp()) if edit else None,

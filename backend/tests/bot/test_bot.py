@@ -98,6 +98,41 @@ async def test_chatter_in_topic_is_ignored(tg: Telegram) -> None:
     assert tg.session.calls == []
 
 
+def _p(text: object) -> dict[str, object]:
+    return {"type": "paragraph", "text": text}
+
+
+DAILY_RICH = {
+    "blocks": [
+        _p("23.10.2026"),
+        _p("10:00 - 18:00"),
+        _p(["Эффективность: ", {"type": "bold", "text": "90%"}]),
+        {
+            "type": "list",
+            "items": [
+                {"label": "•", "blocks": [_p("сделал управление роботом")]},
+                {"label": "•", "blocks": [_p("написал гайд")]},
+            ],
+        },
+        _p({"type": "hashtag", "text": "#дейли", "hashtag": "дейли"}),
+    ]
+}
+
+
+async def test_rich_message_with_list_is_parsed(tg: Telegram, maker) -> None:
+    """Дейлик со списком Telegram присылает как rich_message без text — разбираем и его."""
+    mid = await tg.group(501, "", rich=DAILY_RICH)
+    assert reactions(tg) == ["👌"]
+    async with maker() as s:
+        dailies = await current_dailies(s, date(2026, 10, 23), date(2026, 10, 23))
+    assert dailies[0].efficiency == 90
+    edited = {**DAILY_RICH, "blocks": [*DAILY_RICH["blocks"][:2], _p("Эффективность: 70%")]}
+    await tg.group(501, "", rich=edited, message_id=mid, edit=True)
+    async with maker() as s:
+        dailies = await current_dailies(s, date(2026, 10, 23), date(2026, 10, 23))
+    assert dailies[0].efficiency == 70
+
+
 async def test_edit_that_fixes_message_removes_warning(tg: Telegram, maker) -> None:
     mid = await tg.group(501, "23.10.2026\n10:00 - 18:00\n- без эффективности")
     await tg.group(501, f.daily_text("23.10.2026", e=80), message_id=mid, edit=True)

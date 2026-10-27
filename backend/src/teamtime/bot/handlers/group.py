@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from teamtime.bot.feedback import group_feedback
+from teamtime.bot.richtext import rich_plain_text
 from teamtime.core.config import Settings
 from teamtime.core.logging import get_logger
 from teamtime.db.models import BotChat, RawMessage, Source, TopicBinding, TopicKind
@@ -42,7 +43,7 @@ def incoming(message: Message, *, edited: bool = False) -> IncomingMessage:
         chat_id=message.chat.id,
         message_id=message.message_id,
         thread_id=message.message_thread_id if message.is_topic_message else None,
-        text=message.text or message.caption or "",
+        text=message_text(message),
         sent_at=message.date,
         edited_at=datetime.fromtimestamp(message.edit_date, UTC)
         if edited and message.edit_date
@@ -56,6 +57,13 @@ def incoming(message: Message, *, edited: bool = False) -> IncomingMessage:
         chat_title=message.chat.title or "",
         is_forum=bool(message.chat.is_forum),
     )
+
+
+def message_text(message: Message) -> str:
+    """Текст сообщения; у «богатого» (списки, заголовки) — собранный из блоков."""
+    if message.text or message.caption:
+        return message.text or message.caption or ""
+    return rich_plain_text(message.rich_message) if message.rich_message else ""
 
 
 async def give_feedback(
@@ -193,7 +201,10 @@ async def _short_reply(message: Message, text: str) -> None:
     asyncio.get_running_loop().create_task(cleanup())
 
 
-@router.message(F.text | F.caption, ~F.text.startswith("/"))
+HAS_TEXT = F.text | F.caption | F.rich_message
+
+
+@router.message(HAS_TEXT, ~F.text.startswith("/"))
 async def on_message(
     message: Message, bot: Bot, session: AsyncSession, settings: AppSettings, config: Settings
 ) -> None:
@@ -202,10 +213,23 @@ async def on_message(
     await give_feedback(bot, message, outcome, settings, session, config)
 
 
-@router.edited_message(F.text | F.caption)
+@router.edited_message(HAS_TEXT)
 async def on_edit(
     message: Message, bot: Bot, session: AsyncSession, settings: AppSettings, config: Settings
 ) -> None:
     outcome = await ingest(session, incoming(message, edited=True), settings)
     await session.commit()
     await give_feedback(bot, message, outcome, settings, session, config)
+
+
+@router.message(~HAS_TEXT)
+@router.edited_message(~HAS_TEXT)
+async def on_no_text(message: Message) -> None:
+    """Разбирать нечего, но след в логе нужен: новый формат Telegram не потеряется молча."""
+    log.info(
+        "message.no_text",
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+        thread_id=message.message_thread_id,
+        content_type=message.content_type,
+    )
