@@ -18,6 +18,7 @@ from __future__ import annotations
 import itertools
 import re
 from datetime import date, datetime
+from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 
 from teamtime.parsing.text import (
@@ -26,8 +27,10 @@ from teamtime.parsing.text import (
     bullet_text,
     closest_year,
     fold,
+    format_seconds,
     full_year,
     hashtags,
+    lenient_interval_list,
     make_date,
     parse_interval_list,
     split_lines,
@@ -43,14 +46,35 @@ from teamtime.parsing.types import (
 )
 
 DATE_LINE_RE = re.compile(r"^(?:дата\s*:?\s*)?" + DATE_RE.pattern + r"(?P<tail>.*)$", re.I)
-# «Эффективность: 70%», «эффективность 70», «Эфф. — 70 %», «Эфективность:70».
+# «Эффективность: 70%», «эффективность 70», «Эфф. — 70 %», «Эфективность:70»,
+# «Эффективность: 90% (сидел с кнопкой)» — комментарий в скобках после процента не мешает.
 EFFICIENCY_RE = re.compile(
-    r"^(?:эф+е?к?т?и?в?н?о?с?т?ь?|кпд|[eе]%?)\.?\s*[:=\-]?\s*(?P<value>\d{1,3}(?:[.,]\d+)?)\s*%?\s*$"
+    r"^(?P<word>[а-яa-z]+%?)\.?\s*[:=\-]?\s*(?P<value>\d+(?:[.,]\d+)?)\s*%?\s*(?P<comment>\(.*)?$"
 )
-EFFICIENCY_WORD_RE = re.compile(r"^(?:эф|кпд)")
+EFFICIENCY_WORD_RE = re.compile(r"^(?P<word>[а-яa-z]+%?)")
+EFFICIENCY_WORD = "эффективность"
 DAILY_TAGS = {"дейли", "дейлик", "дейлики", "daily", "дэйли", "отчет"}
 
 MAX_BACKDATE_DAYS = 31
+
+
+def _efficiency_word(word: str) -> bool:
+    """«эффективность» с опечатками («эффеткивность», «эфективонсть»), «эфф», «кпд», «e%»."""
+    word = word.rstrip("%")
+    if word in {"кпд", "e", "е"}:
+        return True
+    if len(word) >= 2 and (EFFICIENCY_WORD.startswith(word) or "эфективность".startswith(word)):
+        return True  # сокращение: «эф», «эфф», «эффект»
+    return word.startswith("эф") and SequenceMatcher(None, word, EFFICIENCY_WORD).ratio() >= 0.8
+
+
+def _fix_year(work_date: date, sent: date) -> date | None:
+    """Год с опечаткой («27.10.2025», отправлено 27.10.2026): тот же день и месяц в году
+    отправки, если так дата попадает в обычное окно «за последний месяц»."""
+    guess = closest_year(work_date.day, work_date.month, sent)
+    if guess is None or guess.year == work_date.year:
+        return None
+    return guess if 0 <= (sent - guess).days <= MAX_BACKDATE_DAYS else None
 
 
 def _overlaps(intervals: list[Interval]) -> bool:
@@ -115,6 +139,18 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
             day, month = int(m["d"]), int(m["m"])
             if m["y"]:
                 work_date = make_date(full_year(m["y"]), month, day)
+                if work_date is not None and (fixed := _fix_year(work_date, sent_local)):
+                    issues.append(
+                        Issue(
+                            "year_fixed",
+                            Severity.INFO,
+                            f"Год {work_date.year} похож на опечатку: дейлик отнесён "
+                            f"к {fixed:%d.%m.%Y}",
+                            line_no,
+                            raw,
+                        )
+                    )
+                    work_date = fixed
             else:
                 work_date = closest_year(day, month, sent_local)
                 issues.append(
@@ -139,7 +175,7 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                     intervals.extend(p.interval for p in parsed)
             continue
 
-        if m := EFFICIENCY_RE.match(folded):
+        if (m := EFFICIENCY_RE.match(folded)) and _efficiency_word(m["word"]):
             value = float(m["value"].replace(",", "."))
             if efficiency is not None:
                 issues.append(
@@ -162,6 +198,16 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                     )
                 )
             else:
+                if m["comment"]:
+                    issues.append(
+                        Issue(
+                            "comment_ignored",
+                            Severity.INFO,
+                            "Комментарий в скобках не учтён",
+                            line_no,
+                            raw,
+                        )
+                    )
                 if value != int(value):
                     issues.append(
                         Issue(
@@ -179,7 +225,7 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
 
         if not in_tasks:
             try:
-                parsed = parse_interval_list(content)
+                parsed, relaxed = lenient_interval_list(content)
             except TimeFormatError as exc:
                 issues.append(
                     Issue("bad_time", Severity.ERROR, f"Неверное время: {exc}", line_no, raw)
@@ -197,6 +243,31 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                         )
                     )
                 intervals.extend(p.interval for p in parsed)
+                if relaxed == "comment":
+                    issues.append(
+                        Issue(
+                            "comment_ignored",
+                            Severity.INFO,
+                            "Комментарий в скобках не учтён",
+                            line_no,
+                            raw,
+                        )
+                    )
+                elif relaxed == "typo":
+                    issues.append(
+                        Issue(
+                            "time_typo",
+                            Severity.INFO,
+                            "Опечатка во времени исправлена: "
+                            + "; ".join(
+                                f"{format_seconds(p.interval.start)} - "
+                                f"{format_seconds(p.interval.end)}"
+                                for p in parsed
+                            ),
+                            line_no,
+                            raw,
+                        )
+                    )
                 if any(p.dotted for p in parsed):
                     issues.append(
                         Issue(
@@ -224,7 +295,7 @@ def parse_daily(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
             tasks.append(task)
             continue
 
-        if EFFICIENCY_WORD_RE.match(folded):
+        if (w := EFFICIENCY_WORD_RE.match(folded)) and _efficiency_word(w["word"]):
             issues.append(
                 Issue(
                     "bad_efficiency",

@@ -92,6 +92,11 @@ class TestEfficiency:
             ("Эффективность: 0%", 0),
             ("Эффективность: 100%", 100),
             ("Эффективность: 72,5%", 72),
+            # из реальных дейликов: комментарий в скобках и опечатки в слове
+            ("Эффективность: 90% (сидел с кнопкой какое-то время)", 90),
+            ("Эффективность: 65%(вычел за 40 минут)", 65),
+            ("Эффеткивность: 100%", 100),
+            ("Эффективонсть: 100%", 100),
         ],
     )
     def test_variants(self, line: str, value: int) -> None:
@@ -104,12 +109,25 @@ class TestEfficiency:
         assert "no_efficiency" in codes(r)
         assert r.daily is not None and r.daily.efficiency is None
 
-    @pytest.mark.parametrize("line", ["Эффективность: 150%", "Эффективность: много", "Эфф: ?"])
+    @pytest.mark.parametrize(
+        "line",
+        ["Эффективность: 150%", "Эффективность: много", "Эфф: ?", "Эффективность: 1488%"],
+    )
     def test_bad_values(self, line: str) -> None:
         r = daily(f"23.10.2026\n10:00 - 18:00\n{line}")
         assert "bad_efficiency" in codes(r)
         assert r.status is ParseStatus.PARTIAL
         assert r.daily is not None and r.daily.efficiency is None
+
+    def test_comment_is_noted(self) -> None:
+        r = daily("23.10.2026\n10:00 - 18:00\nЭффективность: 85% (кс)")
+        assert r.status is ParseStatus.OK
+        assert "comment_ignored" in codes(r)
+
+    def test_word_that_only_looks_similar_is_not_efficiency(self) -> None:
+        r = daily("23.10.2026\n10:00 - 18:00\nЭфф: 80%\n\nЭфир 30 минут")
+        assert r.daily is not None and r.daily.efficiency == 80
+        assert codes(r).isdisjoint({"duplicate_efficiency", "bad_efficiency"})
 
     def test_duplicate_takes_first(self) -> None:
         r = daily("23.10.2026\n10:00 - 18:00\nЭфф: 60%\nЭфф: 90%")
@@ -140,6 +158,29 @@ class TestIntervals:
     def test_variants(self, line: str, expected: list[str]) -> None:
         r = daily(f"23.10.2026\n{line}\nЭффективность: 80%")
         assert spans(r) == expected, r.issues
+
+    @pytest.mark.parametrize(
+        ("line", "expected", "code"),
+        [
+            ("10:50 - 19:20 (час добавил за воскресенье)", ["10:50-19:20"], "comment_ignored"),
+            ("9:00 - 15:30 (раньше уехал из-за митапа)", ["9:00-15:30"], "comment_ignored"),
+            ("14:00 - 24:00(00:00)", ["14:00-24:00"], "comment_ignored"),
+            ("15;00 - 18:00", ["15:00-18:00"], "time_typo"),
+            ("09:35 - 18: 30", ["9:35-18:30"], "time_typo"),
+            ("11:30 - 19 00", ["11:30-19:00"], "time_typo"),
+            ("10;00 - 13;00; 14;00 - 18;00", ["10:00-13:00", "14:00-18:00"], "time_typo"),
+        ],
+    )
+    def test_real_life_comments_and_typos(self, line: str, expected: list[str], code: str) -> None:
+        """Строки из реальных дейликов: раньше часы за такой день терялись целиком."""
+        r = daily(f"23.10.2026\n{line}\nЭффективность: 80%")
+        assert spans(r) == expected, r.issues
+        assert code in codes(r)
+        assert r.status is ParseStatus.OK
+
+    def test_comment_without_time_is_still_not_an_interval(self) -> None:
+        r = daily("23.10.2026\n(забыл время)\nЭфф: 80%")
+        assert "no_intervals" in codes(r)
 
     def test_intervals_on_several_lines_are_merged(self) -> None:
         r = daily("23.10.2026\n10:00 - 12:00\n13:00 - 18:00\nЭфф: 80%")
@@ -223,6 +264,20 @@ class TestDate:
     def test_future_date_warns(self) -> None:
         r = daily("30.10.2026\n10:00 - 18:00\nЭфф: 80%")
         assert "future_date" in codes(r)
+
+    @pytest.mark.parametrize("line", ["22.10.2025", "22.10.2020", "22.10.25"])
+    def test_year_typo_is_fixed_with_warning(self, line: str) -> None:
+        """«22.10.2025», присланный 24.10.2026, — опечатка в годе: часы идут на 22.10.2026."""
+        r = daily(f"{line}\n10:00 - 18:00\nЭфф: 80%")
+        assert r.daily is not None and r.daily.work_date == date(2026, 10, 22)
+        assert "year_fixed" in codes(r)
+        assert "old_date" not in codes(r)
+        assert r.status is ParseStatus.OK  # тот же день и месяц в пределах месяца — не гадание
+
+    def test_wrong_month_is_not_guessed(self) -> None:
+        r = daily("22.08.2025\n10:00 - 18:00\nЭфф: 80%")
+        assert r.daily is not None and r.daily.work_date == date(2025, 8, 22)
+        assert "old_date" in codes(r)
 
     def test_very_old_date_warns(self) -> None:
         r = daily("01.08.2026\n10:00 - 18:00\nЭфф: 80%")

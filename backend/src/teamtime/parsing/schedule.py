@@ -82,6 +82,9 @@ FULL_NAME_RE = re.compile(
     r"(?:\s+(?P<middle>[А-ЯЁ][а-яё]+))?$"
 )
 
+# «Задачи:», «Задачи на неделю:» — заголовок списка задач, а не непонятная строка.
+TASKS_HEADER_RE = re.compile(r"^(?:задачи|tasks)(?:\s+на\s+(?:неделю|спринт))?\s*:?$")
+
 OFF_WORDS = {"выходной", "вых", "вых.", "отдых", "отдыхаю", "нет", "не работаю", "off"}
 SCHEDULE_TAGS = {"расписание", "расп", "schedule", "спринт"}
 
@@ -202,6 +205,9 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
     tasks: list[str] = []
     section = _Section.HEAD
     header_seen = False
+    # Продолжать предыдущую задачу можно только у пункта с «-»: строки без маркера после
+    # «Задачи:» или под днём — каждая отдельная задача.
+    last_bullet = False
 
     for line_no, raw, line in split_lines(text):
         content = strip_hashtags(line)
@@ -223,9 +229,15 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                 )
             continue
 
+        if TASKS_HEADER_RE.match(fold(content)):
+            section = _Section.TASKS
+            last_bullet = False
+            continue
+
         if (task := bullet_text(content)) is not None:
             section = _Section.TASKS
             tasks.append(task)
+            last_bullet = True
             continue
 
         if m := DAY_RE.match(content):
@@ -271,9 +283,24 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
             person = p
             continue
 
-        if section is _Section.TASKS and tasks:
+        if section is _Section.TASKS and tasks and last_bullet:
             # Перенос длинной задачи на следующую строку.
             tasks[-1] = f"{tasks[-1]} {content}"
+            continue
+
+        if header_seen and not TIME_MENTION_RE.search(content):
+            # Описание под днём, «Результат недели: …», задачи без «-» после «Задачи:».
+            tasks.append(content)
+            last_bullet = False
+            issues.append(
+                Issue(
+                    "text_as_task",
+                    Severity.INFO,
+                    "Строка без времени записана в задачи",
+                    line_no,
+                    raw,
+                )
+            )
             continue
 
         issues.append(

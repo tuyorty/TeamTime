@@ -106,6 +106,44 @@ def parse_interval_list(text: str) -> list[ParsedInterval] | None:
     return [p for p in parsed if p is not None]
 
 
+_TYPO_FIXES = (
+    (re.compile(r"(\d{1,2})\s*:\s+(\d{2})\b|(\d{1,2})\s+:\s*(\d{2})\b"), r"\1\3:\2\4"),  # «18: 30»
+    (re.compile(r"\b(\d{1,2});(\d{2})\b"), r"\1:\2"),  # «15;00»
+    (re.compile(r"\b(\d{1,2}) (\d{2})\b(?!\s*[:.]\d)"), r"\1:\2"),  # «19 00»
+)
+
+
+def lenient_interval_list(text: str) -> tuple[list[ParsedInterval] | None, str | None]:
+    """Как ``parse_interval_list``, но прощает комментарий в скобках после времени и опечатки
+    в разделителе («18: 30», «15;00», «19 00»). Второе значение — что пришлось поправить:
+    "comment" или "typo"; None, если строка разобралась как есть.
+
+    Ослабления пробуются только когда строгий разбор не удался, поэтому верные строки
+    читаются ровно как раньше. TimeFormatError — только из строгого разбора.
+    """
+    parsed = parse_interval_list(text)
+    if parsed:
+        return parsed, None
+    head, paren, _ = text.partition("(")
+    variants: list[tuple[str, str]] = []
+    if paren and head.strip():
+        variants.append((head, "comment"))
+    for base, note in [(text, "typo"), *([(head, "typo")] if paren and head.strip() else [])]:
+        fixed = base
+        for pattern, repl in _TYPO_FIXES:
+            fixed = pattern.sub(repl, fixed)
+        if fixed != base:
+            variants.append((fixed, note))
+    for candidate, note in variants:
+        try:
+            parsed = parse_interval_list(candidate)
+        except TimeFormatError:
+            continue
+        if parsed:
+            return parsed, note
+    return None, None
+
+
 def format_seconds(seconds: int) -> str:
     """Время суток или длительность в «Ч:ММ» (усечение до минут)."""
     sign = "-" if seconds < 0 else ""

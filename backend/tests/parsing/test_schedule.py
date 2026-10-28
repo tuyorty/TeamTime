@@ -321,11 +321,30 @@ class TestTasksAndNoise:
         assert r.schedule is not None
         assert r.schedule.tasks == ("длинная задача, продолжение", "вторая")
 
-    def test_garbage_line_before_tasks_is_warning(self) -> None:
+    def test_text_under_day_becomes_task(self) -> None:
+        """Описание под строкой дня — задача, а не ошибка: так пишут расписание по дням."""
         r = plan("Спринт 26.10 - 31.10\nИванов И.И.\nПн: 10:00 - 18:00\nкакой-то текст\n- задача")
+        assert "text_as_task" in codes(r)
+        assert r.status is ParseStatus.OK
+        assert r.schedule is not None and r.schedule.tasks == ("какой-то текст", "задача")
+
+    def test_garbage_with_time_is_still_warning(self) -> None:
+        r = plan("Спринт 26.10 - 31.10\nИванов И.И.\nПн: 10:00 - 18:00\nуйду в 15:30\n")
         assert "unknown_line" in codes(r)
         assert r.status is ParseStatus.PARTIAL
-        assert r.schedule is not None and r.schedule.tasks == ("задача",)
+
+    def test_tasks_header_and_plain_tasks(self) -> None:
+        r = plan(
+            "Спринт 26.10 - 31.10\nИванов И.И.\nПн: 10:00 - 18:00\n\nЗадачи:\n"
+            "первая задача\nвторая задача\n- третья\nпродолжение третьей"
+        )
+        assert "unknown_line" not in codes(r)
+        assert r.schedule is not None
+        assert r.schedule.tasks == (
+            "первая задача",
+            "вторая задача",
+            "третья продолжение третьей",
+        )
 
     def test_invisible_chars_and_crlf(self) -> None:
         text = "Спринт 26.10​ - 31.10\r\nИванов И.И.\r\n﻿Пн: 10:00 - 18:00\r\n"
