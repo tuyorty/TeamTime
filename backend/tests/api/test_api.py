@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import io
+from datetime import date
 
 import httpx
 import pytest
@@ -11,6 +12,7 @@ from openpyxl import load_workbook
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from teamtime.db.models import BotChat
+from teamtime.services.facts import current_dailies
 from teamtime.services.ingest import ingest
 from tests import factories as f
 from tests.api.conftest import ADMIN_HEADERS
@@ -235,6 +237,46 @@ async def test_inbox_flow(admin: httpx.AsyncClient, maker) -> None:
     )
     assert r.status_code == 200
     assert (await admin.get("/inbox")).json()["counts"]["pending"] == 0
+
+
+async def test_retract_removes_fact_even_after_manual_edit(admin: httpx.AsyncClient, maker) -> None:
+    """«Отозвать дейлик» убирает факт дня, а не откатывает к дейлику из Telegram."""
+    async with maker() as s:
+        await f.forum(s)
+        emp = await f.employee(s, tg_id=501)
+        await ingest(s, f.message(f.daily_text("23.10.2026")))
+        await s.commit()
+    url = f"/admin/days/{emp.id}/2026-10-23/fact"
+    r = await admin.put(
+        url, json={"intervals": [[36000, 64800]], "efficiency": 90}, headers=ADMIN_HEADERS
+    )
+    assert r.status_code == 200
+    assert (await admin.delete(f"{url}?reason=ошибка", headers=ADMIN_HEADERS)).status_code == 200
+    async with maker() as s:
+        assert await current_dailies(s, date(2026, 10, 23), date(2026, 10, 23)) == []
+    r = await admin.delete(url, headers=ADMIN_HEADERS)
+    assert r.status_code == 422  # отзывать уже нечего
+
+
+async def test_manual_fact_closes_inbox_item(admin: httpx.AsyncClient, maker) -> None:
+    """«Исправить в табеле»: правка дня из недели закрывает ждущий дейлик за этот день."""
+    async with maker() as s:
+        await f.forum(s)
+        emp = await f.employee(s, tg_id=501)
+        await ingest(s, f.message("23.10.2026\n10:00 - 18:00\n- без эффективности"))
+        await s.commit()
+    assert (await admin.get("/inbox")).json()["counts"]["pending"] == 1
+    r = await admin.put(
+        f"/admin/days/{emp.id}/2026-10-23/fact",
+        json={"intervals": [[36000, 64800]], "efficiency": 100, "reason": ""},
+        headers=ADMIN_HEADERS,
+    )
+    assert r.status_code == 200, r.text
+    assert "инбоксе закрыта" in r.json()["detail"]
+    inbox = (await admin.get("/inbox")).json()
+    assert inbox["counts"]["pending"] == 0
+    resolved = (await admin.get("/inbox?view=resolved")).json()["items"]
+    assert resolved[0]["parse"]["resolution"] == "fixed"
 
 
 async def test_import_upload(admin: httpx.AsyncClient, maker) -> None:

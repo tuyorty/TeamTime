@@ -153,7 +153,17 @@ async def retract_daily(
     previous = await current_daily(session, employee_id, work_date)
     if previous is None:
         raise EditError("Дейлика за этот день нет")
-    previous.retracted_at = clock.now()
+    # Все действующие версии, а не только последнюю: иначе после отзыва ручной правки
+    # табель откатился бы к дейлику из Telegram, и факт дня остался бы на месте.
+    now = clock.now()
+    for daily in await session.scalars(
+        select(Daily).where(
+            Daily.employee_id == employee_id,
+            Daily.work_date == work_date,
+            Daily.retracted_at.is_(None),
+        )
+    ):
+        daily.retracted_at = now
     await audit.record(
         session, actor=actor, action="daily.retract", entity_type="daily", entity_id=previous.id,
         employee_id=employee_id, before=_daily_snapshot(previous), after=None, reason=reason,
@@ -512,6 +522,25 @@ async def resolve_parse(
     )  # fmt: skip
     await events.notify(session, "inbox.changed", parse_result_id=row.id)
     return row
+
+
+async def resolve_daily_inbox(
+    session: AsyncSession, employee_id: int, day: date, *, actor: str, reason: str = ""
+) -> int:
+    """Ручная правка дня закрывает ждущие дейлики сотрудника за этот день: данные уже верны."""
+    rows = await session.scalars(
+        select(ParseResultRow.id).where(
+            ParseResultRow.is_latest.is_(True),
+            ParseResultRow.kind == MessageKind.DAILY,
+            ParseResultRow.resolution == Resolution.PENDING,
+            ParseResultRow.employee_id == employee_id,
+            ParseResultRow.data["work_date"].astext == day.isoformat(),
+        )
+    )
+    ids = list(rows)
+    for parse_id in ids:
+        await resolve_parse(session, parse_id, Resolution.FIXED, actor=actor, reason=reason)
+    return len(ids)
 
 
 async def reparse(

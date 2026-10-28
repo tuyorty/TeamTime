@@ -256,9 +256,12 @@ async def set_fact(
             await manual.resolve_parse(
                 session, body.parse_result_id, Resolution.FIXED, actor=actor, reason=body.reason
             )
+        closed = await manual.resolve_daily_inbox(
+            session, employee_id, day, actor=actor, reason=body.reason
+        )
     except manual.EditError as exc:
         raise _bad(exc) from exc
-    return OkOut()
+    return OkOut(detail="Запись в инбоксе закрыта как исправленная" if closed else "")
 
 
 @router.delete("/days/{employee_id}/{day}/fact", summary="Убрать факт дня (отозвать дейлик)")

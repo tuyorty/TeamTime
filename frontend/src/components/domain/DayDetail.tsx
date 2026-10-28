@@ -236,7 +236,7 @@ function FactForm({ employee, cell, onDone }: { employee: EmployeeBrief; cell: D
         efficiency: eff === "" ? null : Number(eff),
         reason,
       }),
-    { success: "Факт сохранён новой версией" },
+    { success: (r: unknown) => `Факт сохранён новой версией. ${(r as { detail?: string }).detail ?? ""}` },
   );
   const clear = useAdminMutation(() => api.delete(`${path(employee, cell, "fact")}?reason=${encodeURIComponent(reason)}`), {
     success: "Дейлик отозван",
