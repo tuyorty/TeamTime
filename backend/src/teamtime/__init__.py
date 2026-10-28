@@ -1,3 +1,6 @@
 """xTime: табель команды из сообщений Telegram."""
 
-__version__ = "0.1.0"
+import os
+
+# В релизный образ тег попадает при сборке (make release); локально — dev.
+__version__ = os.environ.get("XTIME_VERSION") or "dev"

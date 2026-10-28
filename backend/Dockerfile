@@ -19,6 +19,10 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-deps .
 
+# Версия — в самом конце сборки, чтобы новый тег не сбрасывал кэш слоёв.
+ARG XTIME_VERSION=dev
+ENV XTIME_VERSION=${XTIME_VERSION}
+
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint
 RUN chmod +x /usr/local/bin/entrypoint \
     && useradd --system --uid 10001 --home /app teamtime \

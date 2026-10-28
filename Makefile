@@ -91,7 +91,8 @@ RELEASE  := dist/xtime-$(VERSION)
 
 .PHONY: release deploy
 release: ## Собрать архив для сервера: make release [PLATFORM=linux/arm64]
-	docker buildx build --platform $(PLATFORM) --load -t xtime-backend:$(VERSION) -t xtime-backend:current backend
+	docker buildx build --platform $(PLATFORM) --load --build-arg XTIME_VERSION=$(VERSION) \
+	  -t xtime-backend:$(VERSION) -t xtime-backend:current backend
 	docker buildx build --platform $(PLATFORM) --load -t xtime-web:$(VERSION) -t xtime-web:current frontend
 	docker buildx build --platform $(PLATFORM) --load -t xtime-db:$(VERSION) -t xtime-db:current -f deploy/db.Dockerfile deploy
 	rm -rf $(RELEASE) && mkdir -p $(RELEASE)

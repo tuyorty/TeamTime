@@ -180,6 +180,11 @@ export function AppShell() {
             <AdminButton />
           </div>
         </div>
+        {meta ? (
+          <p className="mt-2 px-1 text-[11px] text-ink-3 tnum" title="Версия xTime на сервере">
+            xTime {meta.version}
+          </p>
+        ) : null}
         {meta?.demo ? (
           <p className="mt-3 rounded-md bg-surface-2 px-2.5 py-2 text-[12px] leading-4 text-ink-2">
             Демо: вымышленная команда, данные сгенерированы.
