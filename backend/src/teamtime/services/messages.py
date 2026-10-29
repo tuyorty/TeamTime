@@ -24,6 +24,8 @@ from teamtime.schemas import (
     ParseResultOut,
 )
 from teamtime.services.matching import candidates_by_surname
+from teamtime.services.schedule_changes import schedule_change_preview
+from teamtime.services.settings import load_settings
 
 
 def telegram_link(raw: RawMessage) -> str | None:
@@ -122,6 +124,7 @@ async def inbox(
         .options(selectinload(ParseResultRow.employee))
     )
     items: list[InboxItem] = []
+    settings = await load_settings(session)
     for row, ver in rows.all():
         msg = await message_out(session, ver.raw_message_id)
         assert msg is not None
@@ -134,6 +137,9 @@ async def inbox(
                 parse=parse_out(row, ver.version),
                 message=msg,
                 candidates=[EmployeeBrief.model_validate(c) for c in candidates],
+                plan_change=await schedule_change_preview(session, row, settings)
+                if row.kind is MessageKind.SCHEDULE
+                else None,
             )
         )
 

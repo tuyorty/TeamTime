@@ -6,10 +6,12 @@ import { api } from "@/api/client";
 import { useAdminMutation, useEmployees, useIdentities, useInbox } from "@/api/queries";
 import type { InboxItem, Issue } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
+import { ScheduleComparison } from "@/components/domain/ScheduleComparison";
 import { EmptyState, ErrorState } from "@/components/domain/feedback";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,7 +41,13 @@ const KINDS = [
 
 const FILTER_KEYS = ["employee", "problem", "kind"] as const;
 
-const RESOLUTION = { accepted: "принято как есть", fixed: "исправлено", ignored: "не учитывается", auto: "разобрано", pending: "ждёт" };
+const RESOLUTION = {
+  accepted: "принято как есть",
+  fixed: "исправлено",
+  ignored: "не учитывается",
+  auto: "разобрано",
+  pending: "ждёт",
+};
 
 export default function InboxPage() {
   const [search, setSearch] = useSearchParams();
@@ -99,7 +107,12 @@ export default function InboxPage() {
           onChange={(v) => setParam("problem", v)}
           options={PROBLEMS.map((p) => ({ value: p.value, label: p.label }))}
         />
-        <Select aria-label="Тип сообщения" className="w-full sm:w-36" value={search.get("kind") ?? ""} onChange={(e) => setParam("kind", e.target.value)}>
+        <Select
+          aria-label="Тип сообщения"
+          className="w-full sm:w-36"
+          value={search.get("kind") ?? ""}
+          onChange={(e) => setParam("kind", e.target.value)}
+        >
           {KINDS.map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
@@ -120,7 +133,11 @@ export default function InboxPage() {
           </Button>
         ) : null}
         <span className="text-[12px] text-ink-3 tnum">
-          {data ? (data.total > data.items.length ? `Показано ${data.items.length} из ${data.total}` : `Найдено: ${data.total}`) : null}
+          {data
+            ? data.total > data.items.length
+              ? `Показано ${data.items.length} из ${data.total}`
+              : `Найдено: ${data.total}`
+            : null}
         </span>
         {admin && view === "pending" ? (
           <Button
@@ -131,7 +148,8 @@ export default function InboxPage() {
             onClick={() => reparseAll.mutate(undefined)}
             disabled={reparseAll.isPending}
           >
-            <RotateCw className={cn(reparseAll.isPending && "animate-spin")} /> {reparseAll.isPending ? "Переразбираем…" : "Переразобрать всё"}
+            <RotateCw className={cn(reparseAll.isPending && "animate-spin")} />{" "}
+            {reparseAll.isPending ? "Переразбираем…" : "Переразобрать всё"}
           </Button>
         ) : null}
       </div>
@@ -144,12 +162,15 @@ export default function InboxPage() {
           ))}
         </div>
       ) : !data.items.length ? (
-        <EmptyState icon={view === "pending" && !filter ? CheckCheck : Inbox} title={filter ? "Ничего не найдено" : view === "pending" ? "Всё разобрано" : "Пусто"}>
+        <EmptyState
+          icon={view === "pending" && !filter ? CheckCheck : Inbox}
+          title={filter ? "Ничего не найдено" : view === "pending" ? "Всё разобрано" : "Пусто"}
+        >
           {filter
             ? "Под эти фильтры ничего не подходит."
             : view === "pending"
-            ? "Бот понял все сообщения. Новые вопросы появятся здесь сами."
-            : "Здесь будут записи, когда они появятся."}
+              ? "Бот понял все сообщения. Новые вопросы появятся здесь сами."
+              : "Здесь будут записи, когда они появятся."}
         </EmptyState>
       ) : (
         <ul className="grid gap-3">
@@ -176,9 +197,17 @@ function Summary({ item }: { item: InboxItem }) {
         <dt className="text-ink-3">Дата</dt>
         <dd>{dayMonth(d.work_date as string)}</dd>
         <dt className="text-ink-3">Время</dt>
-        <dd>{intervals.map(([a, b]) => `${hm(a)}–${hm(b)}`).join("; ")} ({hm(d.worked_sec as number)})</dd>
+        <dd>
+          {intervals.map(([a, b]) => `${hm(a)}–${hm(b)}`).join("; ")} ({hm(d.worked_sec as number)})
+        </dd>
         <dt className="text-ink-3">Эффективность</dt>
-        <dd>{d.efficiency !== null ? `${d.efficiency as number}%` : <span className="text-deviation-ink">не указана</span>}</dd>
+        <dd>
+          {d.efficiency !== null ? (
+            `${d.efficiency as number}%`
+          ) : (
+            <span className="text-deviation-ink">не указана</span>
+          )}
+        </dd>
       </dl>
     );
   }
@@ -186,7 +215,9 @@ function Summary({ item }: { item: InboxItem }) {
   return (
     <dl className="grid grid-cols-[8.5rem_1fr] gap-x-3 gap-y-1 text-[13px] tnum">
       <dt className="text-ink-3">Неделя</dt>
-      <dd>{d.iso_week as number}-я, {dayMonth(d.sprint_start as string)} – {dayMonth(d.sprint_end as string)}</dd>
+      <dd>
+        {d.iso_week as number}-я, {dayMonth(d.sprint_start as string)} – {dayMonth(d.sprint_end as string)}
+      </dd>
       <dt className="text-ink-3">Сотрудник</dt>
       <dd>{person?.raw ?? <span className="text-deviation-ink">не указан</span>}</dd>
       <dt className="text-ink-3">Дней в плане</dt>
@@ -199,6 +230,8 @@ function InboxCard({ item }: { item: InboxItem }) {
   const admin = useIsAdmin();
   const p = item.parse;
   const m = item.message;
+  const [decision, setDecision] = useState<"approve" | "ignore" | null>(null);
+  const lateSchedule = p.kind === "schedule" && p.issues.some((issue) => issue.code === "late_change");
   const text = m.versions.find((v) => v.id === p.message_version_id)?.text ?? m.versions.at(-1)!.text;
   const lineIssues = new Map<number, Issue[]>();
   for (const i of p.issues) if (i.line_no) lineIssues.set(i.line_no, [...(lineIssues.get(i.line_no) ?? []), i]);
@@ -233,38 +266,59 @@ function InboxCard({ item }: { item: InboxItem }) {
           {p.version > 1 ? <Badge>правка {p.version - 1}</Badge> : null}
           <span className="ml-auto text-[12px] text-ink-3">{relative(m.versions.at(-1)!.edited_at ?? m.sent_at)}</span>
         </div>
-        <pre className="overflow-x-auto rounded-md border border-line bg-bg p-3 font-sans text-[13px] leading-[1.55] whitespace-pre-wrap">
+        <pre className="max-h-[28rem] overflow-auto rounded-md border border-line bg-bg p-3 font-sans text-[13px] leading-[1.55] whitespace-pre-wrap [overflow-wrap:anywhere]">
           {text.split("\n").map((line, n) => {
             const issues = lineIssues.get(n + 1);
             const bad = issues?.some((i) => i.severity !== "info");
             return (
-              <span key={n} className={cn("-mx-1 block rounded-sm px-1", issues && (bad ? "bg-late-soft" : "bg-deviation-soft"))}>
+              <span
+                key={n}
+                className={cn("-mx-1 block rounded-sm px-1", issues && (bad ? "bg-late-soft" : "bg-deviation-soft"))}
+              >
                 {line || " "}
-                {issues ? <span className="ml-2 text-[11px] text-ink-2">← {issues.map((i) => i.message).join("; ")}</span> : null}
+                {issues ? (
+                  <span className="ml-2 text-[11px] text-ink-2">← {issues.map((i) => i.message).join("; ")}</span>
+                ) : null}
               </span>
             );
           })}
         </pre>
-        {p.resolution !== "pending" ? <span className="text-[12px] text-ink-3">Решение: {RESOLUTION[p.resolution]}</span> : null}
+        {p.resolution !== "pending" ? (
+          <span className="text-[12px] text-ink-3">Решение: {RESOLUTION[p.resolution]}</span>
+        ) : null}
       </div>
       <div className="grid content-start gap-3">
         {general.length ? (
           <ul className="grid gap-1.5">
             {general.map((i, n) => (
               <li key={n} className="flex items-start gap-2 text-[13px]">
-                <Badge tone={issueTone(i)}>{i.severity === "error" ? "ошибка" : i.severity === "warning" ? "вопрос" : "заметка"}</Badge>
+                <Badge tone={issueTone(i)}>
+                  {i.severity === "error" ? "ошибка" : i.severity === "warning" ? "вопрос" : "заметка"}
+                </Badge>
                 <span className="text-ink-2">{i.message}</span>
               </li>
             ))}
           </ul>
         ) : null}
         <Summary item={item} />
+        {item.plan_change ? (
+          <ScheduleComparison preview={item.plan_change} pending={p.resolution === "pending"} />
+        ) : null}
+        {lateSchedule && p.resolution === "pending" ? (
+          <p className="rounded-md border border-deviation/30 bg-deviation-soft/40 p-3 text-[12px] leading-relaxed text-ink-2">
+            Это предупреждение о позднем изменении расписания. Одобрение применит новый план и пересчитает опоздания и
+            итоги. Фактическое время останется из дейлика.
+          </p>
+        ) : null}
         {p.employee_unresolved ? <LinkIdentity item={item} /> : null}
         {admin ? (
           <div className="mt-1 flex flex-wrap gap-2">
             {fixHref ? (
               <Button asChild size="sm" variant="primary">
-                <Link to={fixHref} title="Открыть этот день в табеле и вручную поправить время и e%. Правка пишется в аудит, а запись закрывается как исправленная.">
+                <Link
+                  to={fixHref}
+                  title="Открыть этот день в табеле и вручную поправить время и e%. Правка пишется в аудит, а запись закрывается как исправленная."
+                >
                   <Pencil /> Исправить в табеле
                 </Link>
               </Button>
@@ -272,11 +326,15 @@ function InboxCard({ item }: { item: InboxItem }) {
             {p.resolution === "pending" && d && !p.employee_unresolved ? (
               <Button
                 size="sm"
-                title="Данные уже учтены. Убрать запись из инбокса, ничего не меняя."
-                onClick={() => resolve.mutate("accepted")}
+                title={
+                  lateSchedule
+                    ? "Одобрить новый план после проверки изменений и пересчёта опозданий."
+                    : "Подтвердить разбор сообщения и убрать запись из инбокса."
+                }
+                onClick={() => (lateSchedule ? setDecision("approve") : resolve.mutate("accepted"))}
                 disabled={resolve.isPending}
               >
-                <Check /> Принять как есть
+                <Check /> {lateSchedule ? "Одобрить новый план" : "Принять как есть"}
               </Button>
             ) : null}
             {p.resolution === "pending" ? (
@@ -284,7 +342,7 @@ function InboxCard({ item }: { item: InboxItem }) {
                 size="sm"
                 variant="ghost"
                 title="Это не дейлик и не расписание. Убрать из инбокса; данные из сообщения не учитываются."
-                onClick={() => resolve.mutate("ignored")}
+                onClick={() => setDecision("ignore")}
                 disabled={resolve.isPending}
               >
                 <EyeOff /> Игнорировать
@@ -304,7 +362,9 @@ function InboxCard({ item }: { item: InboxItem }) {
               <RotateCw /> Переразобрать
             </Button>
             <p className="basis-full text-[12px] leading-snug text-ink-3">
-              «Исправить в табеле» — поправить цифры дня вручную, после сохранения запись уйдёт из инбокса сама. «Принять как есть» — данные верны, убрать из инбокса.
+              {lateSchedule
+                ? "«Одобрить новый план» — применить показанные изменения и пересчитать табель. «Игнорировать» — исключить данные этого сообщения из расчётов."
+                : "«Исправить в табеле» — поправить цифры дня вручную. «Принять как есть» — подтвердить разбор и закрыть вопрос."}{" "}
               «Переразобрать» — прочитать сообщение заново, если бот обновился или в справочнике появился сотрудник.
             </p>
           </div>
@@ -312,13 +372,57 @@ function InboxCard({ item }: { item: InboxItem }) {
           <p className="text-[12px] text-ink-3">Исправить, принять или игнорировать можно в режиме админа.</p>
         )}
       </div>
+      <Dialog open={decision !== null} onOpenChange={(open) => !open && setDecision(null)}>
+        <DialogContent
+          title={decision === "approve" ? "Одобрить новое расписание?" : "Исключить сообщение из расчётов?"}
+          className="top-[5vh] max-h-[90dvh] w-[min(94vw,42rem)] overflow-y-auto"
+        >
+          {decision === "approve" ? (
+            <>
+              <p className="mb-4 text-[13px] leading-relaxed text-ink-2">
+                Новый план будет применён к этой версии расписания. Опоздания и итоги пересчитаются — при переносе
+                начала позже опоздание может уменьшиться или исчезнуть. Фактические интервалы берутся из дейлика.
+              </p>
+              {item.plan_change ? (
+                <ScheduleComparison preview={item.plan_change} />
+              ) : (
+                <p className="text-[13px] text-deviation-ink">
+                  Сравнение недоступно. Проверьте исходное сообщение и версии в разделе «Планы».
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-[13px] leading-relaxed text-ink-2">
+              Производные планы или дейлики из этого сообщения будут отозваны. Предыдущая версия того же сообщения
+              автоматически не восстанавливается. Для точечного изменения откройте день в табеле.
+            </p>
+          )}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDecision(null)}>
+              Отмена
+            </Button>
+            <Button
+              variant={decision === "approve" ? "primary" : "danger"}
+              disabled={resolve.isPending || (decision === "approve" && !item.plan_change)}
+              onClick={() =>
+                resolve.mutate(decision === "approve" ? "accepted" : "ignored", { onSuccess: () => setDecision(null) })
+              }
+            >
+              {decision === "approve" ? "Одобрить и пересчитать" : "Исключить сообщение"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </li>
   );
 }
 
 function LinkIdentity({ item }: { item: InboxItem }) {
   const admin = useIsAdmin();
-  const person = item.parse.kind === "schedule" ? ((item.parse.data as { person?: { raw: string } | null } | null)?.person ?? null) : null;
+  const person =
+    item.parse.kind === "schedule"
+      ? ((item.parse.data as { person?: { raw: string } | null } | null)?.person ?? null)
+      : null;
   const identities = useIdentities().data ?? [];
   const employees = useEmployees().data ?? [];
   const identity = identities.find((i) => i.telegram_user_id === item.message.author_tg_id);
@@ -351,7 +455,12 @@ function LinkIdentity({ item }: { item: InboxItem }) {
         </div>
       ) : admin && identity ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Select className="w-56" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} aria-label="Сотрудник для привязки">
+          <Select
+            className="w-56"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            aria-label="Сотрудник для привязки"
+          >
             <option value="">Выберите сотрудника</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
@@ -359,7 +468,12 @@ function LinkIdentity({ item }: { item: InboxItem }) {
               </option>
             ))}
           </Select>
-          <Button size="sm" variant="primary" disabled={!employeeId || link.isPending} onClick={() => link.mutate(undefined)}>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={!employeeId || link.isPending}
+            onClick={() => link.mutate(undefined)}
+          >
             Привязать аккаунт
           </Button>
         </div>

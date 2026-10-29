@@ -199,7 +199,10 @@ def plan_in_force(
             or when is None
             or p.id in approved
             or when <= change_deadline(day, start, settings.plan_notice_hours, settings.tz)
-            or when == stated_at(in_force[0], sent)  # переразбор того же сообщения
+            or (
+                p.source_version_id is not None
+                and p.source_version_id == in_force[0].source_version_id
+            )  # переразбор той же версии текста, а не другая правка с тем же временем
         ):
             in_force = (p, candidate)
     assert in_force is not None
@@ -269,6 +272,7 @@ async def load_cells(
     employee_ids: Iterable[int],
     *,
     today: date | None = None,
+    extra_approved: Iterable[int] = (),
 ) -> dict[tuple[int, date], DayCell]:
     """Все ячейки «сотрудник × день» за диапазон, включая пустые."""
     ids = list(employee_ids)
@@ -282,6 +286,7 @@ async def load_cells(
     every = [*plans, *(o for h in history.values() for o in h)]
     sent = await message_times(session, every)
     approved = await approved_plans(session, every)
+    approved.update(extra_approved)
     for p in plans:
         days = {d.date for d in p.days} | {d.date for o in history[p.id] for d in o.days}
         for day in sorted(days):

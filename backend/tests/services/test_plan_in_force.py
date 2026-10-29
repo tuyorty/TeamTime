@@ -110,6 +110,36 @@ async def test_notice_hours_setting(session: AsyncSession) -> None:
     assert next(r for r in week.rows if r.employee.id == emp).cells[0].late_sec == 0
 
 
+async def test_approval_does_not_approve_another_edit_with_same_timestamp(
+    session: AsyncSession,
+) -> None:
+    emp = await setup(session)
+    at = local(MONDAY, 10, 30)
+    await edit_schedule(session, at)
+    pending = await messages.inbox(session)
+    target = next(
+        item for item in pending.items if item.plan_change and item.plan_change.late_change
+    )
+    await manual.resolve_parse(session, target.parse.id, Resolution.ACCEPTED, actor="admin")
+    assert (await monday(session, emp)).plan.start == 11 * 3600
+    msg = f.message(
+        f.schedule_text(sprint="19.10 - 24.10", Пн="12:00 - 20:00"),
+        thread=f.SCHEDULE_THREAD,
+        message_id=SCHEDULE_ID,
+        sent_at=local(date(2026, 10, 18), 20),
+    )
+    await ingest(session, replace(msg, edited_at=at), SETTINGS)
+    cell = await monday(session, emp)
+    assert cell.plan is not None and cell.plan.start == 11 * 3600
+    pending = await messages.inbox(session)
+    target = next(
+        item for item in pending.items if item.plan_change and item.plan_change.late_change
+    )
+    change = next(day for day in target.plan_change.days if day.date == MONDAY)
+    assert change.affects_calculation is True
+    assert change.if_accepted.plan and change.if_accepted.plan.start == 12 * 3600
+
+
 async def test_admin_edit_always_applies(session: AsyncSession) -> None:
     emp = await setup(session)
     await edit_schedule(session, local(MONDAY, 10, 30))

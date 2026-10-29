@@ -58,14 +58,14 @@ function flash(event: RealtimeEvent) {
 }
 
 const INVALIDATE: Record<string, string[]> = {
-  "message.ingested": ["today", "week", "month", "plans", "employee", "calendar", "inbox", "search"],
-  "daily.changed": ["today", "week", "month", "employee", "calendar", "inbox", "audit"],
-  "plan.changed": ["today", "week", "month", "plans", "employee", "calendar", "audit"],
-  "status.changed": ["today", "week", "month", "employee", "calendar", "audit"],
-  "employee.changed": ["employees", "employee", "week", "month", "today", "audit"],
-  "identity.changed": ["identities", "inbox", "audit"],
-  "inbox.changed": ["inbox", "today", "audit"],
-  "settings.changed": ["meta", "settings", "week", "month", "today", "audit"],
+  "message.ingested": ["today", "day-summary", "week", "month", "plans", "employee", "calendar", "inbox", "search"],
+  "daily.changed": ["today", "day-summary", "week", "month", "employee", "calendar", "inbox", "audit"],
+  "plan.changed": ["today", "day-summary", "week", "month", "plans", "employee", "calendar", "audit"],
+  "status.changed": ["today", "day-summary", "week", "month", "employee", "calendar", "audit"],
+  "employee.changed": ["employees", "employee", "week", "month", "today", "day-summary", "audit"],
+  "identity.changed": ["identities", "employee", "inbox", "audit"],
+  "inbox.changed": ["inbox", "today", "day-summary", "week", "month", "plans", "employee", "calendar", "audit"],
+  "settings.changed": ["meta", "settings", "week", "month", "today", "day-summary", "audit"],
 };
 
 function describe(event: RealtimeEvent): string | null {
