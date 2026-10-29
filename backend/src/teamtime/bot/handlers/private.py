@@ -187,7 +187,7 @@ async def set_status(
     label = STATUS_LABELS[kind] if kind else "Статус снят"
     await query.answer(label)
     await msg.edit_text(
-        f"✅ <b>{label}</b>\n{texts.human_date(today)}\n\nСтатус обновлён в табеле."
+        f"✅ <b>{label}</b>\n{texts.human_date(today)}\n\nСтатус обновлён в таблице."
     )
 
 
@@ -244,7 +244,7 @@ async def vacation_range(
     await state.clear()
     await message.answer(
         f"🌴 <b>Отпуск отмечен</b>\n\nС <b>{start:%d.%m}</b> по <b>{end:%d.%m}</b> включительно.\n"
-        f"Всего: {n} {texts.plural(n, 'день', 'дня', 'дней')}. Статус обновлён в табеле."
+        f"Всего: {n} {texts.plural(n, 'день', 'дня', 'дней')}. Статус обновлён в таблице."
     )
 
 
@@ -417,7 +417,7 @@ async def fix_action(
             await query.answer(f"Эффективность {callback_data.value}%")
             await msg.edit_text(
                 f"✅ <b>Готово: эффективность {callback_data.value}%</b>\n\n"
-                "Изменение сохранено в табеле."
+                "Изменение сохранено в таблице."
             )
         case "full":
             await state.set_state(Fix.full_daily)
@@ -468,7 +468,9 @@ async def fix_time(message: Message, session: AsyncSession, state: FSMContext) -
         return
     await manual.resolve_parse(session, row.id, Resolution.FIXED, actor=actor(message.from_user))
     await state.clear()
-    await message.answer("✅ <b>Готово, время обновлено</b>\n\nНовые интервалы сохранены в табеле.")
+    await message.answer(
+        "✅ <b>Готово, время обновлено</b>\n\nНовые интервалы сохранены в таблице."
+    )
 
 
 @router.message(Fix.full_daily, F.text)
@@ -505,7 +507,7 @@ async def fix_full(
     await state.clear()
     await message.answer(
         f"✅ <b>Готово: дейлик за {d.work_date:%d.%m.%Y} сохранён</b>\n\n"
-        "Часы, эффективность и задачи обновлены в табеле."
+        "Часы, эффективность и задачи обновлены в таблице."
     )
 
 
@@ -553,7 +555,7 @@ async def fix_plan_day(message: Message, session: AsyncSession, state: FSMContex
     await state.clear()
     await message.answer(
         f"✅ <b>Готово: план на {WEEKDAYS[weekday]} {day:%d.%m} обновлён</b>\n\n"
-        "Расписание сохранено в табеле."
+        "Расписание сохранено в таблице."
     )
 
 

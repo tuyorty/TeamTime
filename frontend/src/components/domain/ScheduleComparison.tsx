@@ -35,7 +35,7 @@ export function ScheduleComparison({ preview, pending = true }: { preview: Sched
               </h4>
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-[12px]">
                 <div className="min-w-0">
-                  <p className="mb-1 text-[11px] text-ink-3">{approval ? "В табеле сейчас" : "Предыдущая версия"}</p>
+                  <p className="mb-1 text-[11px] text-ink-3">{approval ? "В таблице сейчас" : "Предыдущая версия"}</p>
                   <p className="break-words font-medium tnum">{planText(before)}</p>
                 </div>
                 <ArrowRight className="size-3.5 text-ink-3" />

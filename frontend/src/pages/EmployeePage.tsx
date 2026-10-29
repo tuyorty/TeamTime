@@ -326,7 +326,7 @@ function TasksPanel({ data }: { data: EmployeeDetail }) {
 
 function NotesPanel({ data }: { data: EmployeeDetail }) {
   return (
-    <Panel title="Заметки и статусы" description="Пометки у конкретных дней расписания и статусы из табеля или бота">
+    <Panel title="Заметки и статусы" description="Пометки у конкретных дней расписания и статусы из таблицы или бота">
       {data.notes.length ? (
         <ul className="grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
           {data.notes.map((n, i) => {

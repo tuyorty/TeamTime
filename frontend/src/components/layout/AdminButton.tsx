@@ -62,7 +62,7 @@ export function AdminButton() {
       </Tooltip>
       <DialogContent
         title="Режим админа"
-        description="Смотреть табель можно без входа. Пароль нужен для правок и настроек, все правки пишутся в журнал."
+        description="Смотреть таблицу можно без входа. Пароль нужен для правок и настроек, все правки пишутся в журнал."
       >
         <form onSubmit={login} className="grid gap-4">
           <Field label="Пароль" error={error} hint={meta.demo ? "В демо пароль: demo" : "Задаётся в ADMIN_PASSWORD"}>

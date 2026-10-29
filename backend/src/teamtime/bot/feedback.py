@@ -117,7 +117,7 @@ def accepted_text(outcome: IngestOutcome) -> str:
             f"{dates[0]:%d.%m.%Y}" if len(dates) == 1 else f"{dates[0]:%d.%m}–{dates[-1]:%d.%m.%Y}"
         )
         lines.append(label)
-    lines += ["", "Сохранено в табеле."]
+    lines += ["", "Сохранено в таблице."]
     return "\n".join(lines)
 
 

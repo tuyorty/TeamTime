@@ -207,7 +207,7 @@ export function DaySummary() {
           <ArrowLeft className="size-4" /> К расписанию
         </Link>
         <Link to="/week" className="flex items-center gap-1 text-accent-ink hover:underline">
-          Табель недели <ArrowRight className="size-4" />
+          Таблица недели <ArrowRight className="size-4" />
         </Link>
       </div>
       <DayDetailSheet value={detail} onClose={() => setDetail(null)} />

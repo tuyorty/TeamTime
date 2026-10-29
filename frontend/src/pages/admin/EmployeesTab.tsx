@@ -263,7 +263,7 @@ function EmployeeForm({
           className="size-4 rounded-full"
           style={{ background: employeeColor(form.color, employee?.id ?? 1, isDark) }}
         />
-        <Switch checked={form.is_active} onChange={set("is_active")} label="Активен (показывается в табеле)" />
+        <Switch checked={form.is_active} onChange={set("is_active")} label="Активен (показывается в таблице)" />
       </div>
       {employee && confirmDelete ? (
         <div role="alert" className="grid gap-2 rounded-md border border-late/40 bg-late-soft/60 p-3 text-[13px]">

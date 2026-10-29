@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "teamtime"
 version = "0.1.0"
-description = "xTime: табель команды из сообщений Telegram"
+description = "xTime: таблица команды из сообщений Telegram"
 requires-python = ">=3.12,<3.14"
 license = "MIT"
 dependencies = [

@@ -154,7 +154,7 @@ async def retract_daily(
     if previous is None:
         raise EditError("Дейлика за этот день нет")
     # Все действующие версии, а не только последнюю: иначе после отзыва ручной правки
-    # табель откатился бы к дейлику из Telegram, и факт дня остался бы на месте.
+    # таблица откатилась бы к дейлику из Telegram, и факт дня остался бы на месте.
     now = clock.now()
     for daily in await session.scalars(
         select(Daily).where(

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-app = typer.Typer(help="xTime: табель команды из Telegram.", no_args_is_help=True)
+app = typer.Typer(help="xTime: таблица команды из Telegram.", no_args_is_help=True)
 db_app = typer.Typer(help="База данных и миграции.", no_args_is_help=True)
 bot_app = typer.Typer(help="Telegram-бот.", no_args_is_help=True)
 demo_app = typer.Typer(help="Демо-данные и эмулятор.", no_args_is_help=True)

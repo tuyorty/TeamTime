@@ -43,7 +43,7 @@ export default function AdminPage() {
           <TabsContent key={t.value} value={t.value} className="pt-5">
             {t.admin && !admin ? (
               <EmptyState icon={Lock} title="Нужен режим админа">
-                Смотреть табель можно всем, а менять справочник и настройки — только в режиме админа. Нажмите на замок
+                Смотреть таблицу можно всем, а менять справочник и настройки — только в режиме админа. Нажмите на замок
                 в меню и введите пароль из ADMIN_PASSWORD.
               </EmptyState>
             ) : t.value === "employees" ? (

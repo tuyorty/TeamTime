@@ -129,7 +129,7 @@ export default function EmulatorPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Эмулятор чата"
-        subtitle={`Напишите сообщение в тему так, как его написал бы сотрудник. Бот разберёт его тем же кодом, а табель обновится сам. В демо сегодня ${meta ? dayMonth(meta.today) : "…"}.`}
+        subtitle={`Напишите сообщение в тему так, как его написал бы сотрудник. Бот разберёт его тем же кодом, а таблица обновится сама. В демо сегодня ${meta ? dayMonth(meta.today) : "…"}.`}
       />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <Panel title="Новое сообщение">

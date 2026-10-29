@@ -285,7 +285,7 @@ async def test_retract_removes_fact_even_after_manual_edit(admin: httpx.AsyncCli
 
 
 async def test_manual_fact_closes_inbox_item(admin: httpx.AsyncClient, maker) -> None:
-    """«Исправить в табеле»: правка дня из недели закрывает ждущий дейлик за этот день."""
+    """«Исправить в таблице»: правка дня из недели закрывает ждущий дейлик за этот день."""
     async with maker() as s:
         await f.forum(s)
         emp = await f.employee(s, tg_id=501)

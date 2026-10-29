@@ -115,7 +115,7 @@ test("инбокс: правка показывает последствия д�
   await page.goto(`/inbox?employee=${employee.id}&kind=schedule`);
   const card = page.getByRole("listitem").filter({ has: page.getByRole("button", { name: "Одобрить новый план", exact: true }) }).first();
   const comparison = card.getByRole("region", { name: "Изменения расписания", exact: true });
-  await expect(comparison).toContainText("В табеле сейчас");
+  await expect(comparison).toContainText("В таблице сейчас");
   await expect(comparison).toContainText("После одобрения");
   await expect(comparison).toContainText("Опоздание:");
   await card.getByRole("button", { name: "Одобрить новый план", exact: true }).click();
