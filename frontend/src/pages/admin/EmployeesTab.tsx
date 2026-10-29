@@ -6,6 +6,7 @@ import { api } from "@/api/client";
 import { keys, useAdminMutation, useEmployees } from "@/api/queries";
 import type { Employee, EmployeeIn } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
+import { AvatarEditor } from "@/components/domain/AvatarEditor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -15,7 +16,14 @@ import { cn } from "@/lib/cn";
 import { employeeColor } from "@/lib/colors";
 import { hm } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
-import { prepareAvatar } from "@/lib/avatar";
+import {
+  DEFAULT_AVATAR_CROP,
+  loadAvatar,
+  prepareAvatar,
+  readAvatar,
+  type AvatarCrop,
+  type AvatarSource,
+} from "@/lib/avatar";
 
 const COLORS = ["blue", "orange", "aqua", "yellow", "magenta", "green", "violet", "red"];
 const COLOR_NAMES: Record<string, string> = {
@@ -146,16 +154,18 @@ function EmployeeForm({
   const rateError = !(Number(form.rate) >= 0) ? "Не меньше нуля" : null;
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoSource, setPhotoSource] = useState<AvatarSource | null>(null);
+  const [photoCrop, setPhotoCrop] = useState<AvatarCrop>({ ...DEFAULT_AVATAR_CROP });
 
   const save = useAdminMutation(
-    () => {
+    async () => {
       const body: EmployeeIn = {
         full_name: form.full_name.trim(),
         short_name: form.short_name.trim(),
         position: form.position.trim(),
         phone: form.phone.trim(),
         about: form.about.trim(),
-        avatar_url: form.avatar_url,
+        avatar_url: photoSource ? await prepareAvatar(photoSource, photoCrop) : form.avatar_url,
         monthly_norm_minutes: Math.round(Number(form.norm) * 60),
         hourly_rate: form.rate.replace(",", "."),
         color: form.color,
@@ -205,7 +215,11 @@ function EmployeeForm({
       <Field label="Должность" hint="Видна в карточке и отчётах">
         <Input value={form.position} onChange={(e) => set("position")(e.target.value)} />
       </Field>
-      <Field label="Фотография" error={photoError} hint="JPEG, PNG или WebP, до 10 МБ. Сохраняется уменьшенная копия.">
+      <Field
+        label="Фотография"
+        error={photoError}
+        hint="JPEG, PNG или WebP, до 10 МБ. После выбора настройте положение и масштаб."
+      >
         <Input
           type="file"
           accept="image/jpeg,image/png,image/webp"
@@ -218,7 +232,8 @@ function EmployeeForm({
             setPhotoError(null);
             setPhotoLoading(true);
             try {
-              set("avatar_url")(await prepareAvatar(file));
+              setPhotoSource(await loadAvatar(file));
+              setPhotoCrop({ ...DEFAULT_AVATAR_CROP });
             } catch (error) {
               setPhotoError(error instanceof Error ? error.message : "Не удалось прочитать фотографию.");
             } finally {
@@ -227,10 +242,41 @@ function EmployeeForm({
           }}
         />
       </Field>
-      {form.avatar_url ? (
+      {photoSource ? <AvatarEditor source={photoSource} crop={photoCrop} onChange={setPhotoCrop} /> : null}
+      {form.avatar_url || photoSource ? (
         <div className="flex items-center gap-3">
-          <img src={form.avatar_url} alt="Фотография сотрудника" className="size-14 rounded-full object-cover" />
-          <Button size="sm" variant="ghost" onClick={() => set("avatar_url")("")}>
+          {!photoSource ? (
+            <img src={form.avatar_url} alt="Фотография сотрудника" className="size-14 rounded-full object-cover" />
+          ) : null}
+          {!photoSource ? (
+            <Button
+              size="sm"
+              disabled={photoLoading}
+              onClick={async () => {
+                setPhotoError(null);
+                setPhotoLoading(true);
+                try {
+                  setPhotoSource(await readAvatar(form.avatar_url));
+                  setPhotoCrop({ ...DEFAULT_AVATAR_CROP });
+                } catch (error) {
+                  setPhotoError(error instanceof Error ? error.message : "Не удалось прочитать фотографию.");
+                } finally {
+                  setPhotoLoading(false);
+                }
+              }}
+            >
+              Настроить фото
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setPhotoSource(null);
+              setPhotoError(null);
+              set("avatar_url")("");
+            }}
+          >
             Убрать фото
           </Button>
         </div>

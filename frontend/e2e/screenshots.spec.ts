@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { test, type Browser, type Page } from "@playwright/test";
-import { lateScheduleExample } from "./fixtures";
+import { avatarFixture, lateScheduleExample } from "./fixtures";
 
 /**
  * Скриншоты и GIF для README на демо-данных:
@@ -54,6 +54,7 @@ for (const theme of ["light", "dark"] as const) {
     });
     await shot(browser, "/month/2026/9", "month", theme);
     await shot(browser, "/people/2", "employee", theme);
+    await shot(browser, "/admin/employees?edit=2", "avatar-editor", theme, false, prepareAvatarEditor);
     await shot(browser, "/calendar", "calendar", theme);
     await shot(browser, "/week/2026/43?day=2026-10-21&e=1", "day-detail", theme);
   });
@@ -63,11 +64,23 @@ for (const theme of ["light", "dark"] as const) {
     await shot(browser, "/week/2026/43", "mobile-week", theme, true);
     await shot(browser, "/", "mobile-today", theme, true);
     await shot(browser, "/people/2", "mobile-employee", theme, true);
+    await shot(browser, "/admin/employees?edit=2", "mobile-avatar-editor", theme, true, prepareAvatarEditor);
     await shot(browser, "/?view=summary&date=2026-10-22", "mobile-day-summary", theme, true);
     await shot(browser, "/week/2026/43", "mobile-week-facts", theme, true, async (p) => {
       await p.getByRole("button", { name: "Факты недели", exact: true }).click();
     });
   });
+}
+
+async function prepareAvatarEditor(page: Page) {
+  await page.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+  await page.reload();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Фотография", { exact: true }).setInputFiles(await avatarFixture(page));
+  const zoom = dialog.getByRole("slider", { name: "Масштаб фото", exact: true });
+  await zoom.focus();
+  for (let step = 0; step < 10; step++) await zoom.press("ArrowRight");
+  await dialog.getByRole("region", { name: "Настройка фотографии", exact: true }).scrollIntoViewIfNeeded();
 }
 
 test("инбокс: сравнение изменённого плана и подтверждение", async ({ browser, request }) => {

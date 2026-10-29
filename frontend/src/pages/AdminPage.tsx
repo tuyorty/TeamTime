@@ -26,7 +26,7 @@ export default function AdminPage() {
   const tab = useParams().tab ?? (admin ? "employees" : "audit");
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 grid-cols-1 gap-5">
       <PageHeader
         title="Админка"
         subtitle="Справочник, привязки Telegram, настройки расчётов, импорт истории и журнал правок"

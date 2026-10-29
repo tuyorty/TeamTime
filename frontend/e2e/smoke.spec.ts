@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { lateScheduleExample } from "./fixtures";
+import { avatarFixture, lateScheduleExample } from "./fixtures";
 
 /** Ключевые сценарии на демо-данных. Ожидания не завязаны на конкретные случайные числа. */
 
@@ -196,6 +196,85 @@ test("профиль: админ сохраняет телефон, описан
     });
     expect(restored.ok()).toBeTruthy();
   }
+});
+
+for (const mobile of [false, true]) {
+  test(`фото: масштаб, перемещение и сохранение выбранной области · ${mobile ? "телефон" : "компьютер"}`, async ({ page }) => {
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+    await login(page);
+    const employee = (await (await page.request.get("/api/v1/employees")).json())[0];
+    try {
+      await page.goto(`/admin/employees?edit=${employee.id}`);
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Фотография", { exact: true }).setInputFiles(await avatarFixture(page));
+      const editor = dialog.getByRole("region", { name: "Настройка фотографии", exact: true });
+      const zoom = editor.getByRole("slider", { name: "Масштаб фото", exact: true });
+      await zoom.focus();
+      await zoom.press("End");
+      await expect(zoom).toHaveValue("4");
+      await editor.getByRole("button", { name: "Сбросить кадр", exact: true }).click();
+      await expect(zoom).toHaveValue("1");
+      await zoom.focus();
+      for (let step = 0; step < 20; step++) await zoom.press("ArrowRight");
+      await expect(zoom).toHaveValue("2");
+      const frame = editor.getByRole("group", { name: "Область кадрирования", exact: true });
+      await frame.scrollIntoViewIfNeeded();
+      const bounds = (await frame.boundingBox())!;
+      const start = { x: bounds.x + bounds.width - 12, y: bounds.y + bounds.height / 2 };
+      const end = { x: bounds.x + 12, y: start.y };
+      if (mobile) {
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...start, id: 1 }] });
+        for (let step = 1; step <= 5; step++) {
+          await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: start.x + (end.x - start.x) * step / 5, y: start.y, id: 1 }] });
+        }
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await cdp.detach();
+      } else {
+        await page.mouse.move(start.x, start.y);
+        await page.mouse.down();
+        await page.mouse.move(end.x, end.y, { steps: 5 });
+        await page.mouse.up();
+      }
+      expect(await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")).toBeTruthy();
+      await dialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      const saved = (await (await page.request.get(`/api/v1/employees/${employee.id}`)).json()).employee.avatar_url;
+      const picture: { width: number; height: number; pixel: number[] } = await page.evaluate(`(async () => {
+        const image = new Image();
+        image.src = ${JSON.stringify(saved)};
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 256;
+        const context = canvas.getContext('2d');
+        context.drawImage(image, 0, 0);
+        return { width: image.naturalWidth, height: image.naturalHeight, pixel: [...context.getImageData(128, 128, 1, 1).data] };
+      })()`);
+      expect(picture.width).toBe(256);
+      expect(picture.height).toBe(256);
+      expect(picture.pixel[2]!).toBeGreaterThan(180);
+      expect(picture.pixel[0]!).toBeLessThan(80);
+      expect(picture.pixel[1]!).toBeLessThan(130);
+      await page.goto(`/admin/employees?edit=${employee.id}`);
+      await page.getByRole("dialog").getByRole("button", { name: "Настроить фото", exact: true }).click();
+      await expect(page.getByRole("region", { name: "Настройка фотографии", exact: true })).toBeVisible();
+    } finally {
+      expect((await page.request.put(`/api/v1/admin/employees/${employee.id}`, { data: employee, headers: { "X-Requested-With": "teamtime" } })).ok()).toBeTruthy();
+    }
+  });
+}
+
+test("фото: отмена редактирования не меняет профиль", async ({ page }) => {
+  await login(page);
+  const employee = (await (await page.request.get("/api/v1/employees")).json())[0];
+  await page.goto(`/admin/employees?edit=${employee.id}`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Фотография", { exact: true }).setInputFiles(await avatarFixture(page));
+  await expect(dialog.getByRole("region", { name: "Настройка фотографии", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+  const saved = (await (await page.request.get(`/api/v1/employees/${employee.id}`)).json()).employee;
+  expect(saved.avatar_url).toBe(employee.avatar_url);
 });
 
 test("командная палитра ищет людей", async ({ page }) => {

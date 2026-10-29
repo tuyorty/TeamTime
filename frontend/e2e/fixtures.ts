@@ -1,7 +1,23 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import type { Identity, InboxItem, Plans, Today } from "../src/api/types";
 import { hm, isoWeek, parseDate } from "../src/lib/format";
+
+/** Три цветные области помогают проверить, какой участок сохранился после кадрирования. */
+export async function avatarFixture(page: Page) {
+  const image: string = await page.evaluate(`(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 900;
+    canvas.height = 600;
+    const context = canvas.getContext('2d');
+    ['#dc3242', '#149462', '#2864dc'].forEach((color, index) => {
+      context.fillStyle = color;
+      context.fillRect(index * 300, 0, 300, 600);
+    });
+    return canvas.toDataURL('image/png');
+  })()`);
+  return { name: "demo-avatar.png", mimeType: "image/png", buffer: Buffer.from(image.split(",")[1]!, "base64") };
+}
 
 /** Только вымышленные данные отдельного демо-стенда; никаких обращений в Telegram. */
 export async function lateScheduleExample(request: APIRequestContext) {
