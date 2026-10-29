@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from html import escape
+from textwrap import wrap
 
 from teamtime.calc import DayState
 from teamtime.calc.duration import format_hm
@@ -25,7 +26,7 @@ def plural(n: int, one: str, few: str, many: str) -> str:
 
 
 def short_text(value: str, limit: int = 200) -> str:
-    """Одна безопасная строка; подробности больших задач остаются в дэшборде."""
+    """Одна безопасная строка для заголовков и кратких подписей."""
     value = " ".join(value.split())
     return escape(value if len(value) <= limit else value[: limit - 1] + "…")
 
@@ -69,10 +70,14 @@ def _name(employee: EmployeeBrief) -> str:
     return short_text(employee.short_name, 100)
 
 
-def _tasks(tasks: list[str], limit: int = 6) -> list[str]:
-    lines = [f"• {short_text(task)}" for task in tasks[:limit]]
-    if len(tasks) > limit:
-        lines.append(f"<i>Ещё задач: {len(tasks) - limit}. Полный список — на сайте.</i>")
+def _tasks(tasks: list[str]) -> list[str]:
+    """Все задачи доступны в Telegram; длинные строки делим до экранирования HTML."""
+    lines: list[str] = []
+    for task in tasks:
+        chunks = wrap(" ".join(task.split()), width=500, break_on_hyphens=False) or ["—"]
+        lines.extend(
+            f"{'• ' if index == 0 else '  '}{escape(chunk)}" for index, chunk in enumerate(chunks)
+        )
     return lines
 
 

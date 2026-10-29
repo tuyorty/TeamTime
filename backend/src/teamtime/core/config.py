@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     )
     public_url: str = Field(
         default="http://localhost:8080",
-        description="Адрес сайта в локальной сети (для ссылок бота).",
+        description="Адрес сайта в локальной сети; используется при установке и диагностике.",
     )
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 

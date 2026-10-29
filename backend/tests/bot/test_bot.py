@@ -41,6 +41,7 @@ def dispatcher(maker: async_sessionmaker[AsyncSession]) -> Dispatcher:
             database_url=TEST_DB,
             bot_token=SecretStr("123456:TEST-TOKEN"),
             bot_username="teamtime_test_bot",
+            public_url="https://dashboard.example",
         )
         _DISPATCHER["dp"] = build_dispatcher(maker, config)
     dp = _DISPATCHER["dp"]
@@ -215,6 +216,42 @@ async def test_today_has_summary_button_and_private_chat_is_registered(tg: Teleg
             select(TelegramIdentity).where(TelegramIdentity.telegram_user_id == 501)
         )
         assert identity.dm_chat_id == 501
+
+
+@pytest.mark.parametrize(
+    "action", ["/today", "/week", "/me", "/who", "week", "month", "today", "summary"]
+)
+async def test_reports_have_no_dashboard_links(tg: Telegram, action: str) -> None:
+    if action.startswith("/"):
+        await tg.private(501, action)
+    else:
+        await tg.press(501, MenuCb(action=action).pack())
+    messages = tg.session.of(SendMessage)
+    assert messages
+    for message in messages:
+        assert "dashboard.example" not in message.text
+        assert "Открыть мой профиль" not in message.text
+        if message.reply_markup:
+            for row in message.reply_markup.inline_keyboard:
+                assert all(button.url is None for button in row)
+
+
+async def test_week_keeps_all_tasks_in_telegram_and_splits_long_report(tg: Telegram) -> None:
+    tasks = [f"Задача {index}: " + "описание " * 18 for index in range(15)]
+    tasks.append("&" * 500)
+    text = f.schedule_text().replace(
+        "- задача один\n- задача два", "\n".join(f"- {task}" for task in tasks)
+    )
+    await tg.group(501, text, thread=f.SCHEDULE_THREAD)
+    tg.session.calls.clear()
+    await tg.private(501, "/week")
+    messages = tg.session.of(SendMessage)
+    assert len(messages) > 1
+    report = "\n".join(message.text for message in messages)
+    assert all(f"Задача {index}:" in report for index in range(15))
+    assert "&amp;" * 500 in report
+    assert "на сайте" not in report
+    assert all(len(message.text.encode("utf-16-le")) // 2 <= 4096 for message in messages)
 
 
 async def test_fix_efficiency_via_deep_link_and_buttons(tg: Telegram, maker) -> None:

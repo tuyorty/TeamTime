@@ -17,7 +17,6 @@ from teamtime.bot.identity import identity_for
 from teamtime.bot.reminders import due_reminders, send_due_reminders
 from teamtime.calc import StatusKind
 from teamtime.core import clock
-from teamtime.core.config import Settings
 from teamtime.db.models import DailyReminder, Employee, TelegramIdentity
 from teamtime.services import manual
 from teamtime.services.ingest import ingest
@@ -26,7 +25,6 @@ from tests import factories as f
 from tests.bot.fake_telegram import FakeSession
 
 pytestmark = pytest.mark.db
-CONFIG = Settings(public_url="https://example.com")
 WORK_DATE = date(2026, 10, 26)
 
 
@@ -164,18 +162,17 @@ async def test_success_is_persistent_and_contains_useful_buttons(maker) -> None:
     at()
     fake = FakeSession()
     bot = Bot("123456:TEST-TOKEN", session=fake)
-    assert await send_due_reminders(bot, maker, CONFIG) == 1
+    assert await send_due_reminders(bot, maker) == 1
     # Новая сессия и новый экземпляр бота моделируют перезапуск процесса.
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     messages = fake.of(SendMessage)
     assert len(messages) == 1
     assert messages[0].parse_mode == "HTML"
     assert "26.10.2026" in messages[0].text and "15 минут" in messages[0].text
     buttons = [button for row in messages[0].reply_markup.inline_keyboard for button in row]
     assert any(button.url == "https://t.me/c/1234567890/22" for button in buttons)
-    assert any(
-        button.url == "https://example.com/?view=summary&date=2026-10-26" for button in buttons
-    )
+    assert all(button.url is None or button.url.startswith("https://t.me/") for button in buttons)
+    assert any(button.callback_data == "m:fix" for button in buttons)
     async with maker() as session:
         record = await session.get(DailyReminder, (employee_id, WORK_DATE, 501))
         assert record.sent_at is not None
@@ -187,8 +184,8 @@ async def test_concurrent_workers_do_not_send_twice(maker) -> None:
     fake = FakeSession()
     bot = Bot("123456:TEST-TOKEN", session=fake)
     results = await asyncio.gather(
-        send_due_reminders(bot, maker, CONFIG),
-        send_due_reminders(bot, maker, CONFIG),
+        send_due_reminders(bot, maker),
+        send_due_reminders(bot, maker),
     )
     assert sum(results) == 1
     assert len(fake.of(SendMessage)) == 1
@@ -201,15 +198,15 @@ async def test_rate_limit_is_retried_after_requested_delay(maker) -> None:
     method = SendMessage(chat_id=501, text="тест")
     fake.send_failures.append(TelegramRetryAfter(method=method, message="Retry", retry_after=120))
     bot = Bot("123456:TEST-TOKEN", session=fake)
-    assert await send_due_reminders(bot, maker, CONFIG) == 0
-    assert await send_due_reminders(bot, maker, CONFIG) == 0
+    assert await send_due_reminders(bot, maker) == 0
+    assert await send_due_reminders(bot, maker) == 0
     async with maker() as session:
         record = await session.get(DailyReminder, (employee_id, WORK_DATE, 501))
         assert record.sent_at is None
     at("2026-10-26T18:16:00+05:00")
-    assert await send_due_reminders(bot, maker, CONFIG) == 0
+    assert await send_due_reminders(bot, maker) == 0
     at("2026-10-26T18:17:00+05:00")
-    assert await send_due_reminders(bot, maker, CONFIG) == 1
+    assert await send_due_reminders(bot, maker) == 1
 
 
 async def test_network_error_is_not_retried_after_restart(maker) -> None:
@@ -219,9 +216,9 @@ async def test_network_error_is_not_retried_after_restart(maker) -> None:
     fake.send_failures.append(
         TelegramNetworkError(method=SendMessage(chat_id=501, text="тест"), message="Timeout")
     )
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     at("2026-10-26T19:00:00+05:00")
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     assert len(fake.of(SendMessage)) == 1
     async with maker() as session:
         record = await session.get(DailyReminder, (employee_id, WORK_DATE, 501))
@@ -241,9 +238,9 @@ async def test_crash_after_telegram_accepted_message_does_not_repeat_it(maker) -
 
     fake = CrashAfterDelivery()
     with pytest.raises(asyncio.CancelledError):
-        await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG)
+        await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker)
     at("2026-10-26T19:00:00+05:00")
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     assert len(fake.of(SendMessage)) == 1
 
 
@@ -263,8 +260,8 @@ async def test_failed_database_write_after_delivery_does_not_repeat_it(maker, mo
 
     monkeypatch.setattr(AsyncSession, "commit", commit)
     with pytest.raises(RuntimeError, match="сбой БД"):
-        await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG)
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+        await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker)
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     assert len(fake.of(SendMessage)) == 1
 
 
@@ -279,7 +276,7 @@ async def test_rate_limit_attempts_are_bounded(maker) -> None:
     ]
     for minute in (15, 16, 18, 22):
         at(f"2026-10-26T18:{minute}:00+05:00")
-        assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+        assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     assert len(fake.of(SendMessage)) == 3
 
 
@@ -294,18 +291,18 @@ async def test_failed_claim_does_not_send_until_database_recovers(maker, monkeyp
     with monkeypatch.context() as patch:
         patch.setattr(AsyncSession, "commit", failed_commit)
         with pytest.raises(RuntimeError, match="недоступную БД"):
-            await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG)
+            await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker)
     assert fake.of(SendMessage) == []
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 1
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 1
 
 
 async def test_long_outage_does_not_send_old_reminders(maker) -> None:
     await setup_reminder(maker)
     at("2026-10-26T19:15:00+05:00")
     fake = FakeSession()
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     at("2026-10-27T09:00:00+05:00")
-    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker, CONFIG) == 0
+    assert await send_due_reminders(Bot("123456:TEST-TOKEN", session=fake), maker) == 0
     assert fake.of(SendMessage) == []
 
 
@@ -320,12 +317,12 @@ async def test_blocked_bot_waits_for_new_private_message(maker) -> None:
         )
     )
     bot = Bot("123456:TEST-TOKEN", session=fake)
-    assert await send_due_reminders(bot, maker, CONFIG) == 0
+    assert await send_due_reminders(bot, maker) == 0
     async with maker() as session:
         assert await due_reminders(session) == []
         await identity_for(session, User(id=501, is_bot=False, first_name="Вымышленный"), 501)
         await session.commit()
-    assert await send_due_reminders(bot, maker, CONFIG) == 1
+    assert await send_due_reminders(bot, maker) == 1
 
 
 async def test_old_history_is_not_spammed_after_restart(maker) -> None:

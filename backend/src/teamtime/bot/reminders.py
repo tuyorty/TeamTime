@@ -14,7 +14,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from teamtime.core import clock
-from teamtime.core.config import Settings
 from teamtime.core.logging import get_logger
 from teamtime.db.models import (
     BotChat,
@@ -164,9 +163,7 @@ async def due_reminders(session: AsyncSession) -> list[Reminder]:
     return reminders
 
 
-async def send_due_reminders(
-    bot: Bot, maker: async_sessionmaker[AsyncSession], config: Settings
-) -> int:
+async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) -> int:
     """Повторяем только явный отказ Telegram (429); при неизвестном результате дубль опаснее."""
     async with maker() as session:
         candidates = await due_reminders(session)
@@ -242,9 +239,7 @@ async def send_due_reminders(
                         settings.bot.reminder_delay_minutes,
                     ),
                     parse_mode=ParseMode.HTML,
-                    reply_markup=reminder_menu(
-                        config.public_url, candidate.work_date, candidate.topic_url
-                    ),
+                    reply_markup=reminder_menu(candidate.topic_url),
                 )
             except TelegramForbiddenError:
                 # Новое сообщение в личке снова включит доставку для этого аккаунта.
@@ -278,12 +273,10 @@ async def send_due_reminders(
     return sent
 
 
-async def reminder_loop(
-    bot: Bot, maker: async_sessionmaker[AsyncSession], config: Settings
-) -> None:
+async def reminder_loop(bot: Bot, maker: async_sessionmaker[AsyncSession]) -> None:
     while True:
         try:
-            await send_due_reminders(bot, maker, config)
+            await send_due_reminders(bot, maker)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # ошибка одного прохода не останавливает напоминания

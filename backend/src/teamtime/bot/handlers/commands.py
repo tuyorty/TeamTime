@@ -9,9 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from teamtime.bot import texts
 from teamtime.bot.identity import employee_for, not_linked_text, team_access
-from teamtime.bot.keyboards import dashboard_menu, reply_menu
+from teamtime.bot.keyboards import reply_menu, today_menu
 from teamtime.bot.replies import answer_report
-from teamtime.core.config import Settings
 from teamtime.services import reports
 from teamtime.services.facts import today_local
 from teamtime.services.settings import AppSettings
@@ -40,7 +39,6 @@ async def send_today(
     session: AsyncSession,
     settings: AppSettings,
     user: User | None,
-    config: Settings,
 ) -> None:
     if await deny_team(message, session, user):
         return
@@ -48,12 +46,7 @@ async def send_today(
     await answer_report(
         message,
         texts.format_today(report),
-        dashboard_menu(
-            config.public_url,
-            "/",
-            "🏢 Открыть расписание",
-            summary=True,
-        ),
+        today_menu(),
     )
 
 
@@ -62,7 +55,6 @@ async def send_day_summary(
     session: AsyncSession,
     settings: AppSettings,
     user: User | None,
-    config: Settings,
 ) -> None:
     if await deny_team(message, session, user):
         return
@@ -70,25 +62,16 @@ async def send_day_summary(
     await answer_report(
         message,
         texts.format_day_summary(report),
-        dashboard_menu(
-            config.public_url,
-            f"/?view=summary&date={report.date}",
-            "📊 Открыть итоги дня",
-        ),
     )
 
 
 @router.message(Command("today"))
-async def today(
-    message: Message, session: AsyncSession, settings: AppSettings, config: Settings
-) -> None:
-    await send_today(message, session, settings, message.from_user, config)
+async def today(message: Message, session: AsyncSession, settings: AppSettings) -> None:
+    await send_today(message, session, settings, message.from_user)
 
 
 @router.message(Command("who"))
-async def who(
-    message: Message, session: AsyncSession, settings: AppSettings, config: Settings
-) -> None:
+async def who(message: Message, session: AsyncSession, settings: AppSettings) -> None:
     if await deny_team(message, session, message.from_user):
         return
     iso = today_local(settings).isocalendar()
@@ -96,16 +79,11 @@ async def who(
     await answer_report(
         message,
         texts.format_who(week),
-        dashboard_menu(
-            config.public_url,
-            f"/week/{iso.year}/{iso.week}",
-            "👥 Открыть таблицу команды",
-        ),
     )
 
 
 async def send_my_week(
-    message: Message, session: AsyncSession, settings: AppSettings, user: User, config: Settings
+    message: Message, session: AsyncSession, settings: AppSettings, user: User
 ) -> None:
     _, employee = await employee_for(session, user)
     if employee is None:
@@ -120,16 +98,11 @@ async def send_my_week(
     await answer_report(
         message,
         texts.format_my_week(week, row),
-        dashboard_menu(
-            config.public_url,
-            f"/people/{employee.id}",
-            "👤 Открыть мой профиль",
-        ),
     )
 
 
 async def send_my_month(
-    message: Message, session: AsyncSession, settings: AppSettings, user: User, config: Settings
+    message: Message, session: AsyncSession, settings: AppSettings, user: User
 ) -> None:
     _, employee = await employee_for(session, user)
     if employee is None:
@@ -144,25 +117,16 @@ async def send_my_month(
     await answer_report(
         message,
         texts.format_month(employee.short_name, month.label, row.summary),
-        dashboard_menu(
-            config.public_url,
-            f"/people/{employee.id}",
-            "👤 Подробная статистика",
-        ),
     )
 
 
 @router.message(Command("week"))
-async def week(
-    message: Message, session: AsyncSession, settings: AppSettings, config: Settings
-) -> None:
+async def week(message: Message, session: AsyncSession, settings: AppSettings) -> None:
     if message.from_user:
-        await send_my_week(message, session, settings, message.from_user, config)
+        await send_my_week(message, session, settings, message.from_user)
 
 
 @router.message(Command("me"))
-async def me(
-    message: Message, session: AsyncSession, settings: AppSettings, config: Settings
-) -> None:
+async def me(message: Message, session: AsyncSession, settings: AppSettings) -> None:
     if message.from_user:
-        await send_my_month(message, session, settings, message.from_user, config)
+        await send_my_month(message, session, settings, message.from_user)

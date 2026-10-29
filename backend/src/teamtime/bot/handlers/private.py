@@ -32,7 +32,6 @@ from teamtime.bot.keyboards import (
 )
 from teamtime.calc import STATUS_LABELS, StatusKind
 from teamtime.core import clock
-from teamtime.core.config import Settings
 from teamtime.db.models import (
     Employee,
     ParseResultRow,
@@ -99,16 +98,15 @@ async def run_menu(
     session: AsyncSession,
     settings: AppSettings,
     user: User,
-    config: Settings,
 ) -> None:
     if action == "week":
-        await send_my_week(msg, session, settings, user, config)
+        await send_my_week(msg, session, settings, user)
     elif action == "month":
-        await send_my_month(msg, session, settings, user, config)
+        await send_my_month(msg, session, settings, user)
     elif action == "today":
-        await send_today(msg, session, settings, user, config)
+        await send_today(msg, session, settings, user)
     elif action == "summary":
-        await send_day_summary(msg, session, settings, user, config)
+        await send_day_summary(msg, session, settings, user)
     elif action == "absent":
         await msg.answer(texts.STATUS_PROMPT, reply_markup=status_menu())
     elif action == "fix":
@@ -121,12 +119,11 @@ async def menu_button(
     session: AsyncSession,
     settings: AppSettings,
     state: FSMContext,
-    config: Settings,
 ) -> None:
     """Кнопка постоянного меню. Прерывает начатое исправление: человек передумал."""
     await state.clear()
     if message.from_user and message.text:
-        await run_menu(MENU[message.text], message, session, settings, message.from_user, config)
+        await run_menu(MENU[message.text], message, session, settings, message.from_user)
 
 
 @router.callback_query(MenuCb.filter())
@@ -136,13 +133,10 @@ async def menu(
     session: AsyncSession,
     settings: AppSettings,
     state: FSMContext,
-    config: Settings,
 ) -> None:
     await query.answer()
     if isinstance(query.message, Message):
-        await run_menu(
-            callback_data.action, query.message, session, settings, query.from_user, config
-        )
+        await run_menu(callback_data.action, query.message, session, settings, query.from_user)
 
 
 # --- статусы -------------------------------------------------------------------------------
