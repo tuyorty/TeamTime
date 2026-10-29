@@ -24,7 +24,9 @@ ARG XTIME_VERSION=dev
 ENV XTIME_VERSION=${XTIME_VERSION}
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint
-RUN chmod +x /usr/local/bin/entrypoint \
+# Убираем CRLF и в существующих рабочих копиях Windows.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint \
+    && chmod +x /usr/local/bin/entrypoint \
     && useradd --system --uid 10001 --home /app teamtime \
     && chown -R teamtime /app
 USER teamtime
