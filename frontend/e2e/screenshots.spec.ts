@@ -3,10 +3,11 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { test, type Browser, type Page } from "@playwright/test";
+import { lateScheduleExample } from "./fixtures";
 
 /**
  * Скриншоты и GIF для README на демо-данных:
- *   DEMO=1 DEMO_NOW=2026-10-23T19:40:00+05:00 docker compose up -d
+ *   DEMO=1 DEMO_NOW=2026-10-23T14:30:00+05:00 docker compose up -d
  *   E2E_BASE_URL=http://localhost:8080 npm run screenshots
  */
 const OUT = path.resolve(import.meta.dirname, "../../docs/screenshots");
@@ -26,6 +27,7 @@ async function shot(browser: Browser, url: string, name: string, theme: Theme, m
   await page.goto(url, { waitUntil: "load" });
   await page.waitForLoadState("networkidle").catch(() => undefined);
   await page.waitForTimeout(700);
+  await page.evaluate("window.scrollTo(0, 0)");
   if (prepare) await prepare(page);
   await page.screenshot({ path: path.join(OUT, `${name}-${theme}.png`) });
   await ctx.close();
@@ -35,8 +37,16 @@ test.describe.configure({ mode: "serial" });
 
 for (const theme of ["light", "dark"] as const) {
   test(`десктоп, ${theme}`, async ({ browser }) => {
+    test.setTimeout(60_000);
     await shot(browser, "/week/2026/43", "week", theme);
+    await shot(browser, "/week/2026/43", "week-facts", theme, false, async (p) => {
+      await p.getByRole("button", { name: "Факты недели", exact: true }).click();
+    });
+    await shot(browser, "/month/2026/9", "month-facts", theme, false, async (p) => {
+      await p.getByRole("button", { name: "Факты месяца", exact: true }).click();
+    });
     await shot(browser, "/", "today", theme);
+    await shot(browser, "/?view=summary&date=2026-10-22", "day-summary", theme);
     await shot(browser, "/month/2026/9?tab=late", "month-late", theme, false, async (p) => {
       await p.getByRole("heading", { name: "Шкала штрафа" }).scrollIntoViewIfNeeded();
       await p.mouse.wheel(0, 380);
@@ -49,10 +59,52 @@ for (const theme of ["light", "dark"] as const) {
   });
 
   test(`телефон, ${theme}`, async ({ browser }) => {
+    test.setTimeout(60_000);
     await shot(browser, "/week/2026/43", "mobile-week", theme, true);
     await shot(browser, "/", "mobile-today", theme, true);
+    await shot(browser, "/people/2", "mobile-employee", theme, true);
+    await shot(browser, "/?view=summary&date=2026-10-22", "mobile-day-summary", theme, true);
+    await shot(browser, "/week/2026/43", "mobile-week-facts", theme, true, async (p) => {
+      await p.getByRole("button", { name: "Факты недели", exact: true }).click();
+    });
   });
 }
+
+test("инбокс: сравнение изменённого плана и подтверждение", async ({ browser, request }) => {
+  test.setTimeout(60_000);
+  const { employee } = await lateScheduleExample(request);
+  for (const theme of ["light", "dark"] as const) {
+    await shot(browser, `/inbox?employee=${employee.id}&kind=schedule`, "inbox-changes", theme, false, async (page) => {
+      await page.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+      await page.reload();
+      await page.getByRole("button", { name: "Одобрить новый план", exact: true }).first().click();
+    });
+  }
+});
+
+test("телефон: большой список задач с внутренней прокруткой", async ({ browser }) => {
+  await shot(browser, "/", "mobile-tasks", "light", true, async (page) => {
+    const today = await (await page.request.get("/api/v1/today")).json();
+    const row = today.rows[0];
+    row.tasks = [
+      "Разобрать новые обращения поддержки",
+      "Проверить исправление фильтров расписания на телефоне и большом экране",
+      "Подготовить инструкцию для новых сотрудников",
+      "Обновить тестовые данные для демонстрации",
+      "Обсудить макет личного кабинета с командой",
+      "Проверить отчёт за прошлую неделю",
+      "Описать порядок ручного исправления дейликов",
+      "Провести ревью изменений экспорта",
+      "Подготовить задачи следующего спринта",
+      "Обновить документацию проекта",
+    ];
+    await page.route("**/api/v1/today", (route) => route.fulfill({ json: today }));
+    await page.reload();
+    await page.getByRole("button", { name: `Задачи: ${row.employee.short_name}`, exact: true }).click();
+    await page.getByRole("button", { name: "Показать все задачи (10)", exact: true }).click();
+    await page.getByRole("region", { name: "Задачи выбранного сотрудника", exact: true }).scrollIntoViewIfNeeded();
+  });
+});
 
 test("GIF: дейлик из эмулятора появляется без перезагрузки", async ({ browser }) => {
   const videoDir = path.join(OUT, ".video");
@@ -64,11 +116,11 @@ test("GIF: дейлик из эмулятора появляется без пе
     recordVideo: { dir: videoDir, size: { width: 1280, height: 760 } },
   });
   const page = await ctx.newPage();
-  await page.goto("/");
+  const today = await (await page.request.get("/api/v1/today")).json();
+  await page.goto(`/?view=summary&date=${today.date}`);
   await page.getByText("Онлайн").waitFor();
   await page.waitForTimeout(1200);
   const identities = await (await page.request.get("/api/v1/identities")).json();
-  const today = await (await page.request.get("/api/v1/today")).json();
   const waiting = today.rows.find((r: { cell: { fact: unknown; plan: { kind: string } | null } }) => !r.cell.fact && r.cell.plan?.kind === "work");
   const author = identities.find((i: { employee: { id: number } | null }) => i.employee?.id === waiting?.employee.id) ?? identities.find((i: { employee: unknown }) => i.employee);
   const [y, m, d] = today.date.split("-");
