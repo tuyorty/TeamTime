@@ -30,12 +30,15 @@ class EmployeeBrief(Schema):
     position: str
     color: str
     is_active: bool
+    avatar_url: str = ""
 
 
 class EmployeeOut(EmployeeBrief):
     monthly_norm_minutes: int
     hourly_rate: Decimal
     match_key: str
+    phone: str
+    about: str
 
 
 class EmployeeIn(BaseModel):
@@ -44,6 +47,13 @@ class EmployeeIn(BaseModel):
         min_length=3, max_length=100, description="Как в расписании: «Иванов И.И.»"
     )
     position: str = Field("", max_length=200)
+    phone: str = Field("", max_length=40, pattern=r"^[+\d\s().-]*$")
+    about: str = Field("", max_length=500)
+    avatar_url: str = Field(
+        "",
+        max_length=200_000,
+        pattern=r"^(data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+)?$",
+    )
     monthly_norm_minutes: int = Field(160 * 60, ge=0, le=400 * 60)
     hourly_rate: Decimal = Field(Decimal(0), ge=0, le=Decimal(1_000_000))
     color: str = Field("", max_length=16)
@@ -196,6 +206,7 @@ class WeekOut(BaseModel):
     day_totals: list[DayTotals]
     totals: Totals
     today: date
+    highlights: PeriodHighlights = Field(default_factory=lambda: PeriodHighlights())
 
 
 # --- месяц ---------------------------------------------------------------------------------
@@ -280,6 +291,35 @@ class MonthOut(BaseModel):
     history: list[MonthHistoryPoint]
     deviations: list[Deviation]
     complete: bool = Field(description="Месяц закончился (иначе итоги промежуточные)")
+    highlights: PeriodHighlights = Field(default_factory=lambda: PeriodHighlights())
+
+
+class HighlightOccurrence(BaseModel):
+    date: date
+    employee: EmployeeBrief | None = None
+    participants: int | None = None
+
+
+class HighlightRecord(BaseModel):
+    value_sec: int
+    occurrences: list[HighlightOccurrence]
+    total_occurrences: int
+
+
+class PeriodHighlights(BaseModel):
+    reported_days: int = 0
+    employees_reported: int = 0
+    worked_sec: int = 0
+    tasks_reported: int = 0
+    average_day_sec: int | None = None
+    comparable_days: int = 0
+    on_time_days: int = 0
+    missing_days: int = 0
+    earliest_start: HighlightRecord | None = None
+    latest_finish: HighlightRecord | None = None
+    longest_day: HighlightRecord | None = None
+    largest_lateness: HighlightRecord | None = None
+    busiest_day: HighlightRecord | None = None
 
 
 # --- сегодня -------------------------------------------------------------------------------
@@ -288,8 +328,9 @@ class MonthOut(BaseModel):
 class TodayRow(BaseModel):
     employee: EmployeeBrief
     cell: DayCellOut
-    presence: Literal["on_site", "expected_later", "left", "no_plan", "absent", "remote"]
+    presence: Literal["on_site", "expected_later", "left", "no_plan", "absent", "remote", "off"]
     daily_overdue: bool = Field(description="План закончился, а дейлика нет")
+    tasks: list[str] = Field(default_factory=list, description="Задачи из расписания на неделю")
 
 
 class FeedItem(BaseModel):
@@ -444,6 +485,26 @@ class InboxItem(BaseModel):
     parse: ParseResultOut
     message: MessageOut
     candidates: list[EmployeeBrief]
+    plan_change: ScheduleChangePreview | None = None
+
+
+class ScheduleDayChange(BaseModel):
+    date: date
+    previous: PlanOut | None
+    submitted: PlanOut | None
+    current: DayCellOut
+    if_accepted: DayCellOut
+    affects_calculation: bool
+
+
+class ScheduleChangePreview(BaseModel):
+    plan_id: int
+    version: int
+    previous_version: int | None
+    late_change: bool
+    days: list[ScheduleDayChange]
+    tasks_added: list[str]
+    tasks_removed: list[str]
 
 
 class InboxOut(BaseModel):

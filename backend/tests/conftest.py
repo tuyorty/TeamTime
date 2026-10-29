@@ -72,7 +72,7 @@ async def engine() -> AsyncIterator[AsyncEngine]:
 TABLES = (
     "audit_log, app_settings, daily_tasks, daily_intervals, dailies, sprint_tasks, plan_days, "
     "schedule_plans, parse_results, raw_message_versions, raw_messages, day_statuses, "
-    "topic_bindings, bot_chats, telegram_identities, employees"
+    "topic_bindings, bot_chats, telegram_identities, daily_reminders, employees"
 )
 
 

@@ -95,6 +95,9 @@ class Employee(Timestamped, Base):
         String(100), unique=True, comment="Ключ сопоставления: «иванов ии»"
     )
     position: Mapped[str] = mapped_column(String(200), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    about: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    avatar_url: Mapped[str] = mapped_column(Text, default="", server_default="")
     monthly_norm_minutes: Mapped[int] = mapped_column(Integer, default=160 * 60)
     hourly_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal(0))
     color: Mapped[str] = mapped_column(String(16), default="")
@@ -139,6 +142,22 @@ class TelegramIdentity(Base):
         back_populates="identities", foreign_keys=[employee_id]
     )
     suggested_employee: Mapped[Employee | None] = relationship(foreign_keys=[suggested_employee_id])
+
+
+class DailyReminder(Base):
+    """Личные напоминания: попытка фиксируется до обращения в Telegram."""
+
+    __tablename__ = "daily_reminders"
+
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    work_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
 
 
 class BotChat(Base):

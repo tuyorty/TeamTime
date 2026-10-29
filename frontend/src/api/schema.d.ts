@@ -761,15 +761,15 @@ export interface components {
             reaction_edit: string;
             /**
              * Reminders Enabled
-             * @default false
+             * @default true
              */
             reminders_enabled: boolean;
             /**
-             * Reminder Hour
-             * @description Во сколько напоминать о дейлике
-             * @default 21
+             * Reminder Delay Minutes
+             * @description Через сколько минут после окончания смены напомнить о дейлике
+             * @default 15
              */
-            reminder_hour: number;
+            reminder_delay_minutes: number;
         };
         /** ChatIn */
         ChatIn: {
@@ -946,6 +946,11 @@ export interface components {
             color: string;
             /** Is Active */
             is_active: boolean;
+            /**
+             * Avatar Url
+             * @default
+             */
+            avatar_url: string;
         };
         /** EmployeeDetailOut */
         EmployeeDetailOut: {
@@ -1001,6 +1006,21 @@ export interface components {
              */
             position: string;
             /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
+             * About
+             * @default
+             */
+            about: string;
+            /**
+             * Avatar Url
+             * @default
+             */
+            avatar_url: string;
+            /**
              * Monthly Norm Minutes
              * @default 9600
              */
@@ -1038,12 +1058,21 @@ export interface components {
             color: string;
             /** Is Active */
             is_active: boolean;
+            /**
+             * Avatar Url
+             * @default
+             */
+            avatar_url: string;
             /** Monthly Norm Minutes */
             monthly_norm_minutes: number;
             /** Hourly Rate */
             hourly_rate: string;
             /** Match Key */
             match_key: string;
+            /** Phone */
+            phone: string;
+            /** About */
+            about: string;
         };
         /** FactOut */
         FactOut: {
@@ -1096,6 +1125,26 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HighlightOccurrence */
+        HighlightOccurrence: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            employee?: components["schemas"]["EmployeeBrief"] | null;
+            /** Participants */
+            participants?: number | null;
+        };
+        /** HighlightRecord */
+        HighlightRecord: {
+            /** Value Sec */
+            value_sec: number;
+            /** Occurrences */
+            occurrences: components["schemas"]["HighlightOccurrence"][];
+            /** Total Occurrences */
+            total_occurrences: number;
         };
         /** IdentityOut */
         IdentityOut: {
@@ -1150,6 +1199,7 @@ export interface components {
             message: components["schemas"]["MessageOut"];
             /** Candidates */
             candidates: components["schemas"]["EmployeeBrief"][];
+            plan_change?: components["schemas"]["ScheduleChangePreview"] | null;
         };
         /** InboxOut */
         InboxOut: {
@@ -1346,6 +1396,7 @@ export interface components {
              * @description Месяц закончился (иначе итоги промежуточные)
              */
             complete: boolean;
+            highlights?: components["schemas"]["PeriodHighlights"];
         };
         /** MonthRow */
         MonthRow: {
@@ -1533,6 +1584,51 @@ export interface components {
              */
             tail_slope: string;
         };
+        /** PeriodHighlights */
+        PeriodHighlights: {
+            /**
+             * Reported Days
+             * @default 0
+             */
+            reported_days: number;
+            /**
+             * Employees Reported
+             * @default 0
+             */
+            employees_reported: number;
+            /**
+             * Worked Sec
+             * @default 0
+             */
+            worked_sec: number;
+            /**
+             * Tasks Reported
+             * @default 0
+             */
+            tasks_reported: number;
+            /** Average Day Sec */
+            average_day_sec?: number | null;
+            /**
+             * Comparable Days
+             * @default 0
+             */
+            comparable_days: number;
+            /**
+             * On Time Days
+             * @default 0
+             */
+            on_time_days: number;
+            /**
+             * Missing Days
+             * @default 0
+             */
+            missing_days: number;
+            earliest_start?: components["schemas"]["HighlightRecord"] | null;
+            latest_finish?: components["schemas"]["HighlightRecord"] | null;
+            longest_day?: components["schemas"]["HighlightRecord"] | null;
+            largest_lateness?: components["schemas"]["HighlightRecord"] | null;
+            busiest_day?: components["schemas"]["HighlightRecord"] | null;
+        };
         /** PlanDayIn */
         PlanDayIn: {
             /** @description None — убрать день из плана */
@@ -1650,6 +1746,37 @@ export interface components {
              * @default
              */
             reason: string;
+        };
+        /** ScheduleChangePreview */
+        ScheduleChangePreview: {
+            /** Plan Id */
+            plan_id: number;
+            /** Version */
+            version: number;
+            /** Previous Version */
+            previous_version: number | null;
+            /** Late Change */
+            late_change: boolean;
+            /** Days */
+            days: components["schemas"]["ScheduleDayChange"][];
+            /** Tasks Added */
+            tasks_added: string[];
+            /** Tasks Removed */
+            tasks_removed: string[];
+        };
+        /** ScheduleDayChange */
+        ScheduleDayChange: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            previous: components["schemas"]["PlanOut"] | null;
+            submitted: components["schemas"]["PlanOut"] | null;
+            current: components["schemas"]["DayCellOut"];
+            if_accepted: components["schemas"]["DayCellOut"];
+            /** Affects Calculation */
+            affects_calculation: boolean;
         };
         /** SearchHit */
         SearchHit: {
@@ -1772,12 +1899,17 @@ export interface components {
              * Presence
              * @enum {string}
              */
-            presence: "on_site" | "expected_later" | "left" | "no_plan" | "absent" | "remote";
+            presence: "on_site" | "expected_later" | "left" | "no_plan" | "absent" | "remote" | "off";
             /**
              * Daily Overdue
              * @description План закончился, а дейлика нет
              */
             daily_overdue: boolean;
+            /**
+             * Tasks
+             * @description Задачи из расписания на неделю
+             */
+            tasks?: string[];
         };
         /** TopicIn */
         TopicIn: {
@@ -1908,6 +2040,7 @@ export interface components {
              * Format: date
              */
             today: string;
+            highlights?: components["schemas"]["PeriodHighlights"];
         };
         /** WeekPlanInfo */
         WeekPlanInfo: {
