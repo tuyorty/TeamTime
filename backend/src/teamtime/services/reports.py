@@ -70,6 +70,7 @@ from teamtime.services.facts import (
     load_cells,
     today_local,
 )
+from teamtime.services.highlights import period_highlights
 from teamtime.services.settings import AppSettings
 
 MONTHS = (
@@ -260,6 +261,9 @@ async def week_report(
         day_totals=[day_totals(d, [cells[(e.id, d)] for e in employees]) for d in days],
         totals=totals(cells.values()),
         today=today_local(settings),
+        highlights=period_highlights(
+            cells.values(), {e.id: brief(e) for e in employees}, today_local(settings)
+        ),
     )
 
 
@@ -432,6 +436,9 @@ async def month_report(
         history=history_points,
         deviations=deviations[:20],
         complete=today_local(settings) > last,
+        highlights=period_highlights(
+            cells.values(), {e.id: brief(e) for e in employees}, today_local(settings)
+        ),
     )
 
 

@@ -7,6 +7,7 @@ import { useMeta, useWeek } from "@/api/queries";
 import type { DayCell, EmployeeBrief, Week, WeekRow } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { DayDetailSheet } from "@/components/domain/DayDetail";
+import { PeriodFacts } from "@/components/domain/PeriodFacts";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
 import { axisFor, type Axis } from "@/lib/axis";
 import { ErrorState, TruncationNote } from "@/components/domain/feedback";
@@ -19,7 +20,17 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
-import { WEEKDAYS_SHORT, count, dayMonthShort, hm, isoWeek, parseDate, rangeShort, shiftWeek, span } from "@/lib/format";
+import {
+  WEEKDAYS_SHORT,
+  count,
+  dayMonthShort,
+  hm,
+  isoWeek,
+  parseDate,
+  rangeShort,
+  shiftWeek,
+  span,
+} from "@/lib/format";
 import { hasDeviation } from "@/lib/cells";
 import { useFlashed } from "@/lib/realtime";
 
@@ -75,7 +86,8 @@ export default function WeekPage() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.rows.filter((r) => {
-      if (q && !`${r.employee.full_name} ${r.employee.short_name} ${r.employee.position}`.toLowerCase().includes(q)) return false;
+      if (q && !`${r.employee.full_name} ${r.employee.short_name} ${r.employee.position}`.toLowerCase().includes(q))
+        return false;
       if (filter === "deviations") return r.cells.some(hasDeviation);
       if (filter === "missing") return r.cells.some((c) => c.state === "missing");
       return true;
@@ -130,10 +142,34 @@ export default function WeekPage() {
             onChange={setDensity}
             className="hidden md:inline-flex"
             options={[
-              { value: "compact", label: <><Rows3 /> Компактно</> },
-              { value: "detailed", label: <><Rows2 /> Подробно</> },
+              {
+                value: "compact",
+                label: (
+                  <>
+                    <Rows3 /> Компактно
+                  </>
+                ),
+              },
+              {
+                value: "detailed",
+                label: (
+                  <>
+                    <Rows2 /> Подробно
+                  </>
+                ),
+              },
             ]}
           />
+          {data?.highlights ? (
+            <PeriodFacts
+              data={data.highlights}
+              period="week"
+              start={data.days[0]!}
+              end={data.days[6]!}
+              incomplete={data.days[6]! >= data.today}
+              disabled={isPlaceholderData}
+            />
+          ) : null}
           <Dropdown>
             <DropdownTrigger asChild>
               <Button size="sm">
@@ -173,7 +209,14 @@ export default function WeekPage() {
           onChange={setFilter}
           options={[
             { value: "all", label: "Все" },
-            { value: "deviations", label: <><Filter /> С отклонениями</> },
+            {
+              value: "deviations",
+              label: (
+                <>
+                  <Filter /> С отклонениями
+                </>
+              ),
+            },
             { value: "missing", label: "Без дейлика" },
           ]}
         />
@@ -200,9 +243,7 @@ export default function WeekPage() {
           </div>
           <div className="mt-2 flex flex-wrap justify-between gap-2">
             <TruncationNote />
-            <p className="text-[12px] text-ink-3">
-              Нажмите на день, чтобы увидеть задачи и исходное сообщение.
-            </p>
+            <p className="text-[12px] text-ink-3">Нажмите на день, чтобы увидеть задачи и исходное сообщение.</p>
           </div>
         </div>
       )}
@@ -215,7 +256,10 @@ export default function WeekPage() {
 
 function Legend() {
   return (
-    <div className="ml-auto hidden flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-2 xl:flex" aria-label="Легенда">
+    <div
+      className="ml-auto hidden flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-2 xl:flex"
+      aria-label="Легенда"
+    >
       <span className="flex items-center gap-1.5">
         <span className="h-2.5 w-5 rounded-[2px] border border-ink-3/70" /> план
       </span>
@@ -297,7 +341,13 @@ function CellBody({ cell, density }: { cell: DayCell; density: Density }) {
       );
     if (cell.plan?.kind === "note")
       return (
-        <span className={cn("block truncate text-[12px] italic text-ink-3", cell.plan.note_has_time && "text-deviation-ink")} title={cell.plan.note ?? ""}>
+        <span
+          className={cn(
+            "block truncate text-[12px] italic text-ink-3",
+            cell.plan.note_has_time && "text-deviation-ink",
+          )}
+          title={cell.plan.note ?? ""}
+        >
           {cell.plan.note}
         </span>
       );
@@ -305,9 +355,7 @@ function CellBody({ cell, density }: { cell: DayCell; density: Density }) {
   }
   return (
     <div className="grid gap-0.5 text-[12px] leading-4 tnum">
-      {density === "detailed" ? (
-        <span className="text-ink-2">{span(f.start, f.end)}</span>
-      ) : null}
+      {density === "detailed" ? <span className="text-ink-2">{span(f.start, f.end)}</span> : null}
       <span className="block truncate">
         <span className="mr-1.5 text-[13px] font-semibold text-ink">{hm(f.worked_sec)}</span>
         {f.efficiency !== null && f.efficiency !== undefined ? (
@@ -374,7 +422,13 @@ function DayCellButton({
 }) {
   const flashed = useFlashed(employeeId, cell.date);
   return (
-    <td className={cn("border-l border-line p-0 align-top", cell.date === today && "bg-accent-soft/40", flashed && "flash")}>
+    <td
+      className={cn(
+        "border-l border-line p-0 align-top",
+        cell.date === today && "bg-accent-soft/40",
+        flashed && "flash",
+      )}
+    >
       <button
         type="button"
         onClick={() => onOpen(employeeId, cell.date)}
@@ -416,9 +470,7 @@ function WeekTable({
           ))}
           <col className="w-[7.5rem]" />
         </colgroup>
-        <caption className="sr-only">
-          {data.label}: план и факт по сотрудникам и дням
-        </caption>
+        <caption className="sr-only">{data.label}: план и факт по сотрудникам и дням</caption>
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-line bg-surface-2/60 text-left">
             <th scope="col" className="px-3 py-2 text-[12px] font-medium text-ink-3">
@@ -428,7 +480,10 @@ function WeekTable({
               <th
                 key={d}
                 scope="col"
-                className={cn("border-l border-line px-2.5 pt-2 pb-1 font-normal", d === data.today && "bg-accent-soft/60")}
+                className={cn(
+                  "border-l border-line px-2.5 pt-2 pb-1 font-normal",
+                  d === data.today && "bg-accent-soft/60",
+                )}
               >
                 <div className="flex items-baseline gap-1.5 text-[13px]">
                   <span className={cn("font-semibold", i >= 5 ? "text-ink-2" : "text-ink")}>{WEEKDAYS_SHORT[i]}</span>
@@ -454,13 +509,24 @@ function WeekTable({
                 <EmployeeCell employee={r.employee} row={r} planHref={`/plans/${data.iso_year}/${data.iso_week}`} />
               </th>
               {r.cells.map((c) => (
-                <DayCellButton key={c.date} employeeId={r.employee.id} cell={c} axis={axis} density={density} today={data.today} dimmed={dim?.(c)} onOpen={onOpen} />
+                <DayCellButton
+                  key={c.date}
+                  employeeId={r.employee.id}
+                  cell={c}
+                  axis={axis}
+                  density={density}
+                  today={data.today}
+                  dimmed={dim?.(c)}
+                  onOpen={onOpen}
+                />
               ))}
               <td className="border-l border-line px-3 py-2.5 text-right align-top whitespace-nowrap tnum">
                 <div className="text-[14px] font-semibold">{hm(r.totals.worked_sec)}</div>
                 <div className="text-[12px] text-ink-2">итог {hm(r.totals.result_sec)}</div>
                 {/* План и опоздания занимают место всегда, чтобы строки не меняли высоту между неделями. */}
-                <div className="h-[18px] text-[12px] leading-[18px] text-ink-3">{r.totals.planned_sec ? `план ${hm(r.totals.planned_sec)}` : null}</div>
+                <div className="h-[18px] text-[12px] leading-[18px] text-ink-3">
+                  {r.totals.planned_sec ? `план ${hm(r.totals.planned_sec)}` : null}
+                </div>
                 <div className="h-[18px] text-[12px] leading-[18px] font-medium text-late-ink">
                   {r.totals.late_count ? (
                     <span className="inline-flex items-center gap-0.5 align-top">
@@ -563,7 +629,11 @@ function WeekMobile({
                   <div className="flex items-center gap-2">
                     <Avatar employee={r.employee} size={24} />
                     <span className="text-[14px] font-medium">{r.employee.short_name}</span>
-                    {c.late_sec ? <Badge tone="late" className="ml-auto">+{hm(c.late_sec)}</Badge> : null}
+                    {c.late_sec ? (
+                      <Badge tone="late" className="ml-auto">
+                        +{hm(c.late_sec)}
+                      </Badge>
+                    ) : null}
                   </div>
                   <DayStrip cell={c} axis={axis} height={14} />
                   <CellBody cell={c} density="detailed" />

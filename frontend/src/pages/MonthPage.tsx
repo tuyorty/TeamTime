@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { exportUrl } from "@/api/client";
 import { useMeta, useMonth } from "@/api/queries";
 import { ErrorState, TruncationNote } from "@/components/domain/feedback";
+import { PeriodFacts } from "@/components/domain/PeriodFacts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
@@ -63,6 +64,16 @@ export default function MonthPage() {
               <ChevronRight />
             </Button>
           </div>
+          {data?.highlights ? (
+            <PeriodFacts
+              data={data.highlights}
+              period="month"
+              start={data.first_day}
+              end={data.last_day}
+              incomplete={!data.complete}
+              disabled={isPlaceholderData}
+            />
+          ) : null}
           <Button size="sm" onClick={() => window.print()}>
             <Printer /> Печать
           </Button>

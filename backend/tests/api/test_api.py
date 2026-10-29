@@ -49,8 +49,13 @@ async def test_read_screens_without_login(client: httpx.AsyncClient, maker) -> N
     cell = week["rows"][0]["cells"][0]
     assert cell["late_sec"] == 15 * 60
     assert cell["fact"]["result_sec"] == int(7.75 * 3600 * 0.8)
+    highlights = week["highlights"]
+    assert highlights["worked_sec"] == int(7.75 * 3600)
+    assert highlights["largest_lateness"]["value_sec"] == 15 * 60
+    assert highlights["largest_lateness"]["occurrences"][0]["employee"]["id"] == emp_id
 
-    assert (await client.get("/months/2026/10")).status_code == 200
+    month = (await client.get("/months/2026/10")).json()
+    assert month["highlights"] == highlights
     assert (await client.get("/today")).json()["counts"]["dailies"] == 1
     assert (await client.get(f"/employees/{emp_id}")).json()["employee"][
         "short_name"
