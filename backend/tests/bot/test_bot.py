@@ -19,6 +19,7 @@ from teamtime.calc import StatusKind
 from teamtime.core.config import Settings
 from teamtime.db.models import DayStatus, ParseResultRow, RawMessage, Resolution, TopicBinding
 from teamtime.services.facts import current_dailies, current_plans
+from teamtime.services.settings import load_settings, save_settings
 from tests import factories as f
 from tests.bot.fake_telegram import STRANGERS, FakeSession, Telegram
 from tests.conftest import TEST_DB
@@ -96,6 +97,24 @@ async def test_unlinked_account_is_not_blamed_on_author(tg: Telegram) -> None:
 async def test_chatter_in_topic_is_ignored(tg: Telegram) -> None:
     await tg.group(501, "кто идёт на обед?")
     assert tg.session.calls == []
+
+
+@pytest.mark.parametrize("feedback", ["reaction", "reply"])
+@pytest.mark.parametrize("efficiency", [80, None])
+async def test_replayed_update_does_not_repeat_feedback(
+    tg: Telegram, maker, feedback, efficiency
+) -> None:
+    async with maker() as session:
+        settings = await load_settings(session)
+        settings.bot.feedback = feedback
+        await save_settings(session, settings)
+        await session.commit()
+    text = f.daily_text("23.10.2026", e=efficiency)
+    message_id = await tg.group(501, text)
+    calls = len(tg.session.calls)
+    assert calls > 0
+    await tg.group(501, text, message_id=message_id)
+    assert len(tg.session.calls) == calls
 
 
 def _p(text: object) -> dict[str, object]:

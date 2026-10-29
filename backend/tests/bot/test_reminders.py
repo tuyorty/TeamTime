@@ -233,7 +233,7 @@ async def test_crash_after_telegram_accepted_message_does_not_repeat_it(maker) -
     at()
 
     class CrashAfterDelivery(FakeSession):
-        async def make_request(self, bot, method, timeout=None):
+        async def make_request(self, bot, method, timeout=None):  # noqa: ASYNC109 — сигнатура BaseSession
             result = await super().make_request(bot, method, timeout)
             if isinstance(method, SendMessage):
                 raise asyncio.CancelledError
