@@ -270,3 +270,37 @@ async def test_today_accounts_for_every_employee_and_returns_schedule_tasks(
     assert first.tasks == ["задача один", "задача два"]
     assert first.cell.fact is not None
     assert all(item.kind.value == "schedule" for item in today.feed)
+
+
+async def test_employee_notes_include_workday_remarks_and_manual_status(
+    session: AsyncSession,
+) -> None:
+    employee = await f.employee(session)
+    await manual.set_plan_day(
+        session,
+        employee_id=employee.id,
+        day=date(2026, 10, 20),
+        kind=PlanDayKind.WORK,
+        intervals=[(9 * 3600, 18 * 3600)],
+        note="Встреча в мастерской",
+        actor="admin",
+    )
+    await manual.set_status(
+        session,
+        employee_id=employee.id,
+        day=date(2026, 10, 21),
+        kind=StatusKind.REMOTE,
+        note="Работаю из дома",
+        actor="admin",
+    )
+    report = await reports.employee_report(
+        session, SETTINGS, employee, date(2026, 10, 19), date(2026, 10, 25)
+    )
+    assert [(item.date.day, item.kind, item.text) for item in report.notes] == [
+        (21, "status", "Работаю из дома"),
+        (20, "plan_note", "Встреча в мастерской"),
+    ]
+    outside = await reports.employee_report(
+        session, SETTINGS, employee, date(2026, 10, 22), date(2026, 10, 25)
+    )
+    assert outside.notes == []

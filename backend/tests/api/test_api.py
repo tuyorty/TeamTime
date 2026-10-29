@@ -102,10 +102,31 @@ async def test_admin_employee_crud_and_validation(admin: httpx.AsyncClient) -> N
         "position": "Дизайнер",
         "monthly_norm_minutes": 4800,
         "hourly_rate": "700",
+        "phone": "+0 (000) 000-00-00",
+        "about": "Вымышленный профиль для проверки контактов",
+        "avatar_url": "data:image/png;base64,aGVsbG8=",
     }
     r = await admin.post("/admin/employees", json=body, headers=ADMIN_HEADERS)
     assert r.status_code == 201, r.text
     assert r.json()["match_key"] == "сидорова ап"
+    employee_id = r.json()["id"]
+    detail = (await admin.get(f"/employees/{employee_id}")).json()
+    assert detail["employee"]["phone"] == body["phone"]
+    assert detail["employee"]["about"] == body["about"]
+    assert detail["employee"]["avatar_url"] == body["avatar_url"]
+    updated = await admin.put(
+        f"/admin/employees/{employee_id}",
+        json={**body, "about": "Обновлённое описание"},
+        headers=ADMIN_HEADERS,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["about"] == "Обновлённое описание"
+    invalid_photo = await admin.put(
+        f"/admin/employees/{employee_id}",
+        json={**body, "avatar_url": "javascript:alert(1)"},
+        headers=ADMIN_HEADERS,
+    )
+    assert invalid_photo.status_code == 422
     dup = await admin.post("/admin/employees", json=body, headers=ADMIN_HEADERS)
     assert dup.status_code == 422
     bad = await admin.post(

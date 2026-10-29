@@ -1,10 +1,9 @@
-import { ArrowLeft, AtSign, Flame, ListChecks, NotebookPen, Target } from "lucide-react";
+import { ArrowLeft, Flame, ListChecks, NotebookPen, Target } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import { useAudit, useEmployee, useMeta } from "@/api/queries";
 import type { EmployeeDetail } from "@/api/types";
-import { Avatar } from "@/components/domain/Avatar";
 import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
 import { ErrorState, TruncationNote } from "@/components/domain/feedback";
 import { STATUS } from "@/components/domain/states";
@@ -18,6 +17,7 @@ import { WEEKDAYS_SHORT, count, dateTime, ddmm, hm, isoDate, money, parseDate, p
 import { NormBar } from "./month/shared";
 import { EfficiencyChart, HoursChart, Punctuality } from "./employee/Charts";
 import { MonthHeatmap } from "./employee/Heatmap";
+import { EmployeeProfile } from "./employee/Profile";
 
 /** Готовые периоды статистики. Пустое значение — по умолчанию сервера (8 недель). */
 const PERIODS = [
@@ -71,36 +71,23 @@ export default function EmployeePage() {
     );
   }
   const e = data.employee;
-  const brief = { id: e.id, short_name: e.short_name, full_name: e.full_name, position: e.position, color: e.color, is_active: e.is_active };
+  const brief = e;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5">
       <Link to="/people" className="inline-flex w-fit items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
         <ArrowLeft className="size-4" /> Люди
       </Link>
-      <header className="flex flex-wrap items-center gap-4">
-        <Avatar employee={brief} size={56} />
-        <div className="min-w-0">
-          <h1 className="font-display text-[26px] font-semibold leading-tight tracking-tight">{e.full_name}</h1>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-2">
-            <span>{e.position || "Должность не указана"}</span>
-            <span className="text-ink-3">в расписании: «{e.short_name}»</span>
-            {data.identities.map((i) => (
-              <span key={i.id} className="inline-flex items-center gap-0.5 text-ink-3">
-                <AtSign className="size-3.5" />
-                {i.username ?? i.display_name}
-              </span>
-            ))}
-            {!e.is_active ? <Badge>не активен</Badge> : null}
-          </p>
-        </div>
+      <EmployeeProfile data={data} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold">Рабочая статистика</h2>
         <PeriodPicker
           period={period}
           from={search.get("from") ?? data.start}
           to={search.get("to") ?? data.end}
           onChange={(next) => setSearch(next, { replace: true })}
         />
-      </header>
+      </div>
 
       <MonthStrip data={data} />
 
@@ -109,7 +96,7 @@ export default function EmployeePage() {
         <span className="text-ink-3"> · итоги месяца выше — за текущий месяц</span>
       </p>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <HoursChart data={data} />
         <EfficiencyChart data={data} />
         <MonthHeatmap data={data} today={today} />
@@ -121,7 +108,7 @@ export default function EmployeePage() {
 
       <RecentDays data={data} onOpen={(c) => setSelected({ employee: brief, cell: c })} />
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <TasksPanel data={data} />
         <NotesPanel data={data} />
       </div>
@@ -306,7 +293,7 @@ function TasksPanel({ data }: { data: EmployeeDetail }) {
                   w.planned.map((t, i) => (
                     <li key={i} className="flex gap-2">
                       <span className="mt-[7px] size-1.5 shrink-0 rounded-full border border-ink-3" />
-                      {t}
+                      <span className="min-w-0 [overflow-wrap:anywhere]">{t}</span>
                     </li>
                   ))
                 ) : (
@@ -319,7 +306,7 @@ function TasksPanel({ data }: { data: EmployeeDetail }) {
                     tasks.map((t, i) => (
                       <li key={`${day}-${i}`} className="flex gap-2">
                         <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-accent" />
-                        <span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
                           {t} <span className="text-[11px] text-ink-3 tnum">{ddmm(day)}</span>
                         </span>
                       </li>
@@ -339,7 +326,7 @@ function TasksPanel({ data }: { data: EmployeeDetail }) {
 
 function NotesPanel({ data }: { data: EmployeeDetail }) {
   return (
-    <Panel title="Заметки и статусы" description="Свободный текст из расписаний и отметки дней">
+    <Panel title="Заметки и статусы" description="Пометки у конкретных дней расписания и статусы из табеля или бота">
       {data.notes.length ? (
         <ul className="grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
           {data.notes.map((n, i) => {
@@ -362,7 +349,7 @@ function NotesPanel({ data }: { data: EmployeeDetail }) {
           })}
         </ul>
       ) : (
-        <p className="text-[13px] text-ink-2">Ни заметок, ни статусов за период.</p>
+        <p className="text-[13px] leading-relaxed text-ink-2">За выбранный период пометок и статусов нет. Здесь появляются, например, «Пт: по ситуации», отпуск, больничный или удалёнка. Статус можно поставить в карточке дня или командой /absent в боте.</p>
       )}
     </Panel>
   );

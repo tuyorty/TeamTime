@@ -623,7 +623,7 @@ async def employee_report(
 
     notes: list[NoteItem] = []
     for c in cells:
-        if c.plan_day and c.plan_day.kind is PlanDayKind.NOTE and c.plan_day.note:
+        if c.plan_day and c.plan_day.note:
             notes.append(NoteItem(date=c.day, kind="plan_note", text=c.plan_day.note))
         if c.status:
             notes.append(

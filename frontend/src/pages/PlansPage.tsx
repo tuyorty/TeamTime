@@ -198,11 +198,11 @@ function TaskList({ tasks }: { tasks: string[] }) {
   }
   return (
     <div className="grid justify-items-start gap-0.5 text-[12px] leading-5">
-      <ul className="grid w-full gap-0.5">
+      <ul className="grid max-h-72 w-full gap-0.5 overflow-y-auto pr-1">
         {tasks.map((t, i) => (
           <li key={i} className="flex min-w-0 gap-1.5">
             <span className="mt-[7px] size-1 shrink-0 rounded-full bg-ink-3" />
-            <span className="min-w-0">{t}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">{t}</span>
           </li>
         ))}
       </ul>
