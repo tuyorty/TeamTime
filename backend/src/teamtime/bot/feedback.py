@@ -87,13 +87,37 @@ def problems_text(issues: list[Issue], kind: MessageKind) -> str:
     what = "дейлике" if kind is MessageKind.DAILY else "расписании"
     lines: list[str] = []
     if own:
-        lines.append(f"Не всё понял в {what}:")
+        lines.append(f"⚠️ <b>Нужно уточнить в {what}</b>")
         lines += [f"• {issue_text(i)}" for i in own[:MAX_PROBLEMS]]
         if len(own) > MAX_PROBLEMS:
             lines.append(f"• и ещё {len(own) - MAX_PROBLEMS}")
     if admin:
         note = escape(admin[0].message)
-        lines.append(f"{note} Сообщение сохранено, админ разберётся — переписывать не нужно.")
+        lines += [
+            "",
+            "<b>👤 Нужна помощь админа</b>",
+            f"{note} Сообщение сохранено, админ разберётся — переписывать не нужно.",
+        ]
+    return "\n".join(lines)
+
+
+def accepted_text(outcome: IngestOutcome) -> str:
+    what = "Дейлик" if outcome.kind is MessageKind.DAILY else "Расписание"
+    title = (
+        "✏️ Правка учтена"
+        if outcome.is_edit
+        else f"✅ {what} принят"
+        if what == "Дейлик"
+        else "✅ Расписание принято"
+    )
+    lines = [f"<b>{title}</b>"]
+    if outcome.dates:
+        dates = sorted(outcome.dates)
+        label = (
+            f"{dates[0]:%d.%m.%Y}" if len(dates) == 1 else f"{dates[0]:%d.%m}–{dates[-1]:%d.%m.%Y}"
+        )
+        lines.append(label)
+    lines += ["", "Сохранено в табеле."]
     return "\n".join(lines)
 
 
@@ -107,7 +131,7 @@ def group_feedback(
     cfg = settings.bot
     if not outcome.needs_attention:
         reaction = cfg.reaction_edit if outcome.is_edit else cfg.reaction_ok
-        reply = None if cfg.feedback == "reaction" else "Принято"
+        reply = None if cfg.feedback == "reaction" else accepted_text(outcome)
         return GroupFeedback(reaction, reply)
 
     # В тексте проблемы бывает имя из Telegram или строка из сообщения — escape внутри.
@@ -115,5 +139,5 @@ def group_feedback(
     if any(i.code not in NOT_YOUR_FAULT for i in outcome.problems):
         link = fix_link(bot_username, outcome.parse_result_id)
         tail = f' Или <a href="{link}">исправить в боте</a>.' if link else ""
-        body += f"\nОтредактируйте сообщение — я разберу заново.{tail}"
+        body += f"\n\n<b>Как исправить</b>\nОтредактируйте сообщение — я разберу заново.{tail}"
     return GroupFeedback(cfg.reaction_warn, body)

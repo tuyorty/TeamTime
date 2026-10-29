@@ -90,7 +90,7 @@ async def run(config: Settings) -> None:
     if config.bot_username is None:
         config.bot_username = me.username
     await bot.set_my_commands(COMMANDS, scope=BotCommandScopeAllPrivateChats())
-    reminders = asyncio.create_task(reminder_loop(bot, maker), name="reminders")
+    reminders = asyncio.create_task(reminder_loop(bot, maker, config), name="reminders")
     try:
         await dp.start_polling(
             bot,

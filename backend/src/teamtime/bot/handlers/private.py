@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from teamtime.bot import texts
 from teamtime.bot.feedback import issue_text
-from teamtime.bot.handlers.commands import send_my_month, send_my_week, send_today
+from teamtime.bot.handlers.commands import send_day_summary, send_my_month, send_my_week, send_today
 from teamtime.bot.identity import employee_for, not_linked_text
 from teamtime.bot.keyboards import (
     MENU,
@@ -32,6 +32,7 @@ from teamtime.bot.keyboards import (
 )
 from teamtime.calc import STATUS_LABELS, StatusKind
 from teamtime.core import clock
+from teamtime.core.config import Settings
 from teamtime.db.models import (
     Employee,
     ParseResultRow,
@@ -85,7 +86,7 @@ async def start(message: Message, session: AsyncSession, state: FSMContext) -> N
     _, employee = await employee_for(session, message.from_user, message.chat.id)
     parts = employee.full_name.split() if employee else []
     first = parts[1] if len(parts) > 1 else message.from_user.first_name
-    hello = f"Здравствуйте, {escape(first)}!"
+    hello = f"👋 <b>Здравствуйте, {escape(first)}!</b>"
     if employee is None:
         await message.answer(f"{hello}\n\n{not_linked_text(message.from_user)}\n\n{texts.HELP}")
         return
@@ -93,28 +94,39 @@ async def start(message: Message, session: AsyncSession, state: FSMContext) -> N
 
 
 async def run_menu(
-    action: str, msg: Message, session: AsyncSession, settings: AppSettings, user: User
+    action: str,
+    msg: Message,
+    session: AsyncSession,
+    settings: AppSettings,
+    user: User,
+    config: Settings,
 ) -> None:
     if action == "week":
-        await send_my_week(msg, session, settings, user)
+        await send_my_week(msg, session, settings, user, config)
     elif action == "month":
-        await send_my_month(msg, session, settings, user)
+        await send_my_month(msg, session, settings, user, config)
     elif action == "today":
-        await send_today(msg, session, settings, user)
+        await send_today(msg, session, settings, user, config)
+    elif action == "summary":
+        await send_day_summary(msg, session, settings, user, config)
     elif action == "absent":
-        await msg.answer("Что отметить?", reply_markup=status_menu())
+        await msg.answer(texts.STATUS_PROMPT, reply_markup=status_menu())
     elif action == "fix":
         await list_fixes(msg, session, user)
 
 
 @router.message(F.text.in_(MENU))
 async def menu_button(
-    message: Message, session: AsyncSession, settings: AppSettings, state: FSMContext
+    message: Message,
+    session: AsyncSession,
+    settings: AppSettings,
+    state: FSMContext,
+    config: Settings,
 ) -> None:
     """Кнопка постоянного меню. Прерывает начатое исправление: человек передумал."""
     await state.clear()
     if message.from_user and message.text:
-        await run_menu(MENU[message.text], message, session, settings, message.from_user)
+        await run_menu(MENU[message.text], message, session, settings, message.from_user, config)
 
 
 @router.callback_query(MenuCb.filter())
@@ -124,10 +136,13 @@ async def menu(
     session: AsyncSession,
     settings: AppSettings,
     state: FSMContext,
+    config: Settings,
 ) -> None:
     await query.answer()
     if isinstance(query.message, Message):
-        await run_menu(callback_data.action, query.message, session, settings, query.from_user)
+        await run_menu(
+            callback_data.action, query.message, session, settings, query.from_user, config
+        )
 
 
 # --- статусы -------------------------------------------------------------------------------
@@ -135,7 +150,7 @@ async def menu(
 
 @router.message(Command("absent"))
 async def absent(message: Message) -> None:
-    await message.answer("Что отметить?", reply_markup=status_menu())
+    await message.answer(texts.STATUS_PROMPT, reply_markup=status_menu())
 
 
 @router.callback_query(StatusCb.filter())
@@ -155,7 +170,10 @@ async def set_status(
     if callback_data.kind == "vacation":
         await state.set_state(Vacation.range)
         await query.answer()
-        await msg.answer("Пришлите даты отпуска, например <code>02.11 - 13.11</code>.")
+        await msg.answer(
+            "🌴 <b>Даты отпуска</b>\n\nПришлите начало и конец одним сообщением.\n"
+            "Пример: <code>02.11 - 13.11</code>"
+        )
         return
     kind = None if callback_data.kind == "clear" else StatusKind(callback_data.kind)
     await manual.set_status(
@@ -168,7 +186,9 @@ async def set_status(
     )
     label = STATUS_LABELS[kind] if kind else "Статус снят"
     await query.answer(label)
-    await msg.edit_text(f"{label}: {texts.human_date(today)}. Админ увидит это на сайте.")
+    await msg.edit_text(
+        f"✅ <b>{label}</b>\n{texts.human_date(today)}\n\nСтатус обновлён в табеле."
+    )
 
 
 def parse_range(text: str, today: date) -> tuple[date, date] | None:
@@ -219,11 +239,12 @@ async def vacation_range(
             reason="через бота",
         )
     except manual.EditError as exc:
-        await message.answer(str(exc))
+        await message.answer(f"⚠️ <b>Не удалось сохранить</b>\n\n{escape(str(exc))}")
         return
     await state.clear()
     await message.answer(
-        f"Отпуск с {start:%d.%m} по {end:%d.%m}: {n} {texts.plural(n, 'день', 'дня', 'дней')}."
+        f"🌴 <b>Отпуск отмечен</b>\n\nС <b>{start:%d.%m}</b> по <b>{end:%d.%m}</b> включительно.\n"
+        f"Всего: {n} {texts.plural(n, 'день', 'дня', 'дней')}. Статус обновлён в табеле."
     )
 
 
@@ -280,7 +301,9 @@ async def list_fixes(message: Message, session: AsyncSession, user: User) -> Non
     )
     ids = [r[0] for r in rows]
     if not ids:
-        await message.answer("Всё разобрано, исправлять нечего.")
+        await message.answer(
+            "✅ <b>Всё разобрано</b>\n\nИсправлять нечего: сообщений, требующих вашей помощи, нет."
+        )
         return
     for parse_id in ids:
         await show_fix(message, session, user, parse_id)
@@ -366,10 +389,16 @@ async def fix_action(
         case "time":
             await state.set_state(Fix.time)
             await query.answer()
-            await msg.answer("Пришлите время, например <code>10:00 - 13:00; 14:00 - 18:30</code>")
+            await msg.answer(
+                "⏱ <b>Исправить время</b>\n\nПришлите фактические интервалы одним сообщением.\n"
+                "Пример: <code>10:00 - 13:00; 14:00 - 18:30</code>"
+            )
         case "eff":
             await query.answer()
-            await msg.answer("Какая эффективность?", reply_markup=efficiency_menu(row.id))
+            await msg.answer(
+                "🎯 <b>Эффективность дня</b>\n\nВыберите значение для этого дейлика:",
+                reply_markup=efficiency_menu(row.id),
+            )
         case "eff_set":
             assert employee is not None
             assert row.data is not None
@@ -386,7 +415,10 @@ async def fix_action(
                 session, row.id, Resolution.FIXED, actor=actor(query.from_user)
             )
             await query.answer(f"Эффективность {callback_data.value}%")
-            await msg.edit_text(f"Готово: эффективность {callback_data.value}%.")
+            await msg.edit_text(
+                f"✅ <b>Готово: эффективность {callback_data.value}%</b>\n\n"
+                "Изменение сохранено в табеле."
+            )
         case "full":
             await state.set_state(Fix.full_daily)
             await query.answer()
@@ -432,11 +464,11 @@ async def fix_time(message: Message, session: AsyncSession, state: FSMContext) -
             parse_result_id=row.id,
         )
     except manual.EditError as exc:
-        await message.answer(str(exc))
+        await message.answer(f"⚠️ <b>Не удалось сохранить</b>\n\n{escape(str(exc))}")
         return
     await manual.resolve_parse(session, row.id, Resolution.FIXED, actor=actor(message.from_user))
     await state.clear()
-    await message.answer("Готово, время обновлено. На сайте это видно сразу.")
+    await message.answer("✅ <b>Готово, время обновлено</b>\n\nНовые интервалы сохранены в табеле.")
 
 
 @router.message(Fix.full_daily, F.text)
@@ -455,7 +487,7 @@ async def fix_full(
     result = parse_daily(message.text, clock.now(), settings.tz)
     if result.daily is None:
         problems = "\n".join(f"• {escape(i.message)}" for i in result.warnings)
-        await message.answer(f"Всё ещё не получается разобрать:\n{problems}")
+        await message.answer(f"⚠️ <b>Всё ещё не получается разобрать</b>\n\n{problems}")
         return
     d = result.daily
     await manual.set_daily(
@@ -471,7 +503,10 @@ async def fix_full(
     )
     await manual.resolve_parse(session, row.id, Resolution.FIXED, actor=actor(message.from_user))
     await state.clear()
-    await message.answer(f"Готово: дейлик за {d.work_date:%d.%m.%Y} сохранён.")
+    await message.answer(
+        f"✅ <b>Готово: дейлик за {d.work_date:%d.%m.%Y} сохранён</b>\n\n"
+        "Часы, эффективность и задачи обновлены в табеле."
+    )
 
 
 @router.message(Fix.plan_day, F.text)
@@ -512,11 +547,14 @@ async def fix_plan_day(message: Message, session: AsyncSession, state: FSMContex
                 reason="через бота",
             )
     except (manual.EditError, ValueError) as exc:
-        await message.answer(str(exc))
+        await message.answer(f"⚠️ <b>Не удалось сохранить</b>\n\n{escape(str(exc))}")
         return
     await manual.resolve_parse(session, row.id, Resolution.FIXED, actor=actor(message.from_user))
     await state.clear()
-    await message.answer(f"Готово: план на {WEEKDAYS[weekday]} {day:%d.%m} обновлён.")
+    await message.answer(
+        f"✅ <b>Готово: план на {WEEKDAYS[weekday]} {day:%d.%m} обновлён</b>\n\n"
+        "Расписание сохранено в табеле."
+    )
 
 
 @router.message(F.text)

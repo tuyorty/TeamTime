@@ -13,7 +13,7 @@ from aiogram.types import Message, ReactionTypeEmoji
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from teamtime.bot.feedback import group_feedback
+from teamtime.bot.feedback import accepted_text, group_feedback
 from teamtime.bot.richtext import rich_plain_text
 from teamtime.core.config import Settings
 from teamtime.core.logging import get_logger
@@ -92,7 +92,7 @@ async def give_feedback(
         except TelegramBadRequest as exc:
             # Реакции выключены в чате или эмодзи недоступно — короткий ответ вместо реакции.
             log.warning("bot.reaction_failed", error=str(exc))
-            reply = reply or ("Принято" if not outcome.needs_attention else None)
+            reply = reply or (accepted_text(outcome) if not outcome.needs_attention else None)
     if reply and outcome.needs_attention and raw and raw.bot_reply_message_id:
         with contextlib.suppress(TelegramAPIError):
             await bot.edit_message_text(

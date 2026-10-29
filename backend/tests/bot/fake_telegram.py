@@ -12,7 +12,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.methods import (
     AnswerCallbackQuery,
     DeleteMessage,
@@ -48,6 +48,7 @@ class FakeSession(BaseSession):
         super().__init__()
         self.calls: list[TelegramMethod[Any]] = []
         self.fail_reactions = False
+        self.send_failures: list[TelegramAPIError] = []
         self.admins: set[int] = set()
         self._ids = count(10_000)
 
@@ -77,6 +78,8 @@ class FakeSession(BaseSession):
                 raise TelegramBadRequest(method=method, message="Bad Request: REACTION_INVALID")
             return True
         if isinstance(method, SendMessage):
+            if self.send_failures:
+                raise self.send_failures.pop(0)
             chat_type = "private" if int(method.chat_id) > 0 else "supergroup"
             return Message(
                 message_id=next(self._ids),

@@ -147,7 +147,9 @@ async def test_edit_that_fixes_message_removes_warning(tg: Telegram, maker) -> N
 async def test_reaction_failure_falls_back_to_short_reply(tg: Telegram) -> None:
     tg.session.fail_reactions = True
     await tg.group(501, f.daily_text("23.10.2026"))
-    assert [m.text for m in tg.session.of(SendMessage)] == ["Принято"]
+    replies = tg.session.of(SendMessage)
+    assert len(replies) == 1
+    assert "<b>✅ Дейлик принят</b>" in replies[0].text
 
 
 async def test_bind_requires_chat_admin(tg: Telegram, maker) -> None:
@@ -175,6 +177,25 @@ async def test_private_commands(tg: Telegram) -> None:
     assert "команда" in tg.session.texts()[-1]
     await tg.private(999, "/week")
     assert "не привязан" in tg.session.texts()[-1]
+
+
+async def test_today_has_summary_button_and_private_chat_is_registered(tg: Telegram, maker) -> None:
+    await tg.private(501, "/today")
+    response = tg.session.of(SendMessage)[-1]
+    assert response.parse_mode == "HTML"
+    buttons = [button for row in response.reply_markup.inline_keyboard for button in row]
+    assert any(button.callback_data == MenuCb(action="summary").pack() for button in buttons)
+    await tg.press(501, MenuCb(action="summary").pack())
+    assert "Итоги дня" in tg.session.texts()[-1]
+    await tg.press(999, MenuCb(action="summary").pack())
+    assert "не привязан" in tg.session.texts()[-1]
+    async with maker() as session:
+        from teamtime.db.models import TelegramIdentity
+
+        identity = await session.scalar(
+            select(TelegramIdentity).where(TelegramIdentity.telegram_user_id == 501)
+        )
+        assert identity.dm_chat_id == 501
 
 
 async def test_fix_efficiency_via_deep_link_and_buttons(tg: Telegram, maker) -> None:
@@ -217,7 +238,10 @@ async def test_absent_today_and_vacation(tg: Telegram, maker) -> None:
     await tg.press(501, StatusCb(kind="absent").pack())
     await tg.press(501, StatusCb(kind="vacation").pack())
     await tg.private(501, "02.11 - 06.11")
-    assert "Отпуск с 02.11 по 06.11: 5 дней" in tg.session.texts()[-1]
+    reply = tg.session.texts()[-1]
+    assert "<b>Отпуск отмечен</b>" in reply
+    assert "<b>02.11</b> по <b>06.11</b> включительно" in reply
+    assert "Всего: 5 дней" in reply
     async with maker() as s:
         statuses = list(await s.scalars(select(DayStatus).where(DayStatus.retracted_at.is_(None))))
     kinds = {(st.date, st.kind) for st in statuses}

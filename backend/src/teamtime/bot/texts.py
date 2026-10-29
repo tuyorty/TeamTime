@@ -1,20 +1,13 @@
-"""Тексты бота (HTML-разметка Telegram). Чистые функции от DTO отчётов — легко тестировать."""
+"""Ответы бота: короткие блоки с заголовками, понятными показателями и HTML-разметкой."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from html import escape
 
 from teamtime.calc import DayState
 from teamtime.calc.duration import format_hm
-from teamtime.schemas import (
-    DayCellOut,
-    EmployeeBrief,
-    MonthSummaryOut,
-    TodayOut,
-    WeekOut,
-    WeekRow,
-)
+from teamtime.schemas import DayCellOut, EmployeeBrief, MonthSummaryOut, TodayOut, WeekOut, WeekRow
 from teamtime.services.reports import MONTHS_GENITIVE
 
 WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
@@ -31,174 +24,285 @@ def plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
-def human_date(d: date) -> str:
-    return f"{WEEKDAYS[d.weekday()]}, {d.day} {MONTHS_GENITIVE[d.month - 1]}"
+def short_text(value: str, limit: int = 200) -> str:
+    """Одна безопасная строка; подробности больших задач остаются в дэшборде."""
+    value = " ".join(value.split())
+    return escape(value if len(value) <= limit else value[: limit - 1] + "…")
 
 
-def span(a: int | None, b: int | None) -> str:
-    return f"{format_hm(a)}–{format_hm(b)}"
+def human_date(day: date) -> str:
+    return f"{WEEKDAYS[day.weekday()]}, {day.day} {MONTHS_GENITIVE[day.month - 1]}"
+
+
+def span(start: int | None, end: int | None) -> str:
+    return f"{format_hm(start)}–{format_hm(end)}"
 
 
 def plan_text(cell: DayCellOut) -> str:
-    p = cell.plan
-    if p is None:
-        return "без плана"
-    if p.kind.value == "off":
+    if cell.status_label and cell.status != "remote":
+        return short_text(cell.status_label)
+    plan = cell.plan
+    if plan is None:
+        return "выходной" if cell.state is DayState.OFF else "расписание не указано"
+    if plan.kind.value == "off":
         return "выходной"
-    if p.kind.value == "note":
-        return f"«{escape(p.note or '')}»"
-    return span(p.start, p.end)
+    if plan.kind.value == "note":
+        return f"«{short_text(plan.note or '')}»"
+    return short_text("; ".join(span(start, end) for start, end in plan.intervals), 240)
 
 
 def fact_text(cell: DayCellOut) -> str:
-    f = cell.fact
-    if f is None:
+    fact = cell.fact
+    if fact is None:
         if cell.status_label:
-            return cell.status_label.lower()
+            return short_text(cell.status_label.lower())
         return {
-            DayState.MISSING: "нет дейлика",
-            DayState.PENDING: "ждём дейлик",
+            DayState.MISSING: "дейлик не прислан",
+            DayState.PENDING: "дейлика пока нет",
             DayState.OFF: "выходной",
         }.get(cell.state, "—")
-    spans = "; ".join(span(a, b) for a, b in f.intervals)
-    parts = [spans, format_hm(f.worked_sec)]
-    if f.efficiency is not None:
-        parts.append(f"{f.efficiency}% → {format_hm(f.result_sec)}")
-    return ", ".join(parts)
+    intervals = "; ".join(span(start, end) for start, end in fact.intervals)
+    return f"{intervals} · <b>{format_hm(fact.worked_sec)}</b>"
 
 
-def _name(e: EmployeeBrief) -> str:
-    return escape(e.short_name)
+def _name(employee: EmployeeBrief) -> str:
+    return short_text(employee.short_name, 100)
 
 
-def format_today(t: TodayOut) -> str:
-    lines = [f"<b>Сегодня, {human_date(t.date)}</b>, {format_hm(t.now_sec)}"]
+def _tasks(tasks: list[str], limit: int = 6) -> list[str]:
+    lines = [f"• {short_text(task)}" for task in tasks[:limit]]
+    if len(tasks) > limit:
+        lines.append(f"<i>Ещё задач: {len(tasks) - limit}. Полный список — на сайте.</i>")
+    return lines
+
+
+def format_today(report: TodayOut) -> str:
     groups: dict[str, list[str]] = {
-        "on_site": [],
-        "expected_later": [],
-        "left": [],
-        "remote": [],
-        "absent": [],
+        key: []
+        for key in (
+            "on_site",
+            "remote",
+            "expected_later",
+            "left",
+            "off",
+            "absent",
+            "no_plan",
+        )
     }
-    late: list[str] = []
-    no_daily: list[str] = []
-    no_plan: list[str] = []
-    for r in t.rows:
-        c = r.cell
-        name = _name(r.employee)
-        if r.presence == "absent":
-            groups["absent"].append(f"{name} — {escape((c.status_label or '').lower())}")
-        elif r.presence == "no_plan":
-            no_plan.append(name)
-        elif r.presence == "expected_later" and c.plan:
-            groups["expected_later"].append(f"{name} — с {format_hm(c.plan.start)}")
-        elif r.presence in groups and c.plan:
-            groups[r.presence].append(f"{name} — {span(c.plan.start, c.plan.end)}")
-        if c.late_sec:
-            late.append(f"{name} +{format_hm(c.late_sec)}")
-        if r.daily_overdue:
-            no_daily.append(name)
-
-    titles = {
-        "on_site": "На месте по плану",
-        "expected_later": "Придут позже",
-        "left": "Уже ушли по плану",
-        "remote": "На удалёнке",
-        "absent": "Отсутствуют",
-    }
-    for key, title in titles.items():
+    for row in report.rows:
+        detail = plan_text(row.cell)
+        if row.presence == "absent" and row.cell.status_note:
+            detail += f" · {short_text(row.cell.status_note, 120)}"
+        groups[row.presence].append(f"• <b>{_name(row.employee)}</b> — {detail}")
+    lines = [
+        f"👥 <b>Сегодня, {human_date(report.date)}</b>",
+        f"Сейчас <code>{format_hm(report.now_sec)}</code> · в команде <b>{len(report.rows)}</b>",
+    ]
+    for key, title in (
+        ("on_site", "🏢 В офисе"),
+        ("remote", "💻 На удалёнке"),
+        ("expected_later", "🕒 Начнут позже"),
+        ("left", "🏁 Закончили по расписанию"),
+        ("off", "🌿 Выходной"),
+        ("absent", "🗓 Отсутствуют"),
+        ("no_plan", "❔ Нет расписания"),
+    ):
         if groups[key]:
-            lines += ["", f"<b>{title}</b> ({len(groups[key])})", *(f"• {x}" for x in groups[key])]
+            lines += ["", f"<b>{title} · {len(groups[key])}</b>", *groups[key]]
+    if not report.rows:
+        lines += ["", "Активных сотрудников пока нет."]
+    lines += ["", "<i>Время и место работы — по расписанию. Отчёты доступны в итогах дня.</i>"]
+    return "\n".join(lines)
+
+
+def format_day_summary(report: TodayOut) -> str:
+    waiting = [
+        row
+        for row in report.rows
+        if row.cell.plan
+        and row.cell.plan.kind.value == "work"
+        and not row.cell.fact
+        and row.presence not in {"absent", "off"}
+    ]
+    received = [row for row in report.rows if row.cell.fact]
+    late = [row for row in received if row.cell.late_sec]
+    lines = [
+        f"📋 <b>Итоги дня · {human_date(report.date)}</b>",
+        "",
+        f"Прислали дейлик: <b>{len(received)}</b>",
+        f"Пока без дейлика: <b>{len(waiting)}</b>",
+        f"Отработано командой: <b>{format_hm(report.worked_sec)}</b>",
+        f"Опоздания по дейликам: <b>{len(late)}</b>",
+    ]
+    if waiting:
+        lines += ["", "<b>⏳ Пока не прислали</b>"]
+        lines += [
+            f"• {_name(row.employee)} — расписание до {format_hm(row.cell.plan.end)}"
+            for row in waiting
+            if row.cell.plan
+        ]
     if late:
-        lines += ["", "<b>Опоздали</b> (по дейликам)", *(f"• {x}" for x in late)]
-    if no_daily:
-        lines += ["", "<b>Не прислали дейлик</b>", *(f"• {x}" for x in no_daily)]
-    if no_plan:
-        lines += ["", f"Без плана на сегодня: {', '.join(no_plan)}"]
-    dailies = t.counts.get("dailies", 0)
-    lines += ["", f"Дейликов за сегодня: {dailies}, часов: {format_hm(t.worked_sec)}"]
+        lines += [
+            "",
+            "<b>⚠️ Опоздания</b>",
+            *(f"• {_name(row.employee)} — {format_hm(row.cell.late_sec)}" for row in late),
+        ]
+    if received:
+        lines += ["", "<b>✅ Присланные дейлики</b>"]
+        for row in received:
+            fact = row.cell.fact
+            assert fact
+            efficiency = (
+                f" · {fact.efficiency}%"
+                if fact.efficiency is not None
+                else " · эффективность не указана"
+            )
+            lines.append(
+                f"• <b>{_name(row.employee)}</b> — {format_hm(fact.worked_sec)}{efficiency}"
+            )
     return "\n".join(lines)
 
 
 def format_my_week(week: WeekOut, row: WeekRow) -> str:
-    lines = [f"<b>{week.label}</b>, {_name(row.employee)}", ""]
-    for c in row.cells:
-        if c.plan is None and c.fact is None and c.status is None:
-            continue
-        head = f"<b>{WEEKDAYS_CAP[c.date.weekday()]} {c.date:%d.%m}</b>"
-        line = f"{head}  план {plan_text(c)}\n      факт {fact_text(c)}"
+    lines = [
+        f"🗓 <b>{short_text(week.label)}</b>",
+        f"{_name(row.employee)} · {week.days[0]:%d.%m}–{week.days[-1]:%d.%m}",
+    ]
+    for cell in row.cells:
+        lines += [
+            "",
+            f"<b>{WEEKDAYS_CAP[cell.date.weekday()]} · {cell.date:%d.%m}</b>",
+            f"План: {plan_text(cell)}",
+        ]
+        if cell.date <= week.today or cell.fact:
+            lines.append(f"Факт: {fact_text(cell)}")
+        if cell.fact and cell.fact.efficiency is not None:
+            lines.append(
+                f"Эффективность: <b>{cell.fact.efficiency}%</b> · "
+                f"с её учётом {format_hm(cell.fact.result_sec)}"
+            )
         marks = []
-        if c.late_sec:
-            marks.append(f"опоздание {format_hm(c.late_sec)}")
-        if c.early_leave_sec:
-            marks.append(f"ранний уход {format_hm(c.early_leave_sec)}")
-        if c.undertime_sec:
-            marks.append(f"недоработка {format_hm(c.undertime_sec)}")
+        if cell.late_sec:
+            marks.append(f"опоздание {format_hm(cell.late_sec)}")
+        if cell.early_leave_sec:
+            marks.append(f"ранний уход {format_hm(cell.early_leave_sec)}")
+        if cell.undertime_sec:
+            marks.append(f"недоработка {format_hm(cell.undertime_sec)}")
         if marks:
-            line += f"\n      ⚠ {', '.join(marks)}"
-        lines.append(line)
-    t = row.totals
+            lines.append(f"⚠️ {', '.join(marks)}")
+    totals = row.totals
     lines += [
         "",
-        f"Часы: <b>{format_hm(t.worked_sec)}</b> из плана {format_hm(t.planned_sec)}",
-        f"Итог (с e%): {format_hm(t.result_sec)}",
-        f"Опозданий: {t.late_count}" + (f", всего {format_hm(t.late_sec)}" if t.late_sec else ""),
+        "<b>📊 За неделю</b>",
+        f"Отработано: <b>{format_hm(totals.worked_sec)}</b> · "
+        f"запланировано {format_hm(totals.planned_sec)}",
+        f"С учётом эффективности: <b>{format_hm(totals.result_sec)}</b>",
+        f"Опозданий: {totals.late_count}"
+        + (f" · всего {format_hm(totals.late_sec)}" if totals.late_sec else ""),
     ]
     if row.plan and row.plan.tasks:
-        lines += ["", "<b>Задачи спринта</b>", *(f"• {escape(x)}" for x in row.plan.tasks)]
+        lines += ["", "<b>🎯 Задачи из расписания</b>", *_tasks(row.plan.tasks)]
     return "\n".join(lines)
 
 
 def format_who(week: WeekOut) -> str:
-    lines = [f"<b>{week.label}</b>: команда", ""]
-    for r in week.rows:
-        t = r.totals
-        bits = [f"{format_hm(t.worked_sec)} из {format_hm(t.planned_sec)}"]
-        if t.late_count:
-            bits.append(f"опозданий {t.late_count}")
-        if t.days_missing:
-            bits.append(
-                f"{t.days_missing} {plural(t.days_missing, 'день', 'дня', 'дней')} без дейлика"
-            )
-        absent = sum(1 for c in r.cells if c.state is DayState.ABSENCE)
-        if absent:
-            bits.append(f"отсутствие {absent} {plural(absent, 'день', 'дня', 'дней')}")
-        lines.append(f"• <b>{_name(r.employee)}</b>: {', '.join(bits)}")
-    lines += ["", "Часы — сумма интервалов из дейликов, план — по расписанию."]
-    return "\n".join(lines)
-
-
-def format_month(name: str, label: str, s: MonthSummaryOut) -> str:
-    progress = round(s.norm_progress * 100)
     lines = [
-        f"<b>{escape(label)}</b>, {escape(name)}",
-        "",
-        f"Часы(+): <b>{format_hm(s.worked_sec)}</b>",
-        f"Часы(e%): {format_hm(s.result_sec)}",
-        f"Опоздания: {s.late_count} {plural(s.late_count, 'раз', 'раза', 'раз')}, "
-        f"всего {format_hm(s.late_total_sec)}",
-        f"Опоздания(−), штраф: {format_hm(s.penalty_sec)}",
-        f"Итого: <b>{format_hm(s.total_sec)}</b> из нормы {format_hm(s.norm_sec)} ({progress}%)",
+        f"👥 <b>{short_text(week.label)} · команда</b>",
+        f"{week.days[0]:%d.%m}–{week.days[-1]:%d.%m}",
     ]
-    if s.overtime_sec:
-        bonus = f"{s.bonus:,.2f}".replace(",", " ").replace(".", ",")
-        lines.append(f"Переработка: {format_hm(s.overtime_sec)}, премия {bonus} ₽")
-    if s.days_missing:
-        lines.append(
-            f"Без дейлика: {s.days_missing} {plural(s.days_missing, 'день', 'дня', 'дней')}"
-        )
-    lines += ["", "<i>Значения усечены до минут.</i>"]
+    for row in week.rows:
+        totals = row.totals
+        lines += [
+            "",
+            f"<b>{_name(row.employee)}</b>",
+            f"Отработано <b>{format_hm(totals.worked_sec)}</b> · "
+            f"план {format_hm(totals.planned_sec)}",
+        ]
+        if totals.late_count:
+            lines.append(f"⚠️ Опозданий: {totals.late_count} · всего {format_hm(totals.late_sec)}")
+        if totals.days_missing:
+            lines.append(
+                f"⏳ Без дейлика: {totals.days_missing} "
+                f"{plural(totals.days_missing, 'день', 'дня', 'дней')}"
+            )
+    if not week.rows:
+        lines += ["", "Активных сотрудников пока нет."]
     return "\n".join(lines)
+
+
+def format_month(name: str, label: str, summary: MonthSummaryOut) -> str:
+    progress = round(summary.norm_progress * 100)
+    filled = max(0, min(10, round(summary.norm_progress * 10)))
+    bar = "▰" * filled + "▱" * (10 - filled)
+    lines = [
+        f"📊 <b>{short_text(label)}</b>",
+        short_text(name, 100),
+        "",
+        f"<b>Итого: {format_hm(summary.total_sec)} из {format_hm(summary.norm_sec)}</b>",
+        f"{bar}  {progress}% нормы",
+        "",
+        "<b>⏱ Рабочее время</b>",
+        f"По дейликам: <b>{format_hm(summary.worked_sec)}</b>",
+        f"С учётом эффективности: <b>{format_hm(summary.result_sec)}</b>",
+        "",
+        "<b>⚠️ Опоздания и штраф</b>",
+        f"Опозданий: {summary.late_count} · всего {format_hm(summary.late_total_sec)}",
+        f"Штраф за месяц: <b>{format_hm(summary.penalty_sec)}</b>",
+    ]
+    if summary.overtime_sec:
+        bonus = f"{summary.bonus:,.2f}".replace(",", " ").replace(".", ",")
+        lines += [
+            "",
+            "<b>🎉 Сверх нормы</b>",
+            f"Переработка: {format_hm(summary.overtime_sec)} · премия {bonus} ₽",
+        ]
+    if summary.days_missing:
+        lines += [
+            "",
+            f"⏳ Без дейлика: {summary.days_missing} "
+            f"{plural(summary.days_missing, 'день', 'дня', 'дней')}",
+        ]
+    lines += ["", "<i>Итого = время с учётом эффективности − штраф. Значения усечены до минут.</i>"]
+    return "\n".join(lines)
+
+
+def format_reminder(name: str, work_date: date, shift_end: datetime, delay_minutes: int) -> str:
+    return "\n".join(
+        [
+            "⏰ <b>Не забудьте дейлик</b>",
+            "",
+            f"{short_text(name, 100)}, в табеле пока нет вашего дейлика "
+            f"за <b>{work_date:%d.%m.%Y}</b>.",
+            "",
+            f"Смена по расписанию закончилась <b>{shift_end:%d.%m в %H:%M}</b>.",
+            f"После её окончания прошло не меньше <b>{delay_minutes} "
+            f"{plural(delay_minutes, 'минуты', 'минут', 'минут')}</b>.",
+            "",
+            "Пришлите дейлик в тему «Дейлики»: фактические интервалы работы, "
+            "эффективность и выполненные задачи.",
+            "Если уже отправили сообщение, проверьте в боте, удалось ли его разобрать: /fix.",
+        ]
+    )
 
 
 HELP = (
-    "Я веду табель команды по сообщениям в темах «расписание» и «дейлики».\n\n"
-    "<b>Команды</b>\n"
-    "/today — кто сегодня на работе, кто опоздал, кто не прислал дейлик\n"
-    "/week — моя неделя: план, факт, итог\n"
-    "/who — общая картина по команде за неделю\n"
-    "/me — моя статистика за месяц\n"
-    "/absent — не приду сегодня, удалёнка, больничный, отпуск\n"
-    "/fix — что я не смог разобрать в ваших сообщениях\n\n"
-    "Если в сообщении ошибка, проще всего отредактировать его в теме: я разберу заново."
+    "⏱ <b>xTime · табель команды</b>\n"
+    "Расписание задаёт план, дейлик в конце дня — фактические часы и выполненные задачи.\n\n"
+    "<b>👥 Рабочий день</b>\n"
+    "/today — кто, где и во сколько работает сегодня\n"
+    "/absent — отсутствие, удалёнка, больничный или отпуск\n\n"
+    "<b>📊 Мои отчёты</b>\n"
+    "/week — расписание, часы и задачи на неделю\n"
+    "/me — часы, норма и итоги месяца\n"
+    "/who — итоги команды за неделю\n\n"
+    "<b>✏️ Исправления</b>\n"
+    "/fix — сообщения, в которых нужна ваша помощь\n"
+    "Ошибку можно исправить прямо в исходном сообщении в теме — табель обновится.\n\n"
+    "Выбирайте действия кнопками под полем ввода."
+)
+
+STATUS_PROMPT = (
+    "🗓 <b>Статус на сегодня</b>\n\n"
+    "Выберите, где будете работать или почему отсутствуете. Статус появится в табеле.\n"
+    "Для отпуска можно указать период."
 )

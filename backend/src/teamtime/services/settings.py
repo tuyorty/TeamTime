@@ -68,8 +68,13 @@ class BotSettings(BaseModel):
     reaction_ok: str = "👌"
     reaction_warn: str = "🤔"
     reaction_edit: str = "✍"
-    reminders_enabled: bool = False
-    reminder_hour: int = Field(21, ge=0, le=23, description="Во сколько напоминать о дейлике")
+    reminders_enabled: bool = True
+    reminder_delay_minutes: int = Field(
+        15,
+        ge=1,
+        le=240,
+        description="Через сколько минут после окончания смены напомнить о дейлике",
+    )
 
     @field_validator("reaction_ok", "reaction_warn", "reaction_edit")
     @classmethod

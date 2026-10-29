@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date
+from urllib.parse import urlsplit
+
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
     InlineKeyboardButton,
@@ -15,6 +18,7 @@ MENU = {
     "🗓 Моя неделя": "week",
     "📊 Месяц": "month",
     "👥 Сегодня": "today",
+    "📋 Итоги дня": "summary",
     "🙅 Не приду": "absent",
     "✏️ Исправить": "fix",
 }
@@ -45,6 +49,32 @@ def reply_menu() -> ReplyKeyboardMarkup:
         is_persistent=True,
         input_field_placeholder="Выберите действие или пришлите сообщение",
     )
+
+
+def dashboard_menu(
+    public_url: str, path: str, label: str, *, summary: bool = False
+) -> InlineKeyboardMarkup | None:
+    """Ссылка на соответствующий экран; итоги открываются внутри «Сегодня»."""
+    kb = InlineKeyboardBuilder()
+    if summary:
+        kb.button(text="📋 Итоги дня", callback_data=MenuCb(action="summary"))
+    if urlsplit(public_url).scheme in {"http", "https"} and urlsplit(public_url).netloc:
+        kb.button(text=label, url=public_url.rstrip("/") + path)
+    kb.adjust(1)
+    markup = kb.as_markup()
+    return markup if markup.inline_keyboard else None
+
+
+def reminder_menu(public_url: str, day: date, topic_url: str | None) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    if topic_url:
+        kb.button(text="✍️ Открыть тему «Дейлики»", url=topic_url)
+    kb.button(text="🔎 Проверить мои сообщения", callback_data=MenuCb(action="fix"))
+    dashboard = dashboard_menu(public_url, f"/?view=summary&date={day}", "📊 Итоги этого дня")
+    if dashboard:
+        kb.attach(InlineKeyboardBuilder.from_markup(dashboard))
+    kb.adjust(1)
+    return kb.as_markup()
 
 
 def status_menu() -> InlineKeyboardMarkup:

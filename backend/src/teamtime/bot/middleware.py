@@ -6,10 +6,12 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
+from aiogram.types import CallbackQuery, Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from teamtime.services.settings import load_settings
+
+from .identity import identity_for
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -26,6 +28,10 @@ class DbSessionMiddleware(BaseMiddleware):
             data["session"] = session
             data["settings"] = await load_settings(session)
             try:
+                message = event.message if isinstance(event, CallbackQuery) else event
+                user = event.from_user if isinstance(event, Message | CallbackQuery) else None
+                if isinstance(message, Message) and message.chat.type == "private" and user:
+                    await identity_for(session, user, message.chat.id)
                 result = await handler(event, data)
                 await session.commit()
                 return result
