@@ -91,18 +91,7 @@ RELEASE  := dist/xtime-$(VERSION)
 
 .PHONY: release deploy
 release: ## Собрать архив для сервера: make release [PLATFORM=linux/arm64]
-	docker buildx build --platform $(PLATFORM) --load --build-arg XTIME_VERSION=$(VERSION) \
-	  -t xtime-backend:$(VERSION) -t xtime-backend:current backend
-	docker buildx build --platform $(PLATFORM) --load -t xtime-web:$(VERSION) -t xtime-web:current frontend
-	docker buildx build --platform $(PLATFORM) --load -t xtime-db:$(VERSION) -t xtime-db:current -f deploy/db.Dockerfile deploy
-	rm -rf $(RELEASE) && mkdir -p $(RELEASE)
-	cp deploy/docker-compose.yml deploy/.env.example deploy/install.sh deploy/backup.sh deploy/README.md \
-	  deploy/xtime-tg-tunnel.service $(RELEASE)/
-	echo $(VERSION) > $(RELEASE)/VERSION
-	docker save xtime-backend:$(VERSION) xtime-backend:current xtime-web:$(VERSION) xtime-web:current \
-	  xtime-db:$(VERSION) xtime-db:current | gzip > $(RELEASE)/images.tar.gz
-	COPYFILE_DISABLE=1 tar --no-xattrs -C dist -czf $(RELEASE).tar.gz xtime-$(VERSION)
-	@echo "Готово: $(RELEASE).tar.gz ($$(du -h $(RELEASE).tar.gz | cut -f1))"
+	python3 deploy/release.py --version "$(VERSION)" --platform "$(PLATFORM)"
 
 deploy: release ## Собрать и установить на сервер: make deploy HOST=user@сервер
 	@test -n "$(HOST)" || { echo "Укажите HOST=user@сервер"; exit 1; }
