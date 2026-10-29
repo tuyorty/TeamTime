@@ -218,3 +218,55 @@ async def test_today_report(session: AsyncSession) -> None:
     assert today.counts["awaiting_daily"] == 2
     assert len(today.feed) == 2
     assert today.feed[0].summary.startswith("Расписание на 44 неделю")
+
+
+async def test_today_accounts_for_every_employee_and_returns_schedule_tasks(
+    session: AsyncSession,
+) -> None:
+    """Выходные и отсутствие расписания не теряются в сумме категорий."""
+    await f.forum(session)
+    entries = [
+        ("Иванов И.И.", "10:00 - 18:00", None, "on_site"),
+        ("Петров П.П.", "14:00 - 20:00", None, "expected_later"),
+        ("Сидоров С.С.", "08:00 - 10:00", None, "left"),
+        ("Орлов О.О.", "выходной", None, "off"),
+        ("Кузнецов К.К.", None, None, "no_plan"),
+        ("Смирнов С.С.", "10:00 - 18:00", StatusKind.REMOTE, "remote"),
+        ("Лебедев Л.Л.", "10:00 - 18:00", StatusKind.SICK, "absent"),
+        ("Волков В.В.", None, StatusKind.OFF, "off"),
+        ("Зайцев З.З.", "14:00 - 20:00", StatusKind.REMOTE, "expected_later"),
+    ]
+    for index, (name, plan, status, _) in enumerate(entries, 501):
+        employee = await f.employee(session, name, tg_id=index)
+        if plan:
+            await ingest(
+                session,
+                f.message(
+                    f.schedule_text(name, Пн=plan),
+                    author=index,
+                    thread=f.SCHEDULE_THREAD,
+                    sent_at=sent(25),
+                ),
+            )
+        if status:
+            await manual.set_status(
+                session,
+                employee_id=employee.id,
+                day=date(2026, 10, 26),
+                kind=status,
+                actor="test",
+            )
+    inactive = await f.employee(session, "Захаров З.З.")
+    inactive.is_active = False
+    await ingest(session, f.message(f.daily_text("26.10.2026")))
+    today = await reports.today_report(session, SETTINGS)
+    assert {row.employee.short_name: row.presence for row in today.rows} == {
+        name: presence for name, _, _, presence in entries
+    }
+    categories = ("on_site", "remote", "expected_later", "left", "off", "absent", "no_plan")
+    assert sum(today.counts.get(key, 0) for key in categories) == today.counts["total"] == 9
+    assert today.counts["off"] == 2
+    first = next(row for row in today.rows if row.employee.short_name == "Иванов И.И.")
+    assert first.tasks == ["задача один", "задача два"]
+    assert first.cell.fact is not None
+    assert all(item.kind.value == "schedule" for item in today.feed)

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import NotFound from "./pages/NotFound";
 
 const TodayPage = lazy(() => import("./pages/TodayPage"));
+const DaySummaryPage = lazy(() => import("./pages/DaySummaryPage"));
 const WeekPage = lazy(() => import("./pages/WeekPage"));
 const MonthPage = lazy(() => import("./pages/MonthPage"));
 const PeoplePage = lazy(() => import("./pages/PeoplePage"));
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: page(<TodayPage />) },
+      { path: "day", element: page(<DaySummaryPage />) },
       { path: "week", element: page(<WeekPage />) },
       { path: "week/:year/:week", element: page(<WeekPage />) },
       { path: "month", element: page(<MonthPage />) },

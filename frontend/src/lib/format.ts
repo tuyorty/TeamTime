@@ -109,6 +109,18 @@ export function timeOf(isoDateTime: string, timeZone?: string): string {
     : timeFmt.format(new Date(isoDateTime));
 }
 
+/** Название часового пояса и его смещение на указанную дату, включая летнее время. */
+export function timezoneLabel(timeZone: string, at: string): string {
+  const cities: Record<string, string> = {
+    "Asia/Yekaterinburg": "Екатеринбург", "Europe/Moscow": "Москва", "Europe/Samara": "Самара",
+    "Asia/Omsk": "Омск", "Asia/Novosibirsk": "Новосибирск", "Asia/Krasnoyarsk": "Красноярск",
+    "Asia/Irkutsk": "Иркутск", "Asia/Vladivostok": "Владивосток", "Europe/Kaliningrad": "Калининград",
+  };
+  const offset = new Intl.DateTimeFormat("en", { timeZone, timeZoneName: "shortOffset" })
+    .formatToParts(new Date(at)).find((part) => part.type === "timeZoneName")?.value.replace("GMT", "UTC");
+  return `${cities[timeZone] ?? timeZone} (${offset ?? timeZone})`;
+}
+
 export function dateTime(isoDateTime: string): string {
   return dateTimeFmt.format(new Date(isoDateTime));
 }

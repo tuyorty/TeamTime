@@ -21,6 +21,7 @@ export function DayStrip({
   now,
   height = 14,
   className,
+  label,
 }: {
   cell: DayCell;
   axis: Axis;
@@ -28,6 +29,7 @@ export function DayStrip({
   now?: number | null;
   height?: number;
   className?: string;
+  label?: string;
 }) {
   const span = axis.end - axis.start;
   const x = (s: number) => `${Math.max(0, Math.min(100, ((s - axis.start) / span) * 100))}%`;
@@ -47,7 +49,7 @@ export function DayStrip({
   return (
     <div
       role="img"
-      aria-label={describeCell(cell) || "нет данных"}
+      aria-label={label ?? (describeCell(cell) || "нет данных")}
       className={cn("relative w-full overflow-hidden rounded-[3px] bg-surface-2", className)}
       style={{ height }}
     >

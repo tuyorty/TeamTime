@@ -11,7 +11,7 @@ from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -440,19 +440,21 @@ async def month_report(
 
 def _presence(cell: DayCell, now_sec: int) -> str:
     status = cell.status.kind if cell.status else None
+    if status is StatusKind.OFF:
+        return "off"
     if status is not None and status.cancels_plan:
         return "absent"
     plan = cell.result.plan
-    if status is StatusKind.REMOTE:
-        return "remote"
+    if cell.result.state is DayState.OFF or (plan and plan.kind is PlanDayKind.OFF):
+        return "off"
     if plan is None or not plan.has_time or cell.result.planned is None:
-        return "no_plan"
+        return "remote" if status is StatusKind.REMOTE else "no_plan"
     assert plan.start is not None
     assert plan.end_abs is not None
     if now_sec < plan.start:
         return "expected_later"
-    if now_sec <= plan.end_abs:
-        return "on_site"
+    if now_sec < plan.end_abs:
+        return "remote" if status is StatusKind.REMOTE else "on_site"
     return "left"
 
 
@@ -471,12 +473,15 @@ def feed_summary(row: ParseResultRow) -> str:
     return "Сообщение"
 
 
-async def feed(session: AsyncSession, limit: int = 20) -> list[FeedItem]:
+async def feed(
+    session: AsyncSession, limit: int = 20, kind: MessageKind | None = None
+) -> list[FeedItem]:
     rows = await session.execute(
         select(ParseResultRow, RawMessageVersion, RawMessage)
         .join(RawMessageVersion, ParseResultRow.message_version_id == RawMessageVersion.id)
         .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
         .where(ParseResultRow.is_latest, ParseResultRow.kind != MessageKind.UNKNOWN)
+        .where(ParseResultRow.kind == kind if kind is not None else true())
         .order_by(
             func.coalesce(RawMessageVersion.edited_at, RawMessage.sent_at).desc(),
             ParseResultRow.id.desc(),
@@ -526,7 +531,11 @@ async def today_report(
         )
         rows.append(
             TodayRow(
-                employee=brief(e), cell=cell_out(cell), presence=presence, daily_overdue=overdue
+                employee=brief(e),
+                cell=cell_out(cell),
+                presence=presence,
+                daily_overdue=overdue,
+                tasks=[t.text for t in cell.plan.tasks] if cell.plan else [],
             )
         )
         counts[presence] += 1
@@ -534,6 +543,7 @@ async def today_report(
         counts["dailies"] += 1 if cell.daily else 0
         counts["late"] += 1 if cell.result.late else 0
         counts["awaiting_daily"] += 1 if cell.result.planned and cell.daily is None else 0
+    counts["total"] = len(employees)
     worked = sum(cells[(e.id, day)].result.worked or 0 for e in employees)
     pulse = [
         day_totals(d, [cells[(e.id, d)] for e in employees])
@@ -545,7 +555,7 @@ async def today_report(
         rows=rows,
         counts=dict(counts),
         worked_sec=worked,
-        feed=await feed(session),
+        feed=await feed(session, kind=MessageKind.SCHEDULE),
         week_pulse=pulse,
     )
 

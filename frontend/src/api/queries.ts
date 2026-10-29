@@ -32,6 +32,14 @@ export const useMeta = () =>
 export const useToday = () =>
   useQuery({ queryKey: keys.today, queryFn: () => api.get<Today>("/today"), refetchInterval: 60_000 });
 
+export const useDaySummary = (day: string | undefined) =>
+  useQuery({
+    queryKey: ["day-summary", day],
+    queryFn: () => api.get<Today>(`/today?day=${day}`),
+    enabled: !!day,
+    refetchInterval: 60_000,
+  });
+
 export const useWeek = (y: number, w: number) =>
   useQuery({
     queryKey: keys.week(y, w),

@@ -1,4 +1,4 @@
-import { count, durationWords, hm, isoWeek, plural, rangeShort, shiftWeek, span } from "./format";
+import { count, durationWords, hm, isoWeek, plural, rangeShort, shiftWeek, span, timezoneLabel } from "./format";
 
 describe("hm", () => {
   it.each([
@@ -36,6 +36,11 @@ describe("durationWords", () => {
 });
 
 describe("даты", () => {
+  it("явно показывает город и UTC, учитывая смещение на выбранную дату", () => {
+    expect(timezoneLabel("Asia/Yekaterinburg", "2026-10-29T15:00:00Z")).toBe("Екатеринбург (UTC+5)");
+    expect(timezoneLabel("Europe/Berlin", "2020-01-15T12:00:00Z")).toBe("Europe/Berlin (UTC+1)");
+    expect(timezoneLabel("Europe/Berlin", "2020-07-15T12:00:00Z")).toBe("Europe/Berlin (UTC+2)");
+  });
   it("ISO-неделя", () => {
     expect(isoWeek(new Date(2026, 9, 26))).toEqual({ year: 2026, week: 44 });
     expect(isoWeek(new Date(2027, 0, 1))).toEqual({ year: 2026, week: 53 });

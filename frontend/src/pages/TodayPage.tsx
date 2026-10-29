@@ -1,287 +1,458 @@
-import { CheckCircle2, CircleAlert, Clock3, MessageSquareText, PencilLine } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleAlert, Clock3, ListChecks, MapPin, PencilLine, Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
-import { useToday } from "@/api/queries";
-import type { FeedItem, Today, TodayRow } from "@/api/types";
+import { useMeta, useToday } from "@/api/queries";
+import type { DayCell, FeedItem, Today, TodayRow } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
+import { TaskList } from "@/components/domain/TaskList";
 import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
-import { axisFor } from "@/lib/axis";
 import { EmptyState, ErrorState } from "@/components/domain/feedback";
 import { STATUS } from "@/components/domain/states";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Segmented } from "@/components/ui/segmented";
+import { axisFor } from "@/lib/axis";
 import { cn } from "@/lib/cn";
-import { WEEKDAYS_LONG, WEEKDAYS_SHORT, clock, count, dayMonth, hm, relative, weekday } from "@/lib/format";
+import { WEEKDAYS_LONG, clock, count, dayMonth, relative, timezoneLabel, weekday } from "@/lib/format";
 import { useFlashed } from "@/lib/realtime";
+import { DaySummary } from "./DaySummaryPage";
 
-const PRESENCE: Record<TodayRow["presence"], { label: string; order: number }> = {
-  on_site: { label: "на месте по плану", order: 0 },
-  remote: { label: "на удалёнке", order: 1 },
-  expected_later: { label: "придёт позже", order: 2 },
-  left: { label: "план закончился", order: 3 },
-  no_plan: { label: "без плана", order: 4 },
-  absent: { label: "отсутствует", order: 5 },
+type Presence = TodayRow["presence"];
+const PRESENCE: Record<Presence, { label: string; order: number; color: string }> = {
+  on_site: { label: "В офисе", order: 0, color: "bg-accent" },
+  remote: { label: "На удалёнке", order: 1, color: "bg-sky-500" },
+  expected_later: { label: "Начнут позже", order: 2, color: "bg-deviation" },
+  left: { label: "Закончили", order: 3, color: "bg-ink-3" },
+  off: { label: "Выходной", order: 4, color: "bg-ink-3" },
+  absent: { label: "Отсутствуют", order: 5, color: "bg-absence" },
+  no_plan: { label: "Нет расписания", order: 6, color: "bg-deviation" },
 };
 
-function presenceText(r: TodayRow): string {
-  const c = r.cell;
-  if (r.presence === "absent" && c.status) return STATUS[c.status].label;
-  if (r.presence === "expected_later" && c.plan) return `с ${clock(c.plan.start)}`;
-  if (r.presence === "on_site" && c.plan) return `до ${clock(c.plan.end)}`;
-  if (r.presence === "no_plan" && c.plan?.kind === "note") return `«${c.plan.note}»`;
-  return PRESENCE[r.presence].label;
+function presenceText(row: TodayRow): string {
+  if (row.cell.status && row.presence === "absent") return STATUS[row.cell.status].label;
+  if (row.presence === "no_plan" && row.cell.plan?.note) return row.cell.plan.note;
+  if (row.presence === "expected_later") return `Начнёт в ${clock(row.cell.plan?.start)}`;
+  if (row.presence === "left") return `До ${clock(row.cell.plan?.end)} по расписанию`;
+  return PRESENCE[row.presence].label;
+}
+
+/** На рабочем экране показываем расписание, не подменяя его вечерним отчётом. */
+function scheduleCell(row: TodayRow): DayCell {
+  return {
+    ...row.cell,
+    fact: null,
+    late_sec: null,
+    early_leave_sec: null,
+    undertime_sec: null,
+    state:
+      row.presence === "off"
+        ? "off"
+        : row.presence === "absent"
+          ? "absence"
+          : row.cell.plan?.kind === "work"
+            ? "pending"
+            : "unplanned",
+  };
 }
 
 export default function TodayPage() {
   const { data, error, refetch } = useToday();
-  const [selected, setSelected] = useState<DayRef | null>(null);
-
-  if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
-  if (!data) return <TodaySkeleton />;
-
-  const wd = weekday(data.date);
-  const dateLabel = `${WEEKDAYS_LONG[wd]}, ${dayMonth(data.date)}`;
-  return (
-    <div className="grid gap-5">
-      <PageHeader
-        title="Сегодня"
-        subtitle={
-          <>
-            {dateLabel[0]!.toUpperCase() + dateLabel.slice(1)}, сейчас <span className="tnum">{clock(data.now_sec)}</span>.
-            Факт появляется, когда приходит дейлик.
-          </>
-        }
-      />
-      <KeyNumbers data={data} />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <TeamDay data={data} onOpen={setSelected} />
-        <div className="grid content-start gap-5">
-          <AwaitingDaily data={data} />
-          <Feed items={data.feed} />
-        </div>
-      </div>
-      <DayDetailSheet value={selected} onClose={() => setSelected(null)} />
-    </div>
-  );
-}
-
-function KeyNumbers({ data }: { data: Today }) {
-  const c = data.counts;
-  const planned = c.planned ?? 0;
-  const items = [
-    { label: "по плану сейчас на месте", value: c.on_site ?? 0, strong: true },
-    { label: "придут позже", value: c.expected_later ?? 0 },
-    { label: "на удалёнке", value: c.remote ?? 0 },
-    { label: "отсутствуют", value: c.absent ?? 0, tone: (c.absent ?? 0) > 0 ? "text-absence-ink" : "" },
-    { label: `дейликов из ${planned}`, value: c.dailies ?? 0 },
-    { label: "опоздали по дейликам", value: c.late ?? 0, tone: (c.late ?? 0) > 0 ? "text-late-ink" : "" },
-  ];
-  return (
-    <section aria-label="Ключевые числа дня" className="grid grid-cols-2 gap-y-4 rounded-lg border border-line bg-surface px-1 py-3 sm:grid-cols-3 xl:flex">
-      {items.map((it) => (
-        <div key={it.label} className="flex flex-1 flex-col gap-0.5 border-line px-4 xl:min-w-[9.5rem] xl:[&:not(:first-child)]:border-l">
-          <span className={cn("font-display tnum leading-none", it.strong ? "text-[34px] font-semibold" : "text-[26px] font-medium", it.tone)}>
-            {it.value}
-          </span>
-          <span className="text-[12px] text-ink-2">{it.label}</span>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function TeamRow({ row, axis, now, onOpen }: { row: TodayRow; axis: ReturnType<typeof axisFor>; now: number; onOpen: () => void }) {
-  const flashed = useFlashed(row.employee.id, row.cell.date);
-  const c = row.cell;
-  return (
-    <li className={cn(flashed && "flash")}>
-      <button type="button" onClick={onOpen} className="grid w-full grid-cols-[minmax(9rem,12rem)_1fr] items-center gap-x-4 gap-y-1 px-4 py-2.5 text-left hover:bg-surface-2/60 max-sm:grid-cols-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <Avatar employee={row.employee} size={26} />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-medium">{row.employee.short_name}</span>
-            <span className={cn("block truncate text-[12px]", row.presence === "absent" ? "text-absence-ink" : "text-ink-3")}>
-              {presenceText(row)}
-            </span>
-          </span>
-        </span>
-        <span className="grid gap-1">
-          <DayStrip cell={c} axis={axis} now={now} height={18} />
-          {c.fact ? (
-            <span className="flex gap-2 text-[12px] text-ink-2 tnum">
-              <CheckCircle2 className="size-3.5 text-accent" /> дейлик: {hm(c.fact.worked_sec)}
-              {c.fact.efficiency !== null && c.fact.efficiency !== undefined ? `, ${c.fact.efficiency}%` : ""}
-              {c.late_sec ? <span className="font-medium text-late-ink">опоздание {hm(c.late_sec)}</span> : null}
-            </span>
-          ) : null}
-        </span>
-      </button>
-    </li>
-  );
-}
-
-function TeamDay({ data, onOpen }: { data: Today; onOpen: (r: DayRef) => void }) {
+  const meta = useMeta().data;
+  const [search, setSearch] = useSearchParams();
+  const view = search.get("view") === "summary" ? "summary" : "work";
+  const [detail, setDetail] = useState<DayRef | null>(null);
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<Presence | null>(null);
   const rows = useMemo(
     () =>
-      [...data.rows].sort(
+      [...(data?.rows ?? [])].sort(
         (a, b) =>
           PRESENCE[a.presence].order - PRESENCE[b.presence].order ||
           (a.cell.plan?.start ?? 86400) - (b.cell.plan?.start ?? 86400) ||
           a.employee.short_name.localeCompare(b.employee.short_name, "ru"),
       ),
-    [data.rows],
+    [data?.rows],
   );
-  const axis = axisFor(data.rows.map((r) => r.cell), { start: 8 * 3600, end: 22 * 3600 });
-  if (!rows.length) {
-    return (
-      <Panel title="День команды">
-        <EmptyState title="Сотрудников пока нет">Добавьте их в админке, и здесь появится план на день.</EmptyState>
-      </Panel>
-    );
-  }
-  return (
-    <Panel
-      title="День команды"
-      description="Контур — план, заливка — факт из дейлика, вертикальная черта — сейчас"
-      bodyClassName="px-0 pb-1"
-    >
-      <div className="grid grid-cols-[minmax(9rem,12rem)_1fr] gap-x-4 px-4 pb-1 max-sm:hidden">
-        <span />
-        <AxisTicks axis={axis} />
-      </div>
-      <ul className="divide-y divide-line border-t border-line">
-        {rows.map((r) => (
-          <TeamRow key={r.employee.id} row={r} axis={axis} now={data.now_sec} onOpen={() => onOpen({ employee: r.employee, cell: r.cell })} />
-        ))}
-      </ul>
-      <WeekStrip data={data} />
-    </Panel>
-  );
-}
 
-/** Неделя одной строкой: сколько часов набрано по дням и сколько дейликов пришло. */
-function WeekStrip({ data }: { data: Today }) {
-  // Не меньше рабочего дня, чтобы один короткий день не выглядел «полным».
-  const max = Math.max(8 * 3600, ...data.week_pulse.map((d) => d.worked_sec));
+  if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (!data) return <TodaySkeleton />;
+  const visible = rows.filter((row) => !filter || row.presence === filter);
+  const selected = visible.find((row) => row.employee.id === employeeId) ?? visible[0];
+  const axis = axisFor(rows.map(scheduleCell), { start: 8 * 3600, end: 22 * 3600 });
+
   return (
-    <div className="mt-1 border-t border-line px-4 pt-3 pb-3">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold">Эта неделя</h3>
-        <Link to="/week" className="text-[12px] text-accent-ink hover:underline">
-          Открыть табель
-        </Link>
-      </div>
-      <div className="grid grid-cols-7 gap-2">
-        {data.week_pulse.map((d, i) => (
-          <div key={d.date} className="grid gap-1 text-center">
-            <div className="mx-auto flex h-12 w-2.5 items-end overflow-hidden rounded-full bg-surface-2" aria-hidden>
-              <div
-                className={cn("w-full rounded-full", d.date === data.date ? "bg-accent" : "bg-accent/70")}
-                style={{ height: `${(d.worked_sec / max) * 100}%` }}
-              />
+    <div className="grid grid-cols-1 gap-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-[32px] font-semibold leading-tight tracking-tight sm:text-[40px]">
+            Сегодня <span className="text-ink-3">·</span> {dayMonth(data.date)}
+          </h1>
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-2">
+            <span className="capitalize">{WEEKDAYS_LONG[weekday(data.date)]}</span>
+            <span className="text-line-strong">/</span>
+            <Clock3 className="size-3.5" />
+            <span className="tnum">{clock(data.now_sec)}</span>
+            {meta ? (
+              <span className="text-ink-3" title={`Часовой пояс расписания: ${meta.timezone}`}>
+                {timezoneLabel(meta.timezone, meta.now)}
+              </span>
+            ) : null}
+          </p>
+        </div>
+        <Segmented
+          label="Режим Сегодня"
+          value={view}
+          onChange={(next) =>
+            setSearch((previous) => {
+              const result = new URLSearchParams(previous);
+              if (next === "summary") result.set("view", "summary");
+              else result.delete("view");
+              return result;
+            })
+          }
+          options={[
+            {
+              value: "work",
+              label: (
+                <>
+                  <Users /> Рабочий день
+                </>
+              ),
+            },
+            {
+              value: "summary",
+              label: (
+                <>
+                  <CalendarDays /> Итоги дня
+                </>
+              ),
+            },
+          ]}
+          className="[&_button]:h-9 [&_button]:px-4 [&_button]:text-[13px]"
+        />
+      </header>
+      {view === "summary" ? (
+        <DaySummary />
+      ) : (
+        <>
+          <KeyNumbers data={data} filter={filter} onFilter={setFilter} />
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
+            <div className="grid min-w-0 gap-5">
+              <Panel
+                title="День команды"
+                description="Время и место работы — по расписанию команды"
+                actions={
+                  filter ? (
+                    <Button size="sm" variant="ghost" onClick={() => setFilter(null)}>
+                      Показать всех
+                    </Button>
+                  ) : (
+                    <Badge>{count(rows.length, ["сотрудник", "сотрудника", "сотрудников"])}</Badge>
+                  )
+                }
+                bodyClassName="px-0 pb-1"
+              >
+                {visible.length ? (
+                  <>
+                    <div className="grid grid-cols-[minmax(10rem,13rem)_1fr_5.5rem] gap-3 px-4 pb-2 max-sm:hidden">
+                      <span className="text-[11px] text-ink-3">Сотрудник</span>
+                      <AxisTicks axis={axis} />
+                      <span />
+                    </div>
+                    <ul aria-label="Расписание команды" className="divide-y divide-line border-t border-line">
+                      {visible.map((row) => (
+                        <TeamRow
+                          key={row.employee.id}
+                          row={row}
+                          axis={axis}
+                          now={data.now_sec}
+                          selected={selected?.employee.id === row.employee.id}
+                          onSelect={() => setEmployeeId(row.employee.id)}
+                          onDetails={() => setDetail({ employee: row.employee, cell: row.cell })}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <div className="p-4">
+                    <EmptyState title={rows.length ? "Здесь пока никого" : "Сотрудников пока нет"}>
+                      {rows.length
+                        ? "Выберите другую категорию или покажите всю команду."
+                        : "Добавьте сотрудников в админке."}
+                    </EmptyState>
+                  </div>
+                )}
+                <p className="px-4 pt-3 pb-2 text-[12px] text-ink-3">
+                  Нажмите на сотрудника, чтобы увидеть его задачи ниже.
+                </p>
+              </Panel>
+              {selected ? <EmployeeTasks row={selected} /> : null}
             </div>
-            <span className={cn("text-[11px] text-ink-3", d.date === data.date && "font-semibold text-ink")}>
-              {WEEKDAYS_SHORT[i]}
-            </span>
-            <span className="text-[11px] text-ink-2 tnum">{d.worked_sec ? hm(d.worked_sec) : "—"}</span>
+            <aside className="grid min-w-0 content-start gap-5">
+              <Upcoming data={data} />
+              <ScheduleFeed items={data.feed} />
+            </aside>
           </div>
-        ))}
-      </div>
+          <DayDetailSheet value={detail} onClose={() => setDetail(null)} />
+        </>
+      )}
     </div>
   );
 }
 
-function AwaitingDaily({ data }: { data: Today }) {
-  const waiting = data.rows.filter((r) => r.cell.plan?.kind === "work" && !r.cell.fact && r.presence !== "absent");
-  const overdue = waiting.filter((r) => r.daily_overdue);
+function KeyNumbers({
+  data,
+  filter,
+  onFilter,
+}: {
+  data: Today;
+  filter: Presence | null;
+  onFilter: (value: Presence | null) => void;
+}) {
   return (
-    <Panel
-      title="Ждём дейлик"
-      description={waiting.length ? `${count(waiting.length, ["человек", "человека", "человек"])} с планом на сегодня` : undefined}
-    >
-      {waiting.length ? (
-        <ul className="grid gap-1.5">
-          {waiting.map((r) => (
-            <li key={r.employee.id} className="flex items-center gap-2 text-[13px]">
-              <Avatar employee={r.employee} size={20} />
-              <span className="min-w-0 truncate">{r.employee.short_name}</span>
-              <span className="ml-auto flex items-center gap-1 text-[12px] text-ink-3 tnum">
-                {r.daily_overdue ? (
-                  <Badge tone="deviation">
-                    <Clock3 /> план закончился в {clock(r.cell.plan?.end)}
-                  </Badge>
-                ) : (
-                  <>до {clock(r.cell.plan?.end)}</>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[13px] text-ink-2">Все, у кого был план, уже прислали дейлик.</p>
-      )}
-      {overdue.length ? (
-        <p className="mt-3 text-[12px] text-ink-3">
-          Напоминания можно включить в настройках бота.
-        </p>
-      ) : null}
-    </Panel>
+    <section aria-label="Ключевые числа дня" className="overflow-hidden rounded-lg border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <button
+          type="button"
+          onClick={() => onFilter(null)}
+          className="flex items-center gap-2 text-[14px] font-semibold"
+        >
+          <Users className="size-4 text-ink-3" /> Вся команда{" "}
+          <span className="tnum text-accent-ink">{data.rows.length}</span>
+        </button>
+        <span className="text-[12px] text-ink-3">Сейчас по расписанию</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
+        {(Object.entries(PRESENCE) as [Presence, (typeof PRESENCE)[Presence]][]).map(([key, item]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={filter === key}
+            onClick={() => onFilter(filter === key ? null : key)}
+            className={cn(
+              "grid min-h-23 content-center gap-2 border-line px-4 py-3 text-left transition-colors hover:bg-surface-2",
+              filter === key && "bg-accent/8 ring-1 ring-inset ring-accent/40",
+            )}
+          >
+            <span className="font-display text-[30px] font-semibold leading-none tnum">{data.counts[key] ?? 0}</span>
+            <span className="flex items-center gap-1.5 text-[12px] text-ink-2">
+              <span className={cn("size-1.5 shrink-0 rounded-full", item.color)} />
+              {item.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
-function FeedRow({ item }: { item: FeedItem }) {
-  const problem = item.status !== "ok";
+function TeamRow({
+  row,
+  axis,
+  now,
+  selected,
+  onSelect,
+  onDetails,
+}: {
+  row: TodayRow;
+  axis: ReturnType<typeof axisFor>;
+  now: number;
+  selected: boolean;
+  onSelect: () => void;
+  onDetails: () => void;
+}) {
+  const flashed = useFlashed(row.employee.id, row.cell.date);
+  const timed = row.cell.plan?.kind === "work" && row.presence !== "absent" && row.presence !== "off";
   return (
-    <li className="flex gap-2.5 py-2">
-      <span className="mt-0.5">
-        {item.employee ? (
-          <Avatar employee={item.employee} size={22} />
-        ) : (
-          <span className="flex size-[22px] items-center justify-center rounded-full bg-surface-2 text-ink-3">
-            <MessageSquareText className="size-3.5" />
-          </span>
+    <li
+      className={cn(
+        "flex items-center gap-1 pr-3 transition-colors",
+        selected ? "bg-accent/6" : "hover:bg-surface-2/60",
+        flashed && "flash",
+      )}
+    >
+      <button
+        type="button"
+        aria-label={`Задачи: ${row.employee.short_name}`}
+        aria-pressed={selected}
+        onClick={onSelect}
+        className={cn(
+          "grid min-w-0 flex-1 grid-cols-[minmax(10rem,13rem)_1fr] items-center gap-x-3 gap-y-2 border-l-2 px-3.5 py-3 text-left max-sm:grid-cols-1",
+          selected ? "border-accent" : "border-transparent",
         )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] leading-snug">
-          <span className="font-medium">{item.employee?.short_name ?? item.author_name}</span>{" "}
-          <span className="text-ink-2">{item.summary}</span>
-        </p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-3">
-          {relative(item.at)}
-          {item.edited ? (
-            <span className="inline-flex items-center gap-0.5">
-              <PencilLine className="size-3" /> правка
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          <Avatar employee={row.employee} size={32} />
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold">{row.employee.short_name}</span>
+            <span className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-3">
+              <span className={cn("size-1.5 shrink-0 rounded-full", PRESENCE[row.presence].color)} />
+              {presenceText(row)}
             </span>
-          ) : null}
-          {problem && item.resolution === "pending" ? (
-            <Link to="/inbox" className="inline-flex items-center gap-0.5 text-deviation-ink hover:underline">
-              <CircleAlert className="size-3" /> в инбоксе
-            </Link>
-          ) : null}
-        </p>
-      </div>
+          </span>
+        </span>
+        <span className="grid min-w-0 gap-1.5">
+          {timed ? (
+            <>
+              <span className="flex flex-wrap items-center gap-x-2 text-[12px]">
+                <span className="font-medium tnum">
+                  {row.cell.plan!.intervals.map(([a, b]) => `${clock(a)}–${clock(b)}`).join(" · ")}
+                </span>
+                <span className="ml-auto text-[11px] text-ink-3">
+                  {row.cell.status === "remote" ? "Удалённо" : "Офис"}
+                </span>
+              </span>
+              <DayStrip
+                label="Рабочее время по расписанию"
+                cell={scheduleCell(row)}
+                axis={axis}
+                now={now}
+                height={10}
+              />
+            </>
+          ) : (
+            <span className="flex min-h-8 items-center rounded-md bg-surface-2/60 px-2 text-[12px] text-ink-2">
+              {row.presence === "off"
+                ? "Сегодня не работает"
+                : row.cell.status_note || row.cell.plan?.note || presenceText(row)}
+            </span>
+          )}
+        </span>
+      </button>
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={`Подробнее: ${row.employee.short_name}`}
+        onClick={onDetails}
+        className="shrink-0 text-[11px]"
+      >
+        Подробнее
+      </Button>
     </li>
   );
 }
 
-function Feed({ items }: { items: FeedItem[] }) {
+export function EmployeeTasks({ row }: { row: TodayRow }) {
   return (
-    <Panel title="Последние сообщения" description="Обновляется сама, без перезагрузки">
-      {items.length ? (
-        <ul className="-my-2 divide-y divide-line">
-          {items.slice(0, 8).map((it) => (
-            <FeedRow key={it.id} item={it} />
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          <ListChecks className="size-4 text-accent-ink" /> Задачи · {row.employee.short_name}
+        </span>
+      }
+      description="Из расписания на текущую неделю"
+      actions={
+        <Link
+          to={`/people/${row.employee.id}`}
+          className="flex items-center gap-1 text-[12px] text-accent-ink hover:underline"
+        >
+          Профиль <ArrowRight className="size-3.5" />
+        </Link>
+      }
+    >
+      {row.cell.plan?.note ? (
+        <p className="mb-3 rounded-md bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
+          <span className="font-medium text-ink">На сегодня: </span>
+          {row.cell.plan.note}
+        </p>
+      ) : null}
+      {row.tasks?.length ? (
+        <TaskList key={row.employee.id} tasks={row.tasks} numbered label="Задачи выбранного сотрудника" />
+      ) : (
+        <p className="py-2 text-[13px] text-ink-2">Задачи в расписании не указаны.</p>
+      )}
+    </Panel>
+  );
+}
+
+function Upcoming({ data }: { data: Today }) {
+  const changes = data.rows
+    .flatMap((row) => {
+      if (!row.cell.plan || row.cell.plan.kind !== "work" || row.presence === "absent" || row.presence === "off")
+        return [];
+      return [
+        { row, time: row.cell.plan.start, start: true },
+        { row, time: row.cell.plan.end, start: false },
+      ].filter((event) => event.time !== null && event.time! > data.now_sec);
+    })
+    .sort((a, b) => a.time! - b.time! || a.row.employee.short_name.localeCompare(b.row.employee.short_name, "ru"))
+    .slice(0, 6);
+  return (
+    <Panel title="Дальше по расписанию" description="Ближайшие начала и окончания работы">
+      {changes.length ? (
+        <ul className="grid gap-3.5">
+          {changes.map(({ row, time, start }) => (
+            <li key={`${row.employee.id}-${start}`} className="flex items-start gap-2.5">
+              <span className="mt-0.5 rounded bg-surface-2 px-1.5 py-0.5 text-[12px] font-medium tnum">
+                {clock(time)}
+              </span>
+              <div className="min-w-0">
+                <Link
+                  to={`/people/${row.employee.id}`}
+                  className="block truncate text-[12px] font-medium hover:text-accent-ink"
+                >
+                  {row.employee.short_name}
+                </Link>
+                <span className="text-[11px] text-ink-3">
+                  {start ? (row.cell.status === "remote" ? "Начнёт удалённо" : "Начнёт в офисе") : "Закончит работу"}
+                </span>
+              </div>
+            </li>
           ))}
         </ul>
       ) : (
-        <p className="text-[13px] text-ink-2">
-          Сообщений ещё не было. Привяжите темы командой <code className="rounded bg-surface-2 px-1">/bind</code> в чате.
-        </p>
+        <p className="text-[13px] text-ink-2">На сегодня больше нет запланированных изменений.</p>
+      )}
+      <p className="mt-4 flex items-start gap-1.5 border-t border-line pt-3 text-[11px] text-ink-3">
+        <MapPin className="mt-0.5 size-3.5 shrink-0" /> Присутствие определяется расписанием.
+      </p>
+    </Panel>
+  );
+}
+
+function ScheduleFeed({ items }: { items: FeedItem[] }) {
+  return (
+    <Panel title="Изменения расписания">
+      {items.length ? (
+        <ul className="divide-y divide-line">
+          {items.slice(0, 5).map((item) => (
+            <li key={item.id} className="flex gap-2 py-2 first:pt-0">
+              <Avatar
+                employee={
+                  item.employee ?? {
+                    id: 0,
+                    short_name: item.author_name,
+                    full_name: item.author_name,
+                    position: "",
+                    color: "",
+                    is_active: true,
+                    avatar_url: "",
+                  }
+                }
+                size={24}
+              />
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium">{item.employee?.short_name ?? item.author_name}</p>
+                <p className="text-[12px] text-ink-2">{item.summary}</p>
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-ink-3">
+                  {relative(item.at)}
+                  {item.edited ? <PencilLine className="size-3" /> : null}
+                  {item.resolution === "pending" ? (
+                    <Link to="/inbox" aria-label="Проблема в инбоксе">
+                      <CircleAlert className="size-3 text-deviation-ink" />
+                    </Link>
+                  ) : null}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-ink-2">Новых расписаний пока нет.</p>
       )}
     </Panel>
   );
@@ -290,11 +461,11 @@ function Feed({ items }: { items: FeedItem[] }) {
 function TodaySkeleton() {
   return (
     <div className="grid gap-5" aria-busy>
-      <Skeleton className="h-9 w-48" />
-      <Skeleton className="h-20 w-full" />
-      <div className="grid gap-5 xl:grid-cols-[1fr_22rem]">
+      <Skeleton className="h-20 w-80" />
+      <Skeleton className="h-36" />
+      <div className="grid gap-5 xl:grid-cols-[1fr_19rem]">
         <Skeleton className="h-96" />
-        <Skeleton className="h-96" />
+        <Skeleton className="h-80" />
       </div>
     </div>
   );
