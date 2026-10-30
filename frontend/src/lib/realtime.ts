@@ -61,11 +61,13 @@ const INVALIDATE: Record<string, string[]> = {
   "message.ingested": ["today", "day-summary", "week", "month", "plans", "employee", "calendar", "inbox", "search"],
   "daily.changed": ["today", "day-summary", "week", "month", "employee", "calendar", "inbox", "audit"],
   "plan.changed": ["today", "day-summary", "week", "month", "plans", "employee", "calendar", "audit"],
+  "tasks.changed": ["tasks", "audit"],
+  "status_request.changed": ["status-requests", "today", "day-summary", "week", "month", "employee", "audit"],
   "status.changed": ["today", "day-summary", "week", "month", "employee", "calendar", "audit"],
   "employee.changed": ["employees", "employee", "week", "month", "today", "day-summary", "audit"],
   "identity.changed": ["identities", "employee", "inbox", "audit"],
   "inbox.changed": ["inbox", "today", "day-summary", "week", "month", "plans", "employee", "calendar", "audit"],
-  "settings.changed": ["meta", "settings", "week", "month", "today", "day-summary", "audit"],
+  "settings.changed": ["meta", "settings", "calculation-history", "week", "month", "today", "day-summary", "audit"],
 };
 
 function describe(event: RealtimeEvent): string | null {

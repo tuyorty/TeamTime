@@ -14,6 +14,7 @@ import { Panel } from "@/components/ui/panel";
 import { Segmented } from "@/components/ui/segmented";
 import { cn } from "@/lib/cn";
 import { dayMonth, ddmm, parseDate, timeOf } from "@/lib/format";
+import { DemoStatusRequest } from "./DemoStatusRequest";
 
 type Topic = "schedule" | "daily";
 
@@ -131,6 +132,7 @@ export default function EmulatorPage() {
         title="Эмулятор чата"
         subtitle={`Напишите сообщение в тему так, как его написал бы сотрудник. Бот разберёт его тем же кодом, а таблица обновится сама. В демо сегодня ${meta ? dayMonth(meta.today) : "…"}.`}
       />
+      {meta?.demo && meta.is_admin ? <DemoStatusRequest today={meta.today} /> : null}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <Panel title="Новое сообщение">
           <div className="grid gap-3">

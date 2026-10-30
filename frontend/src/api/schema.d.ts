@@ -624,6 +624,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/status-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Заявки сотрудников на статусы */
+        get: operations["requests_api_v1_admin_status_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/status-requests/{request_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Согласовать или отклонить заявку */
+        post: operations["decide_status_api_v1_admin_status_requests__request_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notifications/{employee_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Личные настройки уведомлений */
+        get: operations["notification_preferences_api_v1_admin_notifications__employee_id__get"];
+        /** Изменить уведомления сотрудника */
+        put: operations["update_notifications_api_v1_admin_notifications__employee_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/calculation-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сохранённые версии правил, норм и ставок */
+        get: operations["calculation_history_api_v1_admin_calculation_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Состояние бота, доставки, личек и бэкапа */
+        get: operations["system_state_api_v1_admin_system_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/demo/status-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Создать в демо заявку, аналогичную /absent */
+        post: operations["request_demo_status_api_v1_demo_status_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/demo/messages": {
         parameters: {
             query?: never;
@@ -792,6 +895,23 @@ export interface components {
              */
             topics: number;
         };
+        /** DMOut */
+        DMOut: {
+            /** Employee Id */
+            employee_id: number;
+            /** Name */
+            name: string;
+            /** Ready */
+            ready: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Delay Minutes */
+            delay_minutes: number;
+            /** Quiet Start */
+            quiet_start: number | null;
+            /** Quiet End */
+            quiet_end: number | null;
+        };
         /** DailyIn */
         DailyIn: {
             /**
@@ -879,6 +999,40 @@ export interface components {
             /** Absence Count */
             absence_count: number;
         };
+        /** DecisionIn */
+        DecisionIn: {
+            /** Accepted */
+            accepted: boolean;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** DeliveryOut */
+        DeliveryOut: {
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Employee Id */
+            employee_id: number | null;
+            /** Raw Message Id */
+            raw_message_id: number | null;
+            /** State */
+            state: string;
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Error Code */
+            error_code: string | null;
+        };
         /** DemoMessageIn */
         DemoMessageIn: {
             /** Telegram User Id */
@@ -912,6 +1066,33 @@ export interface components {
             employee: string | null;
             /** Issues */
             issues: components["schemas"]["IssueOut"][];
+        };
+        /** DemoStatusIn */
+        DemoStatusIn: {
+            /** Employee Id */
+            employee_id: number;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** @default remote */
+            kind: components["schemas"]["StatusKind"] | null;
+            /**
+             * Note
+             * @default Пример заявки из эмулятора
+             */
+            note: string;
+        };
+        /** DemoStatusOut */
+        DemoStatusOut: {
+            /** Request Id */
+            request_id: number;
         };
         /** Deviation */
         Deviation: {
@@ -955,6 +1136,7 @@ export interface components {
         /** EmployeeDetailOut */
         EmployeeDetailOut: {
             employee: components["schemas"]["EmployeeOut"];
+            upcoming_absence?: components["schemas"]["UpcomingAbsenceOut"] | null;
             /** Identities */
             identities: components["schemas"]["IdentityOut"][];
             /**
@@ -1016,6 +1198,18 @@ export interface components {
              */
             about: string;
             /**
+             * Expertise
+             * @default
+             */
+            expertise: string;
+            /**
+             * Help With
+             * @default
+             */
+            help_with: string;
+            /** Terms Effective From */
+            terms_effective_from?: string | null;
+            /**
              * Avatar Url
              * @default
              */
@@ -1073,6 +1267,16 @@ export interface components {
             phone: string;
             /** About */
             about: string;
+            /**
+             * Expertise
+             * @default
+             */
+            expertise: string;
+            /**
+             * Help With
+             * @default
+             */
+            help_with: string;
         };
         /** FactOut */
         FactOut: {
@@ -1145,6 +1349,17 @@ export interface components {
             occurrences: components["schemas"]["HighlightOccurrence"][];
             /** Total Occurrences */
             total_occurrences: number;
+        };
+        /** HistoryOut */
+        HistoryOut: {
+            /** Calculations */
+            calculations: {
+                [key: string]: unknown;
+            }[];
+            /** Terms */
+            terms: {
+                [key: string]: unknown;
+            }[];
         };
         /** IdentityOut */
         IdentityOut: {
@@ -1478,6 +1693,36 @@ export interface components {
             text: string;
             status?: components["schemas"]["StatusKind"] | null;
         };
+        /** NotificationIn */
+        NotificationIn: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Delay Minutes */
+            delay_minutes?: number | null;
+            /** Quiet Start */
+            quiet_start?: number | null;
+            /** Quiet End */
+            quiet_end?: number | null;
+        };
+        /** NotificationOut */
+        NotificationOut: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Delay Minutes */
+            delay_minutes?: number | null;
+            /** Quiet Start */
+            quiet_start?: number | null;
+            /** Quiet End */
+            quiet_end?: number | null;
+            /** Employee Id */
+            employee_id: number;
+        };
         /** OkOut */
         OkOut: {
             /**
@@ -1586,6 +1831,31 @@ export interface components {
         };
         /** PeriodHighlights */
         PeriodHighlights: {
+            /**
+             * Calendar Off Sec
+             * @default 0
+             */
+            calendar_off_sec: number;
+            /**
+             * Evening Night Sec
+             * @default 0
+             */
+            evening_night_sec: number;
+            /**
+             * Long Days
+             * @default 0
+             */
+            long_days: number;
+            /**
+             * Longest Daily Series
+             * @default 0
+             */
+            longest_daily_series: number;
+            /**
+             * Changed Schedule Days
+             * @default 0
+             */
+            changed_schedule_days: number;
             /**
              * Reported Days
              * @default 0
@@ -1717,6 +1987,8 @@ export interface components {
         };
         /** PlansOut */
         PlansOut: {
+            /** Required Days */
+            required_days?: string[];
             /** Iso Year */
             iso_year: number;
             /** Iso Week */
@@ -1732,6 +2004,27 @@ export interface components {
             days: string[];
             /** Rows */
             rows: components["schemas"]["PlanRow"][];
+        };
+        /** ReminderOut */
+        ReminderOut: {
+            /** Employee Id */
+            employee_id: number;
+            /** Work Date */
+            work_date: string;
+            /** State */
+            state: string;
+            /** Attempts */
+            attempts: number;
+            /** Sent At */
+            sent_at: string | null;
+            /** Deferred Until */
+            deferred_until: string | null;
+            /** Snooze Until */
+            snooze_until: string | null;
+            /** Followup Sent At */
+            followup_sent_at: string | null;
+            /** Error Code */
+            error_code: string | null;
         };
         /**
          * Resolution
@@ -1799,6 +2092,30 @@ export interface components {
             /** Hits */
             hits: components["schemas"]["SearchHit"][];
         };
+        /** ServiceOut */
+        ServiceOut: {
+            /** Service */
+            service: string;
+            /** State */
+            state: string;
+            /** Heartbeat At */
+            heartbeat_at?: string | null;
+            /** Last Success At */
+            last_success_at?: string | null;
+            /** Last Update At */
+            last_update_at?: string | null;
+            /** Last Error At */
+            last_error_at?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Details
+             * @default {}
+             */
+            details: {
+                [key: string]: unknown;
+            };
+        };
         /** SettingsOut */
         SettingsOut: {
             settings: components["schemas"]["AppSettings"];
@@ -1854,6 +2171,48 @@ export interface components {
          * @enum {string}
          */
         StatusKind: "vacation" | "sick" | "remote" | "dayoff" | "off" | "absent";
+        /** StatusRequestOut */
+        StatusRequestOut: {
+            /** Id */
+            id: number;
+            /** Employee Id */
+            employee_id: number;
+            employee: components["schemas"]["EmployeeBrief"];
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Kind */
+            kind: string | null;
+            /** Note */
+            note: string;
+            /** State */
+            state: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decision Note */
+            decision_note: string;
+        };
+        /** StatusRequestsOut */
+        StatusRequestsOut: {
+            /** Items */
+            items: components["schemas"]["StatusRequestOut"][];
+            /** Total */
+            total: number;
+            /** Pending */
+            pending: number;
+        };
         /** Streaks */
         Streaks: {
             /**
@@ -1868,6 +2227,28 @@ export interface components {
              * @description Рабочих дней подряд с дейликом
              */
             current_dailies: number;
+        };
+        /** SystemOut */
+        SystemOut: {
+            /** Version */
+            version: string;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Database */
+            database: string;
+            /** Migration */
+            migration: string | null;
+            /** Services */
+            services: components["schemas"]["ServiceOut"][];
+            /** Deliveries */
+            deliveries: components["schemas"]["DeliveryOut"][];
+            /** Reminders */
+            reminders: components["schemas"]["ReminderOut"][];
+            /** Personal Notifications */
+            personal_notifications: components["schemas"]["DMOut"][];
         };
         /** TodayOut */
         TodayOut: {
@@ -1998,6 +2379,28 @@ export interface components {
              * @default 0
              */
             days_no_plan: number;
+        };
+        /** UpcomingAbsenceOut */
+        UpcomingAbsenceOut: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -2438,6 +2841,11 @@ export interface operations {
                 employee?: string | null;
                 problem?: string | null;
                 kind?: components["schemas"]["MessageKind"] | null;
+                limit?: number;
+                offset?: number;
+                start?: string | null;
+                end?: string | null;
+                oldest?: boolean;
             };
             header?: never;
             path?: never;
@@ -3230,7 +3638,9 @@ export interface operations {
     };
     put_settings_api_v1_admin_settings_put: {
         parameters: {
-            query?: never;
+            query?: {
+                effective_from?: string | null;
+            };
             header?: {
                 "x-requested-with"?: string | null;
             };
@@ -3300,7 +3710,9 @@ export interface operations {
     };
     week_api_v1_export_weeks__iso_year___iso_week___fmt__get: {
         parameters: {
-            query?: never;
+            query?: {
+                employee_id?: number[] | null;
+            };
             header?: never;
             path: {
                 iso_year: number;
@@ -3333,7 +3745,9 @@ export interface operations {
     };
     month_api_v1_export_months__year___month___fmt__get: {
         parameters: {
-            query?: never;
+            query?: {
+                employee_id?: number[] | null;
+            };
             header?: never;
             path: {
                 year: number;
@@ -3379,6 +3793,219 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    requests_api_v1_admin_status_requests_get: {
+        parameters: {
+            query?: {
+                state?: "pending" | "accepted" | "rejected" | "all";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusRequestsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_status_api_v1_admin_status_requests__request_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    notification_preferences_api_v1_admin_notifications__employee_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_notifications_api_v1_admin_notifications__employee_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                employee_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_history_api_v1_admin_calculation_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+        };
+    };
+    system_state_api_v1_admin_system_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemOut"];
+                };
+            };
+        };
+    };
+    request_demo_status_api_v1_demo_status_requests_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

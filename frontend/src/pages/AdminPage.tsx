@@ -11,11 +11,13 @@ import { EmployeesTab } from "./admin/EmployeesTab";
 import { ImportTab } from "./admin/ImportTab";
 import { SettingsTab } from "./admin/SettingsTab";
 import { TelegramTab } from "./admin/TelegramTab";
+import { SystemTab } from "./admin/SystemTab";
 
 const TABS = [
   { value: "employees", label: "Сотрудники", admin: true },
   { value: "telegram", label: "Telegram", admin: true },
   { value: "settings", label: "Настройки", admin: true },
+  { value: "system", label: "Состояние системы", admin: true },
   { value: "import", label: "Импорт", admin: true },
   { value: "audit", label: "Журнал правок", admin: false },
 ] as const;
@@ -52,6 +54,8 @@ export default function AdminPage() {
               <TelegramTab />
             ) : t.value === "settings" ? (
               <SettingsTab />
+            ) : t.value === "system" ? (
+              <SystemTab />
             ) : t.value === "import" ? (
               <ImportTab />
             ) : (

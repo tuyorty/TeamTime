@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router";
 
 import { api } from "@/api/client";
-import { keys, useAdminMutation, useEmployees } from "@/api/queries";
+import { keys, useAdminMutation, useEmployees, useMeta } from "@/api/queries";
 import type { Employee, EmployeeIn } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { AvatarEditor } from "@/components/domain/AvatarEditor";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { employeeColor } from "@/lib/colors";
 import { hm } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
+import { CalculationHistory } from "./CalculationHistory";
 import {
   DEFAULT_AVATAR_CROP,
   loadAvatar,
@@ -84,7 +85,10 @@ export function EmployeesTab() {
           </thead>
           <tbody>
             {data.map((e) => (
-              <tr key={e.id} className={cn("border-b border-line last:border-b-0", !e.is_active && "text-ink-3")}>
+              <tr
+                key={e.id}
+                className={cn("border-b border-line last:border-b-0", !e.is_active && "text-ink-3")}
+              >
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-2">
                     <Avatar employee={e} size={24} />
@@ -135,12 +139,16 @@ function EmployeeForm({
   onDone: () => void;
 }) {
   const { isDark } = useTheme();
+  const today = useMeta().data?.today ?? new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     full_name: employee?.full_name ?? "",
     short_name: employee?.short_name ?? prefillShortName,
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
     about: employee?.about ?? "",
+    expertise: employee?.expertise ?? "",
+    help_with: employee?.help_with ?? "",
+    effectiveMonth: today.slice(0, 7),
     avatar_url: employee?.avatar_url ?? "",
     norm: employee ? String(employee.monthly_norm_minutes / 60) : "160",
     rate: employee ? String(Number(employee.hourly_rate)) : "0",
@@ -165,6 +173,9 @@ function EmployeeForm({
         position: form.position.trim(),
         phone: form.phone.trim(),
         about: form.about.trim(),
+        expertise: form.expertise.trim(),
+        help_with: form.help_with.trim(),
+        terms_effective_from: `${form.effectiveMonth}-01`,
         avatar_url: photoSource ? await prepareAvatar(photoSource, photoCrop) : form.avatar_url,
         monthly_norm_minutes: Math.round(Number(form.norm) * 60),
         hourly_rate: form.rate.replace(",", "."),
@@ -175,7 +186,16 @@ function EmployeeForm({
     },
     {
       success: employee ? "Сотрудник сохранён" : "Сотрудник добавлен",
-      invalidate: [["employees"], ["employee"], ["today"], ["day-summary"], ["week"], ["month"], ["plans"]],
+      invalidate: [
+        ["employees"],
+        ["employee"],
+        ["today"],
+        ["day-summary"],
+        ["week"],
+        ["month"],
+        ["plans"],
+        ["calculation-history"],
+      ],
     },
   );
 
@@ -210,7 +230,11 @@ function EmployeeForm({
         />
       </Field>
       <Field label="Как в расписании" error={shortError} hint="По этой строке бот узнаёт сотрудника">
-        <Input value={form.short_name} onChange={(e) => set("short_name")(e.target.value)} placeholder="Иванов И.И." />
+        <Input
+          value={form.short_name}
+          onChange={(e) => set("short_name")(e.target.value)}
+          placeholder="Иванов И.И."
+        />
       </Field>
       <Field label="Должность" hint="Видна в карточке и отчётах">
         <Input value={form.position} onChange={(e) => set("position")(e.target.value)} />
@@ -246,7 +270,11 @@ function EmployeeForm({
       {form.avatar_url || photoSource ? (
         <div className="flex items-center gap-3">
           {!photoSource ? (
-            <img src={form.avatar_url} alt="Фотография сотрудника" className="size-14 rounded-full object-cover" />
+            <img
+              src={form.avatar_url}
+              alt="Фотография сотрудника"
+              className="size-14 rounded-full object-cover"
+            />
           ) : null}
           {!photoSource ? (
             <Button
@@ -284,6 +312,26 @@ function EmployeeForm({
       <Field label="Телефон" hint="Для связи с сотрудником, необязательно">
         <Input type="tel" maxLength={40} value={form.phone} onChange={(e) => set("phone")(e.target.value)} />
       </Field>
+      <Field label="Направления работы">
+        <Textarea maxLength={500} value={form.expertise} onChange={(e) => set("expertise")(e.target.value)} />
+      </Field>
+      <Field label="С чем может помочь">
+        <Textarea maxLength={500} value={form.help_with} onChange={(e) => set("help_with")(e.target.value)} />
+      </Field>
+      <Field
+        label="Норму и ставку применять с месяца"
+        hint="Предыдущие месяцы сохраняют действовавшие условия. Изменение задним числом пересчитает соответствующий период."
+      >
+        <Input
+          type="month"
+          required
+          min="2000-01"
+          max="2100-12"
+          value={form.effectiveMonth}
+          onChange={(e) => set("effectiveMonth")(e.target.value)}
+        />
+      </Field>
+      {employee ? <CalculationHistory employeeId={employee.id} /> : null}
       <Field label="О сотруднике" hint="Специализация, интересы, с какими вопросами обращаться">
         <Textarea maxLength={500} value={form.about} onChange={(e) => set("about")(e.target.value)} />
       </Field>
@@ -309,15 +357,22 @@ function EmployeeForm({
           className="size-4 rounded-full"
           style={{ background: employeeColor(form.color, employee?.id ?? 1, isDark) }}
         />
-        <Switch checked={form.is_active} onChange={set("is_active")} label="Активен (показывается в таблице)" />
+        <Switch
+          checked={form.is_active}
+          onChange={set("is_active")}
+          label="Активен (показывается в таблице)"
+        />
       </div>
       {employee && confirmDelete ? (
-        <div role="alert" className="grid gap-2 rounded-md border border-late/40 bg-late-soft/60 p-3 text-[13px]">
+        <div
+          role="alert"
+          className="grid gap-2 rounded-md border border-late/40 bg-late-soft/60 p-3 text-[13px]"
+        >
           <p className="font-medium text-late-ink">Удалить {employee.short_name}?</p>
           <p className="text-ink-2">
-            Вместе с сотрудником удалятся его планы, дейлики и статусы дней. Исходные сообщения останутся, а привязанный
-            аккаунт Telegram отвяжется. Отменить удаление нельзя. Если человек просто ушёл из команды, лучше выключить
-            «Активен»: история сохранится.
+            Вместе с сотрудником удалятся его планы, дейлики и статусы дней. Исходные сообщения останутся, а
+            привязанный аккаунт Telegram отвяжется. Отменить удаление нельзя. Если человек просто ушёл из
+            команды, лучше выключить «Активен»: история сохранится.
           </p>
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>

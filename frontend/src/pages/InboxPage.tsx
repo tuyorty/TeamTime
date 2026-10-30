@@ -3,22 +3,24 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { api } from "@/api/client";
-import { useAdminMutation, useEmployees, useIdentities, useInbox } from "@/api/queries";
+import { useAdminMutation, useEmployees, useIdentities, useInbox, useStatusRequests } from "@/api/queries";
 import type { InboxItem, Issue } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { ScheduleComparison } from "@/components/domain/ScheduleComparison";
+import { Pagination } from "@/components/domain/Pagination";
 import { EmptyState, ErrorState } from "@/components/domain/feedback";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/field";
+import { Input, Select } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/cn";
 import { dayMonth, hm, isoWeek, parseDate, relative } from "@/lib/format";
+import { StatusRequestsPanel } from "./StatusRequests";
 
 const VIEWS = [
   { value: "pending", label: "Ждут решения" },
@@ -39,7 +41,7 @@ const KINDS = [
   { value: "schedule", label: "Расписания" },
 ] as const;
 
-const FILTER_KEYS = ["employee", "problem", "kind"] as const;
+const FILTER_KEYS = ["employee", "problem", "kind", "start", "end", "oldest"] as const;
 
 const RESOLUTION = {
   accepted: "принято как есть",
@@ -52,19 +54,25 @@ const RESOLUTION = {
 export default function InboxPage() {
   const [search, setSearch] = useSearchParams();
   const view = search.get("view") ?? "pending";
+  const offset = Math.max(0, Number(search.get("offset")) || 0);
   const filter = new URLSearchParams(
     FILTER_KEYS.flatMap((k) => (search.get(k) ? [[k, search.get(k)!]] : [])),
   ).toString();
-  const { data, error, refetch } = useInbox(view, filter);
-  const counts = useInbox("pending").data?.counts;
+  const { data, error, refetch } = useInbox(
+    view === "requests" ? "pending" : view,
+    `${filter}&limit=25&offset=${offset}`,
+  );
+  const counts = useInbox("pending", "limit=1").data?.counts;
   const admin = useIsAdmin();
-  const employees = useEmployees().data ?? [];
+  const pendingRequests = useStatusRequests("pending", 0, admin).data?.pending ?? 0;
+  const employees = useEmployees(true).data ?? [];
   const reparseAll = useAdminMutation(() => api.post<{ detail: string }>("/admin/inbox/reparse"), {
     success: (r) => `Переразобрано, ушло из инбокса: ${r.detail}`,
   });
 
   function setParam(key: (typeof FILTER_KEYS)[number] | "view", value: string) {
     const next = new URLSearchParams(search);
+    next.delete("offset");
     if (value) next.set(key, value);
     else next.delete(key);
     setSearch(next, { replace: true });
@@ -84,100 +92,157 @@ export default function InboxPage() {
               {counts ? <span className="ml-1.5 text-ink-3 tnum">{counts[v.value] ?? 0}</span> : null}
             </TabsTrigger>
           ))}
+          {admin ? (
+            <TabsTrigger value="requests">
+              Заявки на статусы <span className="ml-1.5 tnum text-ink-3">{pendingRequests}</span>
+            </TabsTrigger>
+          ) : null}
         </TabsList>
       </Tabs>
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          aria-label="Сотрудник"
-          className="w-full sm:w-52"
-          value={search.get("employee") ?? ""}
-          onChange={(e) => setParam("employee", e.target.value)}
-        >
-          <option value="">Все сотрудники</option>
-          <option value="none">Сотрудник не определён</option>
-          {employees.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.short_name}
-            </option>
-          ))}
-        </Select>
-        <Segmented
-          label="Проблема"
-          value={search.get("problem") ?? ""}
-          onChange={(v) => setParam("problem", v)}
-          options={PROBLEMS.map((p) => ({ value: p.value, label: p.label }))}
-        />
-        <Select
-          aria-label="Тип сообщения"
-          className="w-full sm:w-36"
-          value={search.get("kind") ?? ""}
-          onChange={(e) => setParam("kind", e.target.value)}
-        >
-          {KINDS.map((k) => (
-            <option key={k.value} value={k.value}>
-              {k.label}
-            </option>
-          ))}
-        </Select>
-        {filter ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              const next = new URLSearchParams(search);
-              FILTER_KEYS.forEach((k) => next.delete(k));
-              setSearch(next, { replace: true });
-            }}
-          >
-            <X /> Сбросить
-          </Button>
-        ) : null}
-        <span className="text-[12px] text-ink-3 tnum">
-          {data
-            ? data.total > data.items.length
-              ? `Показано ${data.items.length} из ${data.total}`
-              : `Найдено: ${data.total}`
-            : null}
-        </span>
-        {admin && view === "pending" ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="sm:ml-auto"
-            title="Прочитать заново все сообщения, которые ждут решения: после обновления бота, добавления сотрудников или привязки аккаунтов."
-            onClick={() => reparseAll.mutate(undefined)}
-            disabled={reparseAll.isPending}
-          >
-            <RotateCw className={cn(reparseAll.isPending && "animate-spin")} />{" "}
-            {reparseAll.isPending ? "Переразбираем…" : "Переразобрать всё"}
-          </Button>
-        ) : null}
-      </div>
-      {error ? (
-        <ErrorState error={error} onRetry={() => refetch()} />
-      ) : !data ? (
-        <div className="grid gap-3">
-          {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-40" />
-          ))}
-        </div>
-      ) : !data.items.length ? (
-        <EmptyState
-          icon={view === "pending" && !filter ? CheckCheck : Inbox}
-          title={filter ? "Ничего не найдено" : view === "pending" ? "Всё разобрано" : "Пусто"}
-        >
-          {filter
-            ? "Под эти фильтры ничего не подходит."
-            : view === "pending"
-              ? "Бот понял все сообщения. Новые вопросы появятся здесь сами."
-              : "Здесь будут записи, когда они появятся."}
-        </EmptyState>
+      {view === "requests" && admin ? (
+        <StatusRequestsPanel />
       ) : (
-        <ul className="grid gap-3">
-          {data.items.map((item) => (
-            <InboxCard key={item.parse.id} item={item} />
-          ))}
-        </ul>
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              aria-label="Сотрудник"
+              className="w-full sm:w-52"
+              value={search.get("employee") ?? ""}
+              onChange={(e) => setParam("employee", e.target.value)}
+            >
+              <option value="">Все сотрудники</option>
+              <option value="none">Сотрудник не определён</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.short_name}
+                </option>
+              ))}
+            </Select>
+            <Input
+              type="date"
+              aria-label="Сообщения с даты"
+              className="w-36"
+              value={search.get("start") ?? ""}
+              onChange={(e) => setParam("start", e.target.value)}
+            />
+            <Input
+              type="date"
+              aria-label="Сообщения до даты"
+              className="w-36"
+              value={search.get("end") ?? ""}
+              onChange={(e) => setParam("end", e.target.value)}
+            />
+            <Select
+              aria-label="Порядок сообщений"
+              className="w-40"
+              value={search.get("oldest") ?? "false"}
+              onChange={(e) => setParam("oldest", e.target.value)}
+            >
+              <option value="false">Сначала новые</option>
+              <option value="true">Сначала старые</option>
+            </Select>
+            <Segmented
+              label="Проблема"
+              value={search.get("problem") ?? ""}
+              onChange={(v) => setParam("problem", v)}
+              options={PROBLEMS.map((p) => ({ value: p.value, label: p.label }))}
+            />
+            <Select
+              aria-label="Тип сообщения"
+              className="w-full sm:w-36"
+              value={search.get("kind") ?? ""}
+              onChange={(e) => setParam("kind", e.target.value)}
+            >
+              {KINDS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </Select>
+            {filter ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const next = new URLSearchParams(search);
+                  FILTER_KEYS.forEach((k) => next.delete(k));
+                  next.delete("offset");
+                  setSearch(next, { replace: true });
+                }}
+              >
+                <X /> Сбросить
+              </Button>
+            ) : null}
+            <span className="text-[12px] text-ink-3 tnum">
+              {data
+                ? data.total > data.items.length
+                  ? `Показано ${data.items.length} из ${data.total}`
+                  : `Найдено: ${data.total}`
+                : null}
+            </span>
+            {admin && view === "pending" ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="sm:ml-auto"
+                title="Прочитать заново все сообщения, которые ждут решения: после обновления бота, добавления сотрудников или привязки аккаунтов."
+                onClick={() => reparseAll.mutate(undefined)}
+                disabled={reparseAll.isPending}
+              >
+                <RotateCw className={cn(reparseAll.isPending && "animate-spin")} />{" "}
+                {reparseAll.isPending ? "Переразбираем…" : "Переразобрать всё"}
+              </Button>
+            ) : null}
+          </div>
+          {error ? (
+            <ErrorState error={error} onRetry={() => refetch()} />
+          ) : !data ? (
+            <div className="grid gap-3">
+              {Array.from({ length: 3 }, (_, i) => (
+                <Skeleton key={i} className="h-40" />
+              ))}
+            </div>
+          ) : !data.items.length ? (
+            <EmptyState
+              icon={view === "pending" && !filter ? CheckCheck : Inbox}
+              title={
+                data.total > 0
+                  ? "На этой странице записей нет"
+                  : filter
+                    ? "Ничего не найдено"
+                    : view === "pending"
+                      ? "Всё разобрано"
+                      : "Пусто"
+              }
+            >
+              {data.total > 0
+                ? "Вернитесь к предыдущей странице с помощью кнопки ниже."
+                : filter
+                  ? "Под эти фильтры ничего не подходит."
+                  : view === "pending"
+                    ? "Бот понял все сообщения. Новые вопросы появятся здесь сами."
+                    : "Здесь будут записи, когда они появятся."}
+            </EmptyState>
+          ) : (
+            <ul className="grid gap-3">
+              {data.items.map((item) => (
+                <InboxCard key={item.parse.id} item={item} />
+              ))}
+            </ul>
+          )}
+          {data ? (
+            <Pagination
+              offset={offset}
+              total={data.total}
+              onChange={(nextOffset) => {
+                const next = new URLSearchParams(search);
+                if (nextOffset) next.set("offset", String(nextOffset));
+                else next.delete("offset");
+                setSearch(next, { replace: true });
+              }}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -234,12 +299,16 @@ function InboxCard({ item }: { item: InboxItem }) {
   const lateSchedule = p.kind === "schedule" && p.issues.some((issue) => issue.code === "late_change");
   const text = m.versions.find((v) => v.id === p.message_version_id)?.text ?? m.versions.at(-1)!.text;
   const lineIssues = new Map<number, Issue[]>();
-  for (const i of p.issues) if (i.line_no) lineIssues.set(i.line_no, [...(lineIssues.get(i.line_no) ?? []), i]);
+  for (const i of p.issues)
+    if (i.line_no) lineIssues.set(i.line_no, [...(lineIssues.get(i.line_no) ?? []), i]);
   const general = p.issues.filter((i) => !i.line_no);
 
-  const resolve = useAdminMutation((resolution: string) => api.post(`/admin/inbox/${p.id}/resolve`, { resolution }), {
-    success: "Готово",
-  });
+  const resolve = useAdminMutation(
+    (resolution: string) => api.post(`/admin/inbox/${p.id}/resolve`, { resolution }),
+    {
+      success: "Готово",
+    },
+  );
   const reparse = useAdminMutation(() => api.post<{ detail: string }>(`/admin/inbox/${p.id}/reparse`), {
     success: "Переразобрано текущим парсером",
   });
@@ -264,7 +333,9 @@ function InboxCard({ item }: { item: InboxItem }) {
             {p.status === "failed" ? "не разобрано" : p.status === "partial" ? "с вопросами" : "разобрано"}
           </Badge>
           {p.version > 1 ? <Badge>правка {p.version - 1}</Badge> : null}
-          <span className="ml-auto text-[12px] text-ink-3">{relative(m.versions.at(-1)!.edited_at ?? m.sent_at)}</span>
+          <span className="ml-auto text-[12px] text-ink-3">
+            {relative(m.versions.at(-1)!.edited_at ?? m.sent_at)}
+          </span>
         </div>
         <pre className="max-h-[28rem] overflow-auto rounded-md border border-line bg-bg p-3 font-sans text-[13px] leading-[1.55] whitespace-pre-wrap [overflow-wrap:anywhere]">
           {text.split("\n").map((line, n) => {
@@ -273,11 +344,16 @@ function InboxCard({ item }: { item: InboxItem }) {
             return (
               <span
                 key={n}
-                className={cn("-mx-1 block rounded-sm px-1", issues && (bad ? "bg-late-soft" : "bg-deviation-soft"))}
+                className={cn(
+                  "-mx-1 block rounded-sm px-1",
+                  issues && (bad ? "bg-late-soft" : "bg-deviation-soft"),
+                )}
               >
                 {line || " "}
                 {issues ? (
-                  <span className="ml-2 text-[11px] text-ink-2">← {issues.map((i) => i.message).join("; ")}</span>
+                  <span className="ml-2 text-[11px] text-ink-2">
+                    ← {issues.map((i) => i.message).join("; ")}
+                  </span>
                 ) : null}
               </span>
             );
@@ -306,8 +382,8 @@ function InboxCard({ item }: { item: InboxItem }) {
         ) : null}
         {lateSchedule && p.resolution === "pending" ? (
           <p className="rounded-md border border-deviation/30 bg-deviation-soft/40 p-3 text-[12px] leading-relaxed text-ink-2">
-            Это предупреждение о позднем изменении расписания. Одобрение применит новый план и пересчитает опоздания и
-            итоги. Фактическое время останется из дейлика.
+            Это предупреждение о позднем изменении расписания. Одобрение применит новый план и пересчитает
+            опоздания и итоги. Фактическое время останется из дейлика.
           </p>
         ) : null}
         {p.employee_unresolved ? <LinkIdentity item={item} /> : null}
@@ -348,7 +424,12 @@ function InboxCard({ item }: { item: InboxItem }) {
                 <EyeOff /> Игнорировать
               </Button>
             ) : (
-              <Button size="sm" variant="ghost" onClick={() => resolve.mutate("pending")} disabled={resolve.isPending}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => resolve.mutate("pending")}
+                disabled={resolve.isPending}
+              >
                 Вернуть в инбокс
               </Button>
             )}
@@ -365,7 +446,8 @@ function InboxCard({ item }: { item: InboxItem }) {
               {lateSchedule
                 ? "«Одобрить новый план» — применить показанные изменения и пересчитать таблицу. «Игнорировать» — исключить данные этого сообщения из расчётов."
                 : "«Исправить в таблице» — поправить цифры дня вручную. «Принять как есть» — подтвердить разбор и закрыть вопрос."}{" "}
-              «Переразобрать» — прочитать сообщение заново, если бот обновился или в справочнике появился сотрудник.
+              «Переразобрать» — прочитать сообщение заново, если бот обновился или в справочнике появился
+              сотрудник.
             </p>
           </div>
         ) : (
@@ -380,8 +462,9 @@ function InboxCard({ item }: { item: InboxItem }) {
           {decision === "approve" ? (
             <>
               <p className="mb-4 text-[13px] leading-relaxed text-ink-2">
-                Новый план будет применён к этой версии расписания. Опоздания и итоги пересчитаются — при переносе
-                начала позже опоздание может уменьшиться или исчезнуть. Фактические интервалы берутся из дейлика.
+                Новый план будет применён к этой версии расписания. Опоздания и итоги пересчитаются — при
+                переносе начала позже опоздание может уменьшиться или исчезнуть. Фактические интервалы берутся
+                из дейлика.
               </p>
               {item.plan_change ? (
                 <ScheduleComparison preview={item.plan_change} />
@@ -393,8 +476,8 @@ function InboxCard({ item }: { item: InboxItem }) {
             </>
           ) : (
             <p className="text-[13px] leading-relaxed text-ink-2">
-              Производные планы или дейлики из этого сообщения будут отозваны. Предыдущая версия того же сообщения
-              автоматически не восстанавливается. Для точечного изменения откройте день в таблице.
+              Производные планы или дейлики из этого сообщения будут отозваны. Предыдущая версия того же
+              сообщения автоматически не восстанавливается. Для точечного изменения откройте день в таблице.
             </p>
           )}
           <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -405,7 +488,9 @@ function InboxCard({ item }: { item: InboxItem }) {
               variant={decision === "approve" ? "primary" : "danger"}
               disabled={resolve.isPending || (decision === "approve" && !item.plan_change)}
               onClick={() =>
-                resolve.mutate(decision === "approve" ? "accepted" : "ignored", { onSuccess: () => setDecision(null) })
+                resolve.mutate(decision === "approve" ? "accepted" : "ignored", {
+                  onSuccess: () => setDecision(null),
+                })
               }
             >
               {decision === "approve" ? "Одобрить и пересчитать" : "Исключить сообщение"}
@@ -429,7 +514,8 @@ function LinkIdentity({ item }: { item: InboxItem }) {
   const suggested = item.candidates[0]?.id ?? identity?.suggested_employee?.id;
   const [employeeId, setEmployeeId] = useState<string>(suggested ? String(suggested) : "");
   const link = useAdminMutation(
-    () => api.put<{ detail: string }>(`/admin/identities/${identity!.id}`, { employee_id: Number(employeeId) }),
+    () =>
+      api.put<{ detail: string }>(`/admin/identities/${identity!.id}`, { employee_id: Number(employeeId) }),
     { success: (r) => `Аккаунт привязан. ${r.detail}` },
   );
   return (
@@ -438,7 +524,9 @@ function LinkIdentity({ item }: { item: InboxItem }) {
         <Link2 className="size-4" /> Сотрудник не определён
       </p>
       {item.candidates.length ? (
-        <p className="text-ink-2">Похожие по фамилии: {item.candidates.map((c) => c.short_name).join(", ")}</p>
+        <p className="text-ink-2">
+          Похожие по фамилии: {item.candidates.map((c) => c.short_name).join(", ")}
+        </p>
       ) : identity?.suggested_employee ? (
         <p className="text-ink-2">Бот предлагает: {identity.suggested_employee.short_name}</p>
       ) : null}

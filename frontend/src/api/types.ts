@@ -41,3 +41,7 @@ export type Audit = S["AuditOut"];
 export type AppSettings = S["AppSettings"];
 export type DayState = DayCell["state"];
 export type StatusKind = NonNullable<DayCell["status"]>;
+export type StatusRequest = S["StatusRequestOut"];
+export type StatusRequests = S["StatusRequestsOut"];
+export type SystemState = S["SystemOut"];
+export type CalculationHistory = S["HistoryOut"];

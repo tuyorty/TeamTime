@@ -3,8 +3,23 @@ import { toast } from "sonner";
 
 import { api, ApiError } from "./client";
 import type {
-  AppSettings, Audit, EmployeeDetail, Employee, Identity, Inbox, Message, Meta, Month, Plans,
-  Chat, Today, Topic, Week,
+  AppSettings,
+  Audit,
+  EmployeeDetail,
+  Employee,
+  Identity,
+  Inbox,
+  Message,
+  Meta,
+  Month,
+  Plans,
+  Chat,
+  Today,
+  Topic,
+  Week,
+  StatusRequests,
+  SystemState,
+  CalculationHistory,
 } from "./types";
 
 export const keys = {
@@ -27,10 +42,40 @@ export const keys = {
 };
 
 export const useMeta = () =>
-  useQuery({ queryKey: keys.meta, queryFn: () => api.get<Meta>("/meta"), staleTime: 60_000 });
+  useQuery({
+    queryKey: keys.meta,
+    queryFn: () => api.get<Meta>("/meta"),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
 
-export const useToday = () =>
-  useQuery({ queryKey: keys.today, queryFn: () => api.get<Today>("/today"), refetchInterval: 60_000 });
+export const useToday = (day?: string) =>
+  useQuery({
+    queryKey: [...keys.today, day],
+    queryFn: () => api.get<Today>(`/today${day ? `?day=${day}` : ""}`),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+export const useStatusRequests = (state = "pending", offset = 0, enabled = true) =>
+  useQuery({
+    queryKey: ["status-requests", state, offset],
+    queryFn: () => api.get<StatusRequests>(`/admin/status-requests?state=${state}&offset=${offset}&limit=25`),
+    enabled,
+  });
+
+export const useSystem = () =>
+  useQuery({
+    queryKey: ["system"],
+    queryFn: () => api.get<SystemState>("/admin/system"),
+    refetchInterval: 30_000,
+  });
+
+export const useCalculationHistory = () =>
+  useQuery({
+    queryKey: ["calculation-history"],
+    queryFn: () => api.get<CalculationHistory>("/admin/calculation-history"),
+  });
 
 export const useDaySummary = (day: string | undefined) =>
   useQuery({
@@ -83,7 +128,8 @@ export const useEmployee = (id: number, start?: string, end?: string) =>
 export const useCalendar = (start: string, end: string) =>
   useQuery({
     queryKey: keys.calendar(start, end),
-    queryFn: () => api.get<Record<string, import("./types").DayCell[]>>(`/calendar?start=${start}&end=${end}`),
+    queryFn: () =>
+      api.get<Record<string, import("./types").DayCell[]>>(`/calendar?start=${start}&end=${end}`),
     placeholderData: keepPreviousData,
   });
 
@@ -104,7 +150,8 @@ export const useInbox = (view: string, filter = "") =>
 export const useIdentities = () =>
   useQuery({ queryKey: keys.identities, queryFn: () => api.get<Identity[]>("/identities") });
 
-export const useChats = () => useQuery({ queryKey: keys.chats, queryFn: () => api.get<Chat[]>("/admin/chats") });
+export const useChats = () =>
+  useQuery({ queryKey: keys.chats, queryFn: () => api.get<Chat[]>("/admin/chats") });
 
 export const useTopics = (enabled: boolean) =>
   useQuery({ queryKey: keys.topics, queryFn: () => api.get<Topic[]>("/admin/topics"), enabled });
@@ -121,7 +168,10 @@ export const useAudit = (employeeId?: number) =>
 /** Мутация админа: тост об успехе или понятная ошибка, затем перезапрос затронутых данных. */
 export function useAdminMutation<TVars, TResult = unknown>(
   fn: (vars: TVars) => Promise<TResult>,
-  { success, invalidate = [] }: { success?: string | ((r: TResult) => string); invalidate?: readonly unknown[][] } = {},
+  {
+    success,
+    invalidate = [],
+  }: { success?: string | ((r: TResult) => string); invalidate?: readonly unknown[][] } = {},
 ) {
   const qc = useQueryClient();
   return useMutation({

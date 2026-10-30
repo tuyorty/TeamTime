@@ -45,7 +45,7 @@ function ConnectionDot() {
           c === "live" ? "bg-accent" : c === "connecting" ? "bg-deviation" : "bg-late",
         )}
       />
-      {c === "live" ? "Онлайн" : c === "connecting" ? "Подключение" : "Офлайн"}
+      {c === "live" ? "Сайт подключён" : c === "connecting" ? "Подключение" : "Офлайн"}
     </span>
   );
 }

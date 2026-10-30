@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "@/api/client";
-import { keys, useAdminMutation, useSettings } from "@/api/queries";
+import { keys, useAdminMutation, useSettings, useMeta } from "@/api/queries";
 import type { AppSettings, PenaltyScale } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Switch, Textarea } from "@/components/ui/field";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { WEEKDAYS_SHORT, hm } from "@/lib/format";
 
 import { penaltyHours } from "../month/penalty";
+import { CalculationHistory } from "./CalculationHistory";
 
 /** Эмодзи, которые Bot API разрешает для реакций (полный список проверяет сервер). */
 const REACTIONS = ["👌", "👍", "🤔", "✍", "👀", "🫡", "🔥", "🎉", "💯", "🤝", "😐", "🙏", "⚡", "🏆"];
@@ -66,24 +67,40 @@ function scaleOf(p: Penalty): PenaltyScale {
 
 export function SettingsTab() {
   const { data } = useSettings();
+  const today = useMeta().data?.today ?? new Date().toISOString().slice(0, 10);
+  const [effectiveMonth, setEffectiveMonth] = useState(today.slice(0, 7));
   const [form, setForm] = useState<Form | null>(null);
   const [holidays, setHolidays] = useState("");
   useEffect(() => {
     if (data) {
-      setForm({ ...data, penalty: { ...DEFAULT_PENALTY, ...data.penalty }, bot: { ...DEFAULT_BOT, ...data.bot } });
+      setForm({
+        ...data,
+        penalty: { ...DEFAULT_PENALTY, ...data.penalty },
+        bot: { ...DEFAULT_BOT, ...data.bot },
+      });
       setHolidays((data.holidays ?? []).join("\n"));
     }
   }, [data]);
 
   const save = useAdminMutation(
     () =>
-      api.put<{ warnings: string[] }>("/admin/settings", {
+      api.put<{ warnings: string[] }>(`/admin/settings?effective_from=${effectiveMonth}-01`, {
         ...form,
         holidays: holidays.split(/[\s,;]+/).filter(Boolean),
       }),
     {
-      success: (r) => (r.warnings.length ? `Сохранено. Внимание: ${r.warnings.join("; ")}` : "Настройки сохранены"),
-      invalidate: [[...keys.settings], ["meta"], ["week"], ["month"], ["today"], ["day-summary"]],
+      success: (r) =>
+        r.warnings.length ? `Сохранено. Внимание: ${r.warnings.join("; ")}` : "Настройки сохранены",
+      invalidate: [
+        [...keys.settings],
+        ["meta"],
+        ["week"],
+        ["month"],
+        ["today"],
+        ["day-summary"],
+        ["employee"],
+        ["calculation-history"],
+      ],
     },
   );
 
@@ -93,12 +110,14 @@ export function SettingsTab() {
   const continuous =
     Math.abs(
       scale.soft_limit_h +
-        (scale.hard_limit_h - scale.soft_limit_h) * (1 + scale.quad_coef * (scale.hard_limit_h - scale.soft_limit_h)) -
+        (scale.hard_limit_h - scale.soft_limit_h) *
+          (1 + scale.quad_coef * (scale.hard_limit_h - scale.soft_limit_h)) -
         scale.hard_value_h,
     ) < 1e-6;
   const badDates = holidays.split(/[\s,;]+/).filter((d) => d && !/^\d{4}-\d{2}-\d{2}$/.test(d));
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm({ ...form, [k]: v });
-  const setPenalty = (k: keyof Penalty, v: string) => setForm({ ...form, penalty: { ...form.penalty, [k]: v } });
+  const setPenalty = (k: keyof Penalty, v: string) =>
+    setForm({ ...form, penalty: { ...form.penalty, [k]: v } });
   const setBot = <K extends keyof Bot>(k: K, v: Bot[K]) => setForm({ ...form, bot: { ...form.bot, [k]: v } });
 
   return (
@@ -109,8 +128,36 @@ export function SettingsTab() {
         save.mutate(undefined);
       }}
     >
+      <Panel title="С какого месяца действуют условия">
+        <Field
+          label="Месяц применения"
+          hint="Допуски, календарь и штрафы сохраняются по месяцам. Настройки бота применяются сразу. Будущие версии видны в истории ниже; форма при открытии показывает действующие условия."
+        >
+          <Input
+            type="month"
+            required
+            min="2000-01"
+            max="2100-12"
+            className="max-w-52"
+            value={effectiveMonth}
+            onChange={(e) => setEffectiveMonth(e.target.value)}
+          />
+        </Field>
+        <div className="mt-4">
+          <CalculationHistory
+            onSelect={(month, value) => {
+              setEffectiveMonth(month);
+              setForm({ ...form, ...value, bot: form.bot, penalty: { ...form.penalty, ...value.penalty } });
+              setHolidays((value.holidays ?? []).join("\n"));
+            }}
+          />
+        </div>
+      </Panel>
       <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title="Расчёт дня" description="Влияет на опоздания, ранний уход и недоработку во всех отчётах">
+        <Panel
+          title="Расчёт дня"
+          description="Влияет на опоздания, ранний уход и недоработку во всех отчётах"
+        >
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Допуск опоздания, мин" hint="В исходной таблице 0">
               <Input
@@ -177,7 +224,10 @@ export function SettingsTab() {
                     type="button"
                     aria-pressed={on}
                     onClick={() =>
-                      set("weekly_off", on ? form.weekly_off!.filter((x) => x !== i) : [...(form.weekly_off ?? []), i])
+                      set(
+                        "weekly_off",
+                        on ? form.weekly_off!.filter((x) => x !== i) : [...(form.weekly_off ?? []), i],
+                      )
                     }
                     className={
                       on
@@ -219,7 +269,10 @@ export function SettingsTab() {
               />
             </Field>
             <Field label="Коэффициент между порогами" hint="Можно дробью: 3/14">
-              <Input value={form.penalty.quad_coef ?? ""} onChange={(e) => setPenalty("quad_coef", e.target.value)} />
+              <Input
+                value={form.penalty.quad_coef ?? ""}
+                onChange={(e) => setPenalty("quad_coef", e.target.value)}
+              />
             </Field>
             <Field label="Штраф на втором пороге, ч">
               <Input
@@ -228,7 +281,10 @@ export function SettingsTab() {
               />
             </Field>
             <Field label="Наклон после второго порога">
-              <Input value={form.penalty.tail_slope ?? ""} onChange={(e) => setPenalty("tail_slope", e.target.value)} />
+              <Input
+                value={form.penalty.tail_slope ?? ""}
+                onChange={(e) => setPenalty("tail_slope", e.target.value)}
+              />
             </Field>
           </div>
           <div className="mt-4 rounded-md bg-bg p-3 text-[13px] tnum">
@@ -298,8 +354,8 @@ export function SettingsTab() {
             </Field>
           </div>
           <p className="mt-3 text-[12px] text-ink-3">
-            Одно напоминание за рабочий день, если дейлик не получен. Учитывается переход смены через полночь. Для
-            уведомлений сотруднику нужно один раз написать боту в личку, например /start.
+            Одно напоминание за рабочий день, если дейлик не получен. Учитывается переход смены через полночь.
+            Для уведомлений сотруднику нужно один раз написать боту в личку, например /start.
           </p>
         </Panel>
       </div>
