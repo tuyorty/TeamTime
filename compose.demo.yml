@@ -1,0 +1,21 @@
+# Локальный демо-стенд без Telegram. Используется вместе с docker-compose.yml.
+services:
+  api:
+    image: teamtime-backend:demo
+    environment:
+      DEMO: "1"
+      DEMO_NOW: "2026-10-23T14:30:00+05:00"
+      ADMIN_PASSWORD: ""
+      BOT_TOKEN: ""
+      TELEGRAM_PROXY: ""
+      PUBLIC_URL: "http://localhost:6769"
+
+  bot:
+    profiles: [telegram]
+    environment:
+      BOT_TOKEN: ""
+
+  web:
+    image: teamtime-web:demo
+    ports: !override
+      - "127.0.0.1:6769:80"

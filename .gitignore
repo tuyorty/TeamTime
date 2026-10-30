@@ -6,7 +6,7 @@
 # python
 __pycache__/
 *.py[cod]
-.venv/
+.venv
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -16,7 +16,7 @@ htmlcov/
 *.egg-info/
 
 # node
-node_modules/
+node_modules
 dist/
 playwright-report/
 test-results/
@@ -31,6 +31,7 @@ exports/
 .DS_Store
 .idea/
 .vscode/
+.local/
 
 # iCloud не синхронизирует *.nosync: там живут venv и node_modules
 *.nosync
