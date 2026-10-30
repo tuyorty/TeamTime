@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from teamtime import __version__
 from teamtime.api.realtime import Broadcaster
-from teamtime.api.routers import admin, auth, events, export, read
+from teamtime.api.routers import admin, auth, events, export, read, workflows
 from teamtime.core import clock
 from teamtime.core.config import Settings, get_settings
 from teamtime.core.logging import configure_logging, get_logger
@@ -105,7 +105,14 @@ def create_app(settings: Settings | None = None, *, realtime: bool = True) -> Fa
             status_code=200 if ok else 503,
         )
 
-    for router in (read.router, auth.router, admin.router, export.router, events.router):
+    for router in (
+        read.router,
+        auth.router,
+        admin.router,
+        export.router,
+        events.router,
+        workflows.router,
+    ):
         app.include_router(router, prefix="/api/v1")
     if settings.demo:
         from teamtime.api.routers import demo

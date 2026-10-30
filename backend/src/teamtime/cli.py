@@ -14,6 +14,32 @@ demo_app = typer.Typer(help="Демо-данные и эмулятор.", no_arg
 app.add_typer(db_app, name="db")
 app.add_typer(bot_app, name="bot")
 app.add_typer(demo_app, name="demo")
+system_app = typer.Typer(help="Состояние служебных процессов.", no_args_is_help=True)
+app.add_typer(system_app, name="system")
+
+
+@system_app.command("backup")
+def record_backup(state: str = typer.Option("ok", help="ok или error")) -> None:
+    """Записать результат скрипта резервного копирования без содержимого копии."""
+    import asyncio
+
+    from teamtime.db.session import session_scope
+    from teamtime.services.diagnostics import set_service
+
+    if state not in {"ok", "error"}:
+        raise typer.BadParameter("Допустимы ok или error")
+
+    async def go() -> None:
+        async with session_scope() as session:
+            await set_service(
+                session,
+                "backup",
+                state,
+                success=state == "ok",
+                error_code="BackupFailed" if state == "error" else None,
+            )
+
+    asyncio.run(go())
 
 
 def _alembic_ini() -> Path:

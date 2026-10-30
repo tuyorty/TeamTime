@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from teamtime.api.deps import AppSettingsDep, SessionDep
+from teamtime.api.deps import AdminDep, AppSettingsDep, SessionDep
+from teamtime.calc import StatusKind
 from teamtime.core import clock
-from teamtime.db.models import RawMessage, Source, TelegramIdentity
+from teamtime.db.models import Employee, RawMessage, Source, TelegramIdentity
 from teamtime.demo.constants import (
     DAILY_THREAD_ID,
     DEMO_CHAT_ID,
@@ -19,9 +21,38 @@ from teamtime.demo.constants import (
 )
 from teamtime.demo.forum import ensure_demo_forum
 from teamtime.schemas import IssueOut
+from teamtime.services import manual, status_requests
 from teamtime.services.ingest import IncomingMessage, ingest
 
 router = APIRouter(prefix="/demo", tags=["демо"])
+
+
+class DemoStatusIn(BaseModel):
+    employee_id: int
+    start: date
+    end: date
+    kind: StatusKind | None = StatusKind.REMOTE
+    note: str = Field("Пример заявки из эмулятора", max_length=500)
+
+
+class DemoStatusOut(BaseModel):
+    request_id: int
+
+
+@router.post("/status-requests", summary="Создать в демо заявку, аналогичную /absent")
+async def request_demo_status(
+    body: DemoStatusIn, session: SessionDep, actor: AdminDep
+) -> DemoStatusOut:
+    employee = await session.get(Employee, body.employee_id)
+    if employee is None:
+        raise HTTPException(404, "Сотрудник не найден")
+    try:
+        row = await status_requests.request_status(
+            session, employee, body.start, body.end, body.kind, f"demo:{actor}", body.note
+        )
+    except manual.EditError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return DemoStatusOut(request_id=row.id)
 
 
 class DemoMessageIn(BaseModel):

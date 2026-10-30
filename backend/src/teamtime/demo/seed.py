@@ -31,7 +31,7 @@ from teamtime.demo.constants import (
     SCHEDULE_THREAD_ID,
 )
 from teamtime.demo.forum import ensure_demo_forum
-from teamtime.services import manual
+from teamtime.services import manual, status_requests
 from teamtime.services.ingest import IncomingMessage, ingest
 from teamtime.services.settings import AppSettings, load_settings, save_settings
 
@@ -155,6 +155,8 @@ class Seeder:
                     "full_name": f"{last} {first} {middle}",
                     "short_name": short,
                     "position": profile.position,
+                    "expertise": profile.position + ": разработка и поддержка проектов",
+                    "help_with": "Ревью решений, поиск ошибок и настройка рабочего окружения",
                     "monthly_norm_minutes": profile.norm_hours * 60,
                     "hourly_rate": Decimal(profile.rate),
                     "color": PALETTE[n % len(PALETTE)],
@@ -401,6 +403,26 @@ class Seeder:
         )
 
         await self.newcomer(this_monday)
+        await self.workflows(people, this_monday)
+
+    async def workflows(self, people: list[Person], monday: date) -> None:
+        """Ожидающая заявка и ближайший отпуск для просмотра новых экранов."""
+        await status_requests.request_status(
+            self.session,
+            people[0].employee,
+            monday + timedelta(days=7),
+            monday + timedelta(days=7),
+            StatusKind.REMOTE,
+            "seed",
+            "Нужна удалённая работа на один день",
+        )
+        await manual.set_status(
+            self.session,
+            employee_id=people[2].employee.id,
+            day=monday + timedelta(days=10),
+            kind=StatusKind.VACATION,
+            actor="seed",
+        )
 
     async def newcomer(self, this_monday: date) -> None:
         """Новый человек в чате: его ещё нет в справочнике, аккаунт не привязан — для инбокса."""
@@ -482,7 +504,8 @@ async def clear_all(session: AsyncSession) -> None:
         text(
             "TRUNCATE audit_log, daily_tasks, daily_intervals, dailies, sprint_tasks, plan_days, "
             "schedule_plans, parse_results, raw_message_versions, raw_messages, day_statuses, "
-            "topic_bindings, bot_chats, telegram_identities, employees RESTART IDENTITY CASCADE"
+            "topic_bindings, bot_chats, telegram_identities, employees, "
+            "bot_deliveries, system_status, calculation_versions RESTART IDENTITY CASCADE"
         )
     )
 
