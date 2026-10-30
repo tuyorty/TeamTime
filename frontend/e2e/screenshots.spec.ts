@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 import { avatarFixture, lateScheduleExample } from "./fixtures";
 
 /**
@@ -15,7 +15,14 @@ mkdirSync(OUT, { recursive: true });
 
 type Theme = "light" | "dark";
 
-async function shot(browser: Browser, url: string, name: string, theme: Theme, mobile = false, prepare?: (p: Page) => Promise<void>) {
+async function shot(
+  browser: Browser,
+  url: string,
+  name: string,
+  theme: Theme,
+  mobile = false,
+  prepare?: (p: Page) => Promise<void>,
+) {
   const ctx = await browser.newContext({
     viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 },
     deviceScaleFactor: mobile ? 2 : 1,
@@ -37,7 +44,7 @@ test.describe.configure({ mode: "serial" });
 
 for (const theme of ["light", "dark"] as const) {
   test(`десктоп, ${theme}`, async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(150_000);
     await shot(browser, "/week/2026/43", "week", theme);
     await shot(browser, "/week/2026/43", "week-facts", theme, false, async (p) => {
       await p.getByRole("button", { name: "Факты недели", exact: true }).click();
@@ -46,6 +53,21 @@ for (const theme of ["light", "dark"] as const) {
       await p.getByRole("button", { name: "Факты месяца", exact: true }).click();
     });
     await shot(browser, "/", "today", theme);
+    await shot(browser, "/?day=tomorrow", "tomorrow", theme);
+    await shot(browser, "/plans/2026/43", "plans", theme);
+
+    await shot(browser, "/admin/system", "system", theme, false, async (p) => {
+      await p.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+      await p.reload();
+      await p.getByRole("heading", { name: "Готовность личных напоминаний", exact: true }).waitFor();
+      await p.evaluate("window.scrollTo({top: 0, left: 0, behavior: 'instant'})");
+    });
+    await shot(browser, "/inbox?view=requests", "status-requests", theme, false, async (p) => {
+      await p.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+      await p.reload();
+      await p.getByRole("button", { name: "Согласовать", exact: true }).first().waitFor();
+      await p.evaluate("window.scrollTo({top: 0, left: 0, behavior: 'instant'})");
+    });
     await shot(browser, "/?view=summary&date=2026-10-22", "day-summary", theme);
     await shot(browser, "/month/2026/9?tab=late", "month-late", theme, false, async (p) => {
       await p.getByRole("heading", { name: "Шкала штрафа" }).scrollIntoViewIfNeeded();
@@ -54,6 +76,11 @@ for (const theme of ["light", "dark"] as const) {
     });
     await shot(browser, "/month/2026/9", "month", theme);
     await shot(browser, "/people/2", "employee", theme);
+    await shot(browser, "/people/2?period=3m", "employee-period", theme, false, async (p) => {
+      await p.evaluate(
+        "Array.from(document.querySelectorAll('h2')).find(element => element.textContent === 'Рабочая статистика').scrollIntoView({block: 'start', behavior: 'instant'})",
+      );
+    });
     await shot(browser, "/admin/employees?edit=2", "avatar-editor", theme, false, prepareAvatarEditor);
     await shot(browser, "/calendar", "calendar", theme);
     await shot(browser, "/week/2026/43?day=2026-10-21&e=1", "day-detail", theme);
@@ -83,15 +110,33 @@ async function prepareAvatarEditor(page: Page) {
   await dialog.getByRole("region", { name: "Настройка фотографии", exact: true }).scrollIntoViewIfNeeded();
 }
 
+test("демо: пример заявки на статус", async ({ browser }) => {
+  for (const theme of ["light", "dark"] as const) {
+    await shot(browser, "/demo", "status-request-example", theme, false, async (p) => {
+      await p.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+      await p.reload();
+      await expect(p.getByRole("button", { name: "Создать пример заявки", exact: true })).toBeEnabled();
+      await p.evaluate("window.scrollTo({top: 0, left: 0, behavior: 'instant'})");
+    });
+  }
+});
+
 test("инбокс: сравнение изменённого плана и подтверждение", async ({ browser, request }) => {
   test.setTimeout(60_000);
   const { employee } = await lateScheduleExample(request);
   for (const theme of ["light", "dark"] as const) {
-    await shot(browser, `/inbox?employee=${employee.id}&kind=schedule`, "inbox-changes", theme, false, async (page) => {
-      await page.request.post("/api/v1/auth/login", { data: { password: "demo" } });
-      await page.reload();
-      await page.getByRole("button", { name: "Одобрить новый план", exact: true }).first().click();
-    });
+    await shot(
+      browser,
+      `/inbox?employee=${employee.id}&kind=schedule`,
+      "inbox-changes",
+      theme,
+      false,
+      async (page) => {
+        await page.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+        await page.reload();
+        await page.getByRole("button", { name: "Одобрить новый план", exact: true }).first().click();
+      },
+    );
   }
 });
 
@@ -115,7 +160,9 @@ test("телефон: большой список задач с внутренн
     await page.reload();
     await page.getByRole("button", { name: `Задачи: ${row.employee.short_name}`, exact: true }).click();
     await page.getByRole("button", { name: "Показать все задачи (10)", exact: true }).click();
-    await page.getByRole("region", { name: "Задачи выбранного сотрудника", exact: true }).scrollIntoViewIfNeeded();
+    await page
+      .getByRole("region", { name: "Задачи выбранного сотрудника", exact: true })
+      .scrollIntoViewIfNeeded();
   });
 });
 
@@ -131,11 +178,16 @@ test("GIF: дейлик из эмулятора появляется без пе
   const page = await ctx.newPage();
   const today = await (await page.request.get("/api/v1/today")).json();
   await page.goto(`/?view=summary&date=${today.date}`);
-  await page.getByText("Онлайн").waitFor();
+  await page.getByText("Сайт подключён", { exact: true }).waitFor();
   await page.waitForTimeout(1200);
   const identities = await (await page.request.get("/api/v1/identities")).json();
-  const waiting = today.rows.find((r: { cell: { fact: unknown; plan: { kind: string } | null } }) => !r.cell.fact && r.cell.plan?.kind === "work");
-  const author = identities.find((i: { employee: { id: number } | null }) => i.employee?.id === waiting?.employee.id) ?? identities.find((i: { employee: unknown }) => i.employee);
+  const waiting = today.rows.find(
+    (r: { cell: { fact: unknown; plan: { kind: string } | null } }) =>
+      !r.cell.fact && r.cell.plan?.kind === "work",
+  );
+  const author =
+    identities.find((i: { employee: { id: number } | null }) => i.employee?.id === waiting?.employee.id) ??
+    identities.find((i: { employee: unknown }) => i.employee);
   const [y, m, d] = today.date.split("-");
   await page.request.post("/api/v1/demo/messages", {
     data: {
@@ -150,8 +202,13 @@ test("GIF: дейлик из эмулятора появляется без пе
   const webm = await video!.path();
   const gif = path.join(OUT, "realtime.gif");
   execFileSync("ffmpeg", [
-    "-y", "-loglevel", "error", "-i", webm,
-    "-vf", "fps=12,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
+    "-y",
+    "-loglevel",
+    "error",
+    "-i",
+    webm,
+    "-vf",
+    "fps=12,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
     gif,
   ]);
   rmSync(videoDir, { recursive: true, force: true });

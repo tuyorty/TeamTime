@@ -12,7 +12,7 @@ export function Segmented<T extends string>({
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: React.ReactNode; title?: string }[];
+  options: { value: T; label: React.ReactNode; title?: string; disabled?: boolean }[];
   label: string;
   className?: string;
 }) {
@@ -29,6 +29,7 @@ export function Segmented<T extends string>({
           key={o.value}
           value={o.value}
           title={o.title}
+          disabled={o.disabled}
           className="inline-flex h-6 items-center gap-1 rounded-[4px] px-2 text-[12px] font-medium text-ink-2 transition-colors hover:text-ink data-[state=on]:bg-surface-3 data-[state=on]:text-ink [&_svg]:size-3.5"
         >
           {o.label}

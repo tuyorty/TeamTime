@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, CircleAlert, Clock3, ListChecks, MapPin, PencilLine, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleAlert, ListChecks, MapPin, PencilLine, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -17,7 +17,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/segmented";
 import { axisFor } from "@/lib/axis";
 import { cn } from "@/lib/cn";
-import { WEEKDAYS_LONG, clock, count, dayMonth, relative, timezoneLabel, weekday } from "@/lib/format";
+import {
+  WEEKDAYS_LONG,
+  clock,
+  count,
+  dayMonth,
+  relative,
+  timezoneLabel,
+  weekday,
+  isoDate,
+  parseDate,
+} from "@/lib/format";
 import { useFlashed } from "@/lib/realtime";
 import { DaySummary } from "./DaySummaryPage";
 
@@ -60,10 +70,15 @@ function scheduleCell(row: TodayRow): DayCell {
 }
 
 export default function TodayPage() {
-  const { data, error, refetch } = useToday();
   const meta = useMeta().data;
   const [search, setSearch] = useSearchParams();
-  const view = search.get("view") === "summary" ? "summary" : "work";
+  const tomorrow = search.get("day") === "tomorrow";
+  const nextDay = meta ? parseDate(meta.today) : null;
+  nextDay?.setDate(nextDay.getDate() + 1);
+  const { data, error, refetch, isPlaceholderData } = useToday(
+    tomorrow && nextDay ? isoDate(nextDay) : undefined,
+  );
+  const view = !tomorrow && search.get("view") === "summary" ? "summary" : "work";
   const [detail, setDetail] = useState<DayRef | null>(null);
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [filter, setFilter] = useState<Presence | null>(null);
@@ -80,67 +95,128 @@ export default function TodayPage() {
 
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
   if (!data) return <TodaySkeleton />;
+  const selectedDay = tomorrow && nextDay ? isoDate(nextDay) : (meta?.today ?? data.date);
+  const currentTime = meta
+    ? new Intl.DateTimeFormat("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: meta.timezone,
+      }).format(new Date(meta.now))
+    : clock(data.now_sec);
   const visible = rows.filter((row) => !filter || row.presence === filter);
   const selected = visible.find((row) => row.employee.id === employeeId) ?? visible[0];
   const axis = axisFor(rows.map(scheduleCell), { start: 8 * 3600, end: 22 * 3600 });
 
   return (
     <div className="grid grid-cols-1 gap-5">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-[32px] font-semibold leading-tight tracking-tight sm:text-[40px]">
-            Сегодня <span className="text-ink-3">·</span> {dayMonth(data.date)}
-          </h1>
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-2">
-            <span className="capitalize">{WEEKDAYS_LONG[weekday(data.date)]}</span>
-            <span className="text-line-strong">/</span>
-            <Clock3 className="size-3.5" />
-            <span className="tnum">{clock(data.now_sec)}</span>
-            {meta ? (
-              <span className="text-ink-3" title={`Часовой пояс расписания: ${meta.timezone}`}>
-                {timezoneLabel(meta.timezone, meta.now)}
-              </span>
-            ) : null}
-          </p>
+      <header className="grid gap-5">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+          <div className="min-w-0">
+            <h1 className="min-h-[2.5em] font-display text-[28px] font-semibold leading-tight sm:min-h-0 tracking-tight sm:text-[40px]">
+              {tomorrow ? "Завтра" : "Сегодня"} <span className="text-ink-3">·</span>{" "}
+              <span className="whitespace-nowrap">{dayMonth(selectedDay)}</span>
+            </h1>
+            <p className="mt-2 h-5 truncate text-[13px] capitalize text-ink-2">
+              {WEEKDAYS_LONG[weekday(selectedDay)]}
+              {tomorrow ? " · расписание на завтра" : ""}
+            </p>
+          </div>
+          <div className="text-right" aria-label="Часы команды">
+            <time
+              dateTime={meta?.now}
+              className="block font-display text-[36px] font-semibold leading-none tracking-tight tnum sm:text-[48px]"
+              aria-label="Текущее время команды"
+            >
+              {currentTime}
+            </time>
+            <p className="mt-2 max-w-44 text-[11px] text-ink-3 sm:text-[12px]" title={meta?.timezone}>
+              {meta ? timezoneLabel(meta.timezone, meta.now) : "Время команды"}
+            </p>
+          </div>
         </div>
-        <Segmented
-          label="Режим Сегодня"
-          value={view}
-          onChange={(next) =>
-            setSearch((previous) => {
-              const result = new URLSearchParams(previous);
-              if (next === "summary") result.set("view", "summary");
-              else result.delete("view");
-              return result;
-            })
-          }
-          options={[
-            {
-              value: "work",
-              label: (
-                <>
-                  <Users /> Рабочий день
-                </>
-              ),
-            },
-            {
-              value: "summary",
-              label: (
-                <>
-                  <CalendarDays /> Итоги дня
-                </>
-              ),
-            },
-          ]}
-          className="[&_button]:h-9 [&_button]:px-4 [&_button]:text-[13px]"
-        />
+        <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
+          <div
+            role="group"
+            aria-label="Выбор дня"
+            className="inline-flex h-11 rounded-lg border border-line bg-surface-2 p-1 sm:w-64"
+          >
+            {(
+              [
+                ["today", "Сегодня"],
+                ["tomorrow", "Завтра"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={(tomorrow ? "tomorrow" : "today") === key}
+                className="flex flex-1 items-center justify-center rounded-md px-4 text-[13px] font-medium text-ink-2 transition-colors hover:bg-surface aria-pressed:bg-surface aria-pressed:text-accent-ink aria-pressed:shadow-sm"
+                onClick={() => {
+                  setEmployeeId(null);
+                  setFilter(null);
+                  setSearch((previous) => {
+                    const result = new URLSearchParams(previous);
+                    if (key === "tomorrow") {
+                      result.set("day", key);
+                      result.delete("view");
+                    } else result.delete("day");
+                    return result;
+                  });
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Segmented
+            label="Режим Сегодня"
+            value={view}
+            onChange={(next) =>
+              setSearch((previous) => {
+                const result = new URLSearchParams(previous);
+                if (next === "summary") result.set("view", "summary");
+                else result.delete("view");
+                return result;
+              })
+            }
+            options={[
+              {
+                value: "work",
+                label: (
+                  <>
+                    <Users /> Рабочий день
+                  </>
+                ),
+              },
+              {
+                value: "summary",
+                label: (
+                  <>
+                    <CalendarDays /> Итоги дня
+                  </>
+                ),
+                disabled: tomorrow,
+                title: tomorrow ? "Итоги доступны за сегодня и прошедшие дни" : undefined,
+              },
+            ]}
+            className="h-11 w-full sm:w-[21rem] [&_button]:h-9 [&_button]:flex-1 [&_button]:justify-center [&_button]:whitespace-nowrap [&_button]:px-4 [&_button]:text-[13px] [&_button:disabled]:opacity-40"
+          />
+        </div>
       </header>
       {view === "summary" ? (
         <DaySummary />
       ) : (
         <>
-          <KeyNumbers data={data} filter={filter} onFilter={setFilter} />
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
+          <KeyNumbers data={data} filter={filter} onFilter={setFilter} future={tomorrow} />
+          <div
+            className={cn(
+              "grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]",
+              isPlaceholderData && "opacity-50",
+            )}
+            inert={isPlaceholderData}
+            aria-busy={isPlaceholderData}
+          >
             <div className="grid min-w-0 gap-5">
               <Panel
                 title="День команды"
@@ -208,13 +284,18 @@ function KeyNumbers({
   data,
   filter,
   onFilter,
+  future = false,
 }: {
   data: Today;
   filter: Presence | null;
   onFilter: (value: Presence | null) => void;
+  future?: boolean;
 }) {
   return (
-    <section aria-label="Ключевые числа дня" className="overflow-hidden rounded-lg border border-line bg-surface">
+    <section
+      aria-label="Ключевые числа дня"
+      className="overflow-hidden rounded-lg border border-line bg-surface"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <button
           type="button"
@@ -224,7 +305,9 @@ function KeyNumbers({
           <Users className="size-4 text-ink-3" /> Вся команда{" "}
           <span className="tnum text-accent-ink">{data.rows.length}</span>
         </button>
-        <span className="text-[12px] text-ink-3">Сейчас по расписанию</span>
+        <span className="text-[12px] text-ink-3">
+          {future ? "По расписанию на завтра" : "Сейчас по расписанию"}
+        </span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
         {(Object.entries(PRESENCE) as [Presence, (typeof PRESENCE)[Presence]][]).map(([key, item]) => (
@@ -238,7 +321,9 @@ function KeyNumbers({
               filter === key && "bg-accent/8 ring-1 ring-inset ring-accent/40",
             )}
           >
-            <span className="font-display text-[30px] font-semibold leading-none tnum">{data.counts[key] ?? 0}</span>
+            <span className="font-display text-[30px] font-semibold leading-none tnum">
+              {data.counts[key] ?? 0}
+            </span>
             <span className="flex items-center gap-1.5 text-[12px] text-ink-2">
               <span className={cn("size-1.5 shrink-0 rounded-full", item.color)} />
               {item.label}
@@ -317,7 +402,7 @@ function TeamRow({
           ) : (
             <span className="flex min-h-8 items-center rounded-md bg-surface-2/60 px-2 text-[12px] text-ink-2">
               {row.presence === "off"
-                ? "Сегодня не работает"
+                ? "В этот день не работает"
                 : row.cell.status_note || row.cell.plan?.note || presenceText(row)}
             </span>
           )}
@@ -356,7 +441,7 @@ export function EmployeeTasks({ row }: { row: TodayRow }) {
     >
       {row.cell.plan?.note ? (
         <p className="mb-3 rounded-md bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
-          <span className="font-medium text-ink">На сегодня: </span>
+          <span className="font-medium text-ink">Примечание к дню: </span>
           {row.cell.plan.note}
         </p>
       ) : null}
@@ -372,14 +457,21 @@ export function EmployeeTasks({ row }: { row: TodayRow }) {
 function Upcoming({ data }: { data: Today }) {
   const changes = data.rows
     .flatMap((row) => {
-      if (!row.cell.plan || row.cell.plan.kind !== "work" || row.presence === "absent" || row.presence === "off")
+      if (
+        !row.cell.plan ||
+        row.cell.plan.kind !== "work" ||
+        row.presence === "absent" ||
+        row.presence === "off"
+      )
         return [];
       return [
         { row, time: row.cell.plan.start, start: true },
         { row, time: row.cell.plan.end, start: false },
       ].filter((event) => event.time !== null && event.time! > data.now_sec);
     })
-    .sort((a, b) => a.time! - b.time! || a.row.employee.short_name.localeCompare(b.row.employee.short_name, "ru"))
+    .sort(
+      (a, b) => a.time! - b.time! || a.row.employee.short_name.localeCompare(b.row.employee.short_name, "ru"),
+    )
     .slice(0, 6);
   return (
     <Panel title="Дальше по расписанию" description="Ближайшие начала и окончания работы">
@@ -398,7 +490,11 @@ function Upcoming({ data }: { data: Today }) {
                   {row.employee.short_name}
                 </Link>
                 <span className="text-[11px] text-ink-3">
-                  {start ? (row.cell.status === "remote" ? "Начнёт удалённо" : "Начнёт в офисе") : "Закончит работу"}
+                  {start
+                    ? row.cell.status === "remote"
+                      ? "Начнёт удалённо"
+                      : "Начнёт в офисе"
+                    : "Закончит работу"}
                 </span>
               </div>
             </li>
