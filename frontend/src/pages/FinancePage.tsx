@@ -5,18 +5,23 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { exportUrl } from "@/api/client";
 import { useFinance, useMeta } from "@/api/queries";
 import { ErrorState } from "@/components/domain/feedback";
+import { SortSelect } from "@/components/domain/SortSelect";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { Input, Select } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { MONTHS, money, shiftMonth } from "@/lib/format";
+import { MONTHS, shiftMonth } from "@/lib/format";
 
 import { BonusForm } from "./finance/BonusForm";
+import { FinanceCharts } from "./finance/FinanceCharts";
 import { FinanceDetails } from "./finance/FinanceDetails";
 import { FinanceSummary } from "./finance/FinanceSummary";
 import { FinanceTable } from "./finance/FinanceTable";
+import { ProjectBonuses } from "./finance/ProjectBonuses";
+import { FINANCE_SORT_OPTIONS, FINANCE_VALUES, type FinanceSortKey } from "./finance/sorting";
+import { sortRows, useSort } from "./month/sorting";
 import NotFound from "./NotFound";
 
 export default function FinancePage() {
@@ -37,6 +42,7 @@ function FinancePeriod({ year, month, current }: { year: number; month: number; 
   const [search, setSearch] = useSearchParams();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const { sort, toggle, setSort } = useSort<FinanceSortKey>();
   const [adding, setAdding] = useState(false);
   const monthValue = `${year}-${String(month).padStart(2, "0")}`;
   const label = `${MONTHS[month - 1]} ${year}`;
@@ -44,16 +50,16 @@ function FinancePeriod({ year, month, current }: { year: number; month: number; 
     const next = shiftMonth(year, month, delta);
     navigate(`/finances/${next.year}/${next.month}`);
   };
-  const rows = (data?.rows ?? []).filter((row) => {
+  const filtered = (data?.rows ?? []).filter((row) => {
     const e = row.employee;
     return `${e.full_name} ${e.short_name} ${e.position}`.toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU")) && (
       filter === "all" || (filter === "overtime" && row.summary.overtime_sec > 0) ||
       (filter === "bonuses" && Number(row.amounts.project_bonuses) > 0) || (filter === "no-rate" && Number(row.summary.hourly_rate) === 0)
     );
   });
+  const rows = sortRows(filtered, sort, FINANCE_VALUES);
   const selected = data?.rows.find((row) => row.employee.id === Number(search.get("employee")));
   const select = (id: number) => setSearch({ employee: String(id) });
-  const bonuses = rows.flatMap((row) => row.bonuses.filter((b) => !b.cancelled_at).map((bonus) => ({ employee: row.employee, bonus })));
   const selection = rows.map((row) => `employee_id=${row.employee.id}`).join("&");
   return (
     <div className="grid min-w-0 gap-5">
@@ -92,17 +98,12 @@ function FinancePeriod({ year, month, current }: { year: number; month: number; 
             <Select className="w-auto" aria-label="Отбор начислений" value={filter} onChange={(event) => setFilter(event.target.value)}>
               <option value="all">Все сотрудники</option><option value="overtime">С переработкой</option><option value="bonuses">С проектными премиями</option><option value="no-rate">Без ставки</option>
             </Select>
+            <SortSelect label="Сортировка начислений" options={FINANCE_SORT_OPTIONS} sort={sort} onChange={setSort} />
             <span className="text-[12px] text-ink-3">Показано: {rows.length} из {data.rows.length}</span>
           </div>
-          <FinanceTable rows={rows} onSelect={select} />
-          <section className="rounded-lg border border-line bg-surface p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Премии за проекты</h2><span className="text-[12px] text-ink-3">За выбранный месяц и отбор · {bonuses.length}</span></div>
-            {bonuses.length ? <ul className="mt-3 max-h-80 overflow-y-auto divide-y divide-line">{bonuses.map(({ employee, bonus }) => (
-              <li key={bonus.id}><button onClick={() => select(employee.id)} className="flex w-full items-center justify-between gap-4 rounded px-1 py-3 text-left hover:bg-surface-2">
-                <span className="min-w-0"><span className="block truncate text-[13px] font-medium">{bonus.title}</span><span className="text-[12px] text-ink-3">{employee.short_name}</span></span><span className="whitespace-nowrap text-[14px] font-semibold tnum">{money(bonus.amount)}</span>
-              </button></li>
-            ))}</ul> : <p className="mt-2 text-[13px] text-ink-3">Премий по этому отбору пока нет. Администратор может добавить сумму за закрытый проект.</p>}
-          </section>
+          <FinanceCharts rows={rows} onSelect={select} />
+          <FinanceTable rows={rows} sort={sort} onSort={toggle} onSelect={select} />
+          <ProjectBonuses rows={filtered} onSelect={select} />
           <details className="rounded-lg border border-line px-4 py-3 text-[13px] text-ink-2">
             <summary className="cursor-pointer font-medium text-ink">Как считается оплата</summary>
             <div className="mt-3 grid max-w-3xl gap-2 leading-relaxed"><p>Оклад — полная месячная норма × часовая ставка. Если зачтённых часов меньше нормы, оклад сохраняется.</p><p>Переработка — часы сверх нормы × та же ставка. Используем итог таблицы: часы с учётом эффективности за вычетом штрафа за опоздания.</p><p>К окладу и переработке прибавляются проектные премии администратора. Ставка и норма берутся из условий выбранного месяца. Здесь отображается расчёт сумм; фактические перечисления не отмечаются.</p></div>

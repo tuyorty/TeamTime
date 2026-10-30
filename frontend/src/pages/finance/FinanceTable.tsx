@@ -7,19 +7,34 @@ import { Button } from "@/components/ui/button";
 import { hm, money } from "@/lib/format";
 
 import { sumAmounts } from "./amounts";
+import type { FinanceSortKey } from "./sorting";
+import { SortTh } from "../month/shared";
+import type { SortState } from "../month/sorting";
 
-export function FinanceTable({ rows, onSelect }: { rows: FinanceRow[]; onSelect: (id: number) => void }) {
+export function FinanceTable({ rows, sort, onSort, onSelect }: {
+  rows: FinanceRow[];
+  sort: SortState<FinanceSortKey> | null;
+  onSort: (key: FinanceSortKey) => void;
+  onSelect: (id: number) => void;
+}) {
   if (!rows.length) return <p className="rounded-lg border border-line bg-surface p-10 text-center text-ink-2">По этому отбору сотрудников нет.</p>;
   const totals = sumAmounts(rows);
+  const column = { sort, onSort, className: "px-4 py-3" };
   return (
     <>
       <div className="hidden overflow-x-auto rounded-lg border border-line bg-surface md:block">
         <table className="w-full min-w-[860px] border-collapse text-[13px]">
           <caption className="sr-only">Расчёт оплаты по сотрудникам</caption>
           <thead className="border-b border-line bg-surface-2/60 text-right text-[12px] text-ink-3">
-            <tr>{["Сотрудник", "Норма / ставка", "Оклад", "Переработка", "Проектные премии", "Итого", ""].map((title, index) => (
-              <th key={index} scope="col" className={`whitespace-nowrap px-4 py-3 font-medium ${index === 0 ? "text-left" : ""}`}>{title || <span className="sr-only">Подробнее</span>}</th>
-            ))}</tr>
+            <tr>
+              <SortTh label="Сотрудник" sortKey="name" align="left" {...column} />
+              <SortTh label="Норма / ставка" sortKey="norm" title="Сортировка по месячной норме" {...column} />
+              <SortTh label="Оклад" sortKey="salary" {...column} />
+              <SortTh label="Переработка" sortKey="overtime_pay" title="Сортировка по оплате переработки" {...column} />
+              <SortTh label="Проектные премии" sortKey="project_bonuses" {...column} />
+              <SortTh label="Итого" sortKey="total" {...column} />
+              <th scope="col"><span className="sr-only">Подробнее</span></th>
+            </tr>
           </thead>
           <tbody>
             {rows.map((row) => (

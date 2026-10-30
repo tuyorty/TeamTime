@@ -78,7 +78,18 @@ for (const theme of ["light", "dark"] as const) {
     await shot(browser, "/month/2026/9?tab=bonus", "month-bonus", theme, false, async (p) => {
       await p.getByLabel("Сортировка премий за переработку").selectOption("bonus:desc");
     });
-    await shot(browser, "/finances/2026/10", "finances", theme);
+    await shot(browser, "/finances/2026/10", "finances", theme, false, async (p) => {
+      await p.getByLabel("Сортировка начислений").selectOption("total:desc");
+    });
+    await shot(browser, "/finances/2026/10", "finance-extras", theme, false, async (p) => {
+      await p.getByLabel("Сортировка начислений").selectOption("project_bonuses:desc");
+      await p.getByRole("radio", { name: "Только доплаты", exact: true }).click();
+      await p.getByRole("region", { name: "Графики финансов", exact: true }).scrollIntoViewIfNeeded();
+    });
+    await shot(browser, "/finances/2026/10", "project-bonuses", theme, false, async (p) => {
+      await p.getByLabel("Сортировка проектных премий").selectOption("amount:desc");
+      await p.getByRole("region", { name: "Премии за проекты", exact: true }).scrollIntoViewIfNeeded();
+    });
     await shot(browser, "/finances/2026/10?employee=1", "finance-detail", theme);
     await shot(browser, "/people/2", "employee", theme);
     await shot(browser, "/people/2?period=3m", "employee-period", theme, false, async (p) => {
@@ -96,6 +107,10 @@ for (const theme of ["light", "dark"] as const) {
     await shot(browser, "/week/2026/43", "mobile-week", theme, true);
     await shot(browser, "/", "mobile-today", theme, true);
     await shot(browser, "/finances/2026/10", "mobile-finances", theme, true);
+    await shot(browser, "/finances/2026/10", "mobile-finance-chart", theme, true, async (p) => {
+      await p.getByLabel("Сортировка начислений").selectOption("total:desc");
+      await p.evaluate("const panel = Array.from(document.querySelectorAll('h2')).find(element => element.textContent === 'Начисления по сотрудникам').closest('section'); window.scrollTo({top: panel.getBoundingClientRect().top + window.scrollY - 58, behavior: 'instant'})");
+    });
     await shot(browser, "/people/2", "mobile-employee", theme, true);
     await shot(browser, "/admin/employees?edit=2", "mobile-avatar-editor", theme, true, prepareAvatarEditor);
     await shot(browser, "/?view=summary&date=2026-10-22", "mobile-day-summary", theme, true);

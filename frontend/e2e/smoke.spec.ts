@@ -61,10 +61,72 @@ test("финансы на телефоне: карточки и расшифро
   await page.goto("/finances");
   const cards = page.getByRole("button", { name: /^Расчёт:/ });
   await expect(cards.first()).toBeVisible();
+  await page.getByLabel("Сортировка начислений").selectOption("project_bonuses:desc");
   expect(await page.evaluate("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
   await cards.first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(await page.evaluate("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+});
+
+test("финансы: сортировка начислений и поиск проектных премий", async ({ page }) => {
+  await page.goto("/finances");
+  const month = await page.getByLabel("Месяц расчёта").inputValue();
+  const [year, number] = month.split("-").map(Number);
+  const data: import("../src/api/types").Finance = await (await page.request.get(`/api/v1/finances/${year}/${number}`)).json();
+  const table = page.getByRole("table", { name: "Расчёт оплаты по сотрудникам" });
+  const names = async () => Promise.all((await table.getByRole("button", { name: /^Расчёт:/ }).all()).map((button) => button.getAttribute("aria-label")));
+  const ordered = [...data.rows].sort((a, b) => Number(b.amounts.total) - Number(a.amounts.total));
+  await page.getByLabel("Сортировка начислений").selectOption("total:desc");
+  await expect.poll(names).toEqual(ordered.map((row) => `Расчёт: ${row.employee.short_name}`));
+  await expect(table.getByRole("columnheader", { name: "Итого", exact: true })).toHaveAttribute("aria-sort", "descending");
+  await table.getByRole("button", { name: "Итого", exact: true }).click();
+  await expect(page.getByLabel("Сортировка начислений")).toHaveValue("total:asc");
+  const ascending = [...data.rows].sort((a, b) => Number(a.amounts.total) - Number(b.amounts.total));
+  await expect.poll(names).toEqual(ascending.map((row) => `Расчёт: ${row.employee.short_name}`));
+  await page.getByLabel("Отбор начислений").selectOption("bonuses");
+  await expect.poll(names).toEqual(ascending.filter((row) => Number(row.amounts.project_bonuses) > 0).map((row) => `Расчёт: ${row.employee.short_name}`));
+
+  const bonuses = data.rows.flatMap((row) => row.bonuses.filter((bonus) => !bonus.cancelled_at));
+  expect(bonuses.length).toBeGreaterThan(1);
+  const items = page.getByRole("list", { name: "Список проектных премий" }).getByRole("listitem");
+  await page.getByLabel("Сортировка проектных премий").selectOption("amount:desc");
+  await expect(items).toContainText([...bonuses].sort((a, b) => Number(b.amount) - Number(a.amount)).map((bonus) => bonus.title));
+  await page.getByLabel("Сортировка проектных премий").selectOption("amount:asc");
+  await expect(items).toContainText([...bonuses].sort((a, b) => Number(a.amount) - Number(b.amount)).map((bonus) => bonus.title));
+  await page.getByLabel("Найти премию").fill(bonuses[0]!.title);
+  await expect(items).toHaveCount(bonuses.filter((bonus) => bonus.title.includes(bonuses[0]!.title)).length);
+  await page.getByLabel("Найти премию").fill("Несуществующий проект для проверки поиска");
+  await expect(page.getByText("Премии не найдены. Измените поиск или отбор сотрудников.")).toBeVisible();
+  await page.getByLabel("Найти премию").fill("");
+  await expect(items).toHaveCount(bonuses.length);
+});
+
+test("финансы: графики учитывают отбор, сортировку и показывают доплаты отдельно", async ({ page }) => {
+  const data: import("../src/api/types").Finance = await (await page.request.get("/api/v1/finances/2026/10")).json();
+  const rub = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", minimumFractionDigits: 2 });
+  await page.goto("/finances/2026/10");
+  const charts = page.getByRole("region", { name: "Графики финансов", exact: true });
+  const employees = charts.getByRole("list", { name: "Сотрудники на графике" }).getByRole("button");
+  await page.getByLabel("Сортировка начислений").selectOption("total:desc");
+  const ordered = [...data.rows].sort((a, b) => Number(b.amounts.total) - Number(a.amounts.total));
+  await expect(employees).toHaveText(ordered.map((row) => `${row.employee.short_name}${rub.format(Number(row.amounts.total))}`));
+  await page.getByRole("radio", { name: "Только доплаты", exact: true }).click();
+  await expect(employees).toHaveText(ordered.map((row) => `${row.employee.short_name}${rub.format(Number(row.amounts.overtime_pay) + Number(row.amounts.project_bonuses))}`));
+  const target = ordered.find((row) => Number(row.amounts.project_bonuses) > 0)!;
+  await page.getByLabel("Найти сотрудника").fill(target.employee.full_name);
+  await expect(employees).toHaveCount(1);
+  const sums = charts.getByLabel("Суммы на диаграмме");
+  for (const key of ["salary", "overtime_pay", "project_bonuses"] as const) {
+    await expect(sums).toContainText(rub.format(Number(target.amounts[key])));
+  }
+  await employees.first().click();
+  await expect(page.getByRole("dialog")).toContainText(target.employee.full_name);
+  await page.getByRole("dialog").getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(employees.first()).toBeVisible();
+  expect(await page.evaluate("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+  await page.getByLabel("Найти сотрудника").fill("Несуществующий сотрудник для проверки");
+  await expect(charts).toHaveCount(0);
 });
 
 test("месяц: явная сортировка премий синхронизирована с заголовками", async ({ page }) => {
