@@ -75,6 +75,8 @@ for (const theme of ["light", "dark"] as const) {
       await p.waitForTimeout(300);
     });
     await shot(browser, "/month/2026/9", "month", theme);
+    await shot(browser, "/finances/2026/10", "finances", theme);
+    await shot(browser, "/finances/2026/10?employee=1", "finance-detail", theme);
     await shot(browser, "/people/2", "employee", theme);
     await shot(browser, "/people/2?period=3m", "employee-period", theme, false, async (p) => {
       await p.evaluate(
@@ -90,6 +92,7 @@ for (const theme of ["light", "dark"] as const) {
     test.setTimeout(60_000);
     await shot(browser, "/week/2026/43", "mobile-week", theme, true);
     await shot(browser, "/", "mobile-today", theme, true);
+    await shot(browser, "/finances/2026/10", "mobile-finances", theme, true);
     await shot(browser, "/people/2", "mobile-employee", theme, true);
     await shot(browser, "/admin/employees?edit=2", "mobile-avatar-editor", theme, true, prepareAvatarEditor);
     await shot(browser, "/?view=summary&date=2026-10-22", "mobile-day-summary", theme, true);

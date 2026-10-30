@@ -517,6 +517,9 @@ function NotesPanel({ data }: { data: EmployeeDetail }) {
 }
 
 const ACTION_LABEL: Record<string, string> = {
+  "bonus.created": "добавлена проектная премия",
+  "bonus.updated": "изменена проектная премия",
+  "bonus.cancelled": "отменена проектная премия",
   "daily.set": "факт исправлен",
   "daily.retract": "факт убран",
   "plan_day.set": "план дня изменён",

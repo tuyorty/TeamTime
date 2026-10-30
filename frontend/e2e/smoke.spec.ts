@@ -8,6 +8,65 @@ async function login(page: Page) {
   expect(r.ok()).toBeTruthy();
 }
 
+test("финансы: расчёт, выбор месяца, премия и отмена с сохранением истории", async ({ page }) => {
+  await page.goto("/finances");
+  await expect(page.getByRole("heading", { name: "Финансы", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Добавить премию", exact: true })).toHaveCount(0);
+  const month = await page.getByLabel("Месяц расчёта").inputValue();
+  const [year, number] = month.split("-").map(Number);
+  const data = await (await page.request.get(`/api/v1/finances/${year}/${number}`)).json();
+  const employee = data.rows[0].employee;
+  await page.getByRole("button", { name: `Расчёт: ${employee.short_name}`, exact: true }).first().click();
+  const details = page.getByRole("dialog");
+  await expect(details.getByRole("heading", { name: "Как получилась сумма" })).toBeVisible();
+  await expect(details.getByText(/Выплачивается полностью при недоработке/)).toBeVisible();
+  await details.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.getByRole("button", { name: "Предыдущий месяц" }).click();
+  await expect(page.getByLabel("Месяц расчёта")).not.toHaveValue(month);
+  await page.getByRole("button", { name: "Текущий", exact: true }).click();
+  await expect(page.getByLabel("Месяц расчёта")).toHaveValue(month);
+  await login(page);
+  await page.reload();
+  await page.getByRole("button", { name: "Добавить премию", exact: true }).click();
+  const form = page.getByRole("dialog", { name: "Добавить премию", exact: true });
+  const title = `Проверка проекта ${Date.now()}`;
+  await form.getByLabel("Сотрудник", { exact: true }).selectOption(String(employee.id));
+  await form.getByLabel("Проект / основание").fill(title);
+  await form.getByLabel("Сумма, ₽").fill("1234,56");
+  await form.getByRole("button", { name: "Сохранить премию" }).click();
+  await expect(form).not.toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(title) })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: `Расчёт: ${employee.short_name}`, exact: true }).first().click();
+  const card = details.getByRole("listitem").filter({ hasText: title });
+  await expect(card).toContainText("1 234,56".replace(/ /g, "\u00a0"));
+  await card.getByRole("button", { name: "Изменить", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "Изменить премию" });
+  await edit.getByLabel("Сумма, ₽").fill("2345.67");
+  await edit.getByRole("button", { name: "Сохранить премию" }).click();
+  await expect(edit).not.toBeVisible();
+  await expect(card).toContainText("2 345,67".replace(/ /g, "\u00a0"));
+  await card.getByRole("button", { name: "Отменить", exact: true }).click();
+  const cancel = page.getByRole("dialog", { name: "Отменить премию", exact: true });
+  await cancel.getByLabel("Причина отмены").fill("Завершение тестового примера");
+  await cancel.getByRole("button", { name: "Отменить премию", exact: true }).click();
+  await expect(cancel).not.toBeVisible();
+  await expect(card).toContainText("Отменена");
+  const after = await (await page.request.get(`/api/v1/finances/${year}/${number}`)).json();
+  expect(after.totals.project_bonuses).toBe(data.totals.project_bonuses);
+});
+
+test("финансы на телефоне: карточки и расшифровка без горизонтального скролла", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/finances");
+  const cards = page.getByRole("button", { name: /^Расчёт:/ });
+  await expect(cards.first()).toBeVisible();
+  expect(await page.evaluate("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+  await cards.first().click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(await page.evaluate("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+});
+
 test("сегодня: ключевые числа, день команды и лента", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /^Сегодня/, level: 1 })).toBeVisible();

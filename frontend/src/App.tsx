@@ -10,6 +10,7 @@ const TodayPage = lazy(() => import("./pages/TodayPage"));
 const DaySummaryPage = lazy(() => import("./pages/DaySummaryPage"));
 const WeekPage = lazy(() => import("./pages/WeekPage"));
 const MonthPage = lazy(() => import("./pages/MonthPage"));
+const FinancePage = lazy(() => import("./pages/FinancePage"));
 const PeoplePage = lazy(() => import("./pages/PeoplePage"));
 const EmployeePage = lazy(() => import("./pages/EmployeePage"));
 const PlansPage = lazy(() => import("./pages/PlansPage"));
@@ -39,6 +40,8 @@ const router = createBrowserRouter([
       { path: "week/:year/:week", element: page(<WeekPage />) },
       { path: "month", element: page(<MonthPage />) },
       { path: "month/:year/:month", element: page(<MonthPage />) },
+      { path: "finances", element: page(<FinancePage />) },
+      { path: "finances/:year/:month", element: page(<FinancePage />) },
       { path: "people", element: page(<PeoplePage />) },
       { path: "people/:id", element: page(<EmployeePage />) },
       { path: "plans", element: page(<PlansPage />) },

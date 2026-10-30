@@ -12,6 +12,7 @@ import type {
   Message,
   Meta,
   Month,
+  Finance,
   Plans,
   Chat,
   Today,
@@ -96,6 +97,13 @@ export const useMonth = (y: number, m: number) =>
   useQuery({
     queryKey: keys.month(y, m),
     queryFn: () => api.get<Month>(`/months/${y}/${m}`),
+    placeholderData: keepPreviousData,
+  });
+
+export const useFinance = (y: number, m: number) =>
+  useQuery({
+    queryKey: ["finances", y, m],
+    queryFn: () => api.get<Finance>(`/finances/${y}/${m}`),
     placeholderData: keepPreviousData,
   });
 

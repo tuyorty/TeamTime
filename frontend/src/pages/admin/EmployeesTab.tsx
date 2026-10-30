@@ -339,7 +339,7 @@ function EmployeeForm({
         <Field label="Норма в месяц, ч" error={normError} hint="Не уменьшается из-за отпусков">
           <Input inputMode="decimal" value={form.norm} onChange={(e) => set("norm")(e.target.value)} />
         </Field>
-        <Field label="Ставка, ₽/ч" error={rateError} hint="Для премии за переработку">
+        <Field label="Ставка, ₽/ч" error={rateError} hint="Для оклада и оплаты переработки">
           <Input inputMode="decimal" value={form.rate} onChange={(e) => set("rate")(e.target.value)} />
         </Field>
       </div>

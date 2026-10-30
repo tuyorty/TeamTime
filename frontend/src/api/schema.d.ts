@@ -710,6 +710,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/finances/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Оклад, переработки и проектные премии за месяц */
+        get: operations["report_api_v1_finances__year___month__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bonuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Добавить премию за проект */
+        post: operations["create_bonus_api_v1_admin_bonuses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bonuses/{bonus_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Исправить сумму или описание премии */
+        put: operations["edit_bonus_api_v1_admin_bonuses__bonus_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bonuses/{bonus_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отменить премию с сохранением истории */
+        post: operations["cancel_bonus_api_v1_admin_bonuses__bonus_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/export/finances/{year}/{month}.{fmt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Расчёт оплаты в Excel или CSV */
+        get: operations["download_api_v1_export_finances__year___month___fmt__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/demo/status-requests": {
         parameters: {
             query?: never;
@@ -837,6 +922,51 @@ export interface components {
              * @description Только сообщения с этой даты
              */
             since?: string | null;
+        };
+        /** BonusCancel */
+        BonusCancel: {
+            /** Version */
+            version: number;
+            /** Reason */
+            reason: string;
+        };
+        /** BonusCreate */
+        BonusCreate: {
+            /** Title */
+            title: string;
+            /** Amount */
+            amount: number | string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Employee Id */
+            employee_id: number;
+            /**
+             * Month
+             * Format: date
+             */
+            month: string;
+        };
+        /** BonusEdit */
+        BonusEdit: {
+            /** Title */
+            title: string;
+            /** Amount */
+            amount: number | string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Version */
+            version: number;
         };
         /** BotSettings */
         BotSettings: {
@@ -1324,6 +1454,39 @@ export interface components {
             edited: boolean;
             /** Raw Message Id */
             raw_message_id: number;
+        };
+        /** FinanceAmounts */
+        FinanceAmounts: {
+            /** Salary */
+            salary: string;
+            /** Overtime Pay */
+            overtime_pay: string;
+            /** Project Bonuses */
+            project_bonuses: string;
+            /** Total */
+            total: string;
+        };
+        /** FinanceOut */
+        FinanceOut: {
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Label */
+            label: string;
+            /** Complete */
+            complete: boolean;
+            /** Rows */
+            rows: components["schemas"]["FinanceRow"][];
+            totals: components["schemas"]["FinanceAmounts"];
+        };
+        /** FinanceRow */
+        FinanceRow: {
+            employee: components["schemas"]["EmployeeBrief"];
+            summary: components["schemas"]["MonthSummaryOut"];
+            amounts: components["schemas"]["FinanceAmounts"];
+            /** Bonuses */
+            bonuses: components["schemas"]["ProjectBonusOut"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2004,6 +2167,35 @@ export interface components {
             days: string[];
             /** Rows */
             rows: components["schemas"]["PlanRow"][];
+        };
+        /** ProjectBonusOut */
+        ProjectBonusOut: {
+            /** Id */
+            id: number;
+            /** Employee Id */
+            employee_id: number;
+            /**
+             * Month
+             * Format: date
+             */
+            month: string;
+            /** Title */
+            title: string;
+            /** Amount */
+            amount: string;
+            /** Note */
+            note: string;
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Cancel Reason */
+            cancel_reason: string;
         };
         /** ReminderOut */
         ReminderOut: {
@@ -3970,6 +4162,182 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemOut"];
+                };
+            };
+        };
+    };
+    report_api_v1_finances__year___month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_bonus_api_v1_admin_bonuses_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BonusCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBonusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_bonus_api_v1_admin_bonuses__bonus_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                bonus_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BonusEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBonusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_bonus_api_v1_admin_bonuses__bonus_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                bonus_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BonusCancel"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBonusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_api_v1_export_finances__year___month___fmt__get: {
+        parameters: {
+            query?: {
+                employee_id?: number[] | null;
+            };
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+                fmt: "csv" | "xlsx";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

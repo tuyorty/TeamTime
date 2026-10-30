@@ -1,6 +1,6 @@
 import {
   CalendarDays, CalendarRange, ClipboardList, Inbox, LayoutGrid, MessagesSquare, Settings2,
-  Sun, Users, type LucideIcon,
+  Sun, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -18,6 +18,7 @@ export const NAV: NavItem[] = [
   { to: "/", label: "Сегодня", icon: Sun, mobile: true },
   { to: "/week", label: "Неделя", icon: LayoutGrid, mobile: true },
   { to: "/month", label: "Месяц", icon: CalendarRange, mobile: true },
+  { to: "/finances", label: "Финансы", icon: Wallet },
   { to: "/people", label: "Люди", icon: Users, mobile: true },
   { to: "/plans", label: "Планы", icon: ClipboardList },
   { to: "/calendar", label: "Календарь", icon: CalendarDays },
