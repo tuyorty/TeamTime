@@ -75,6 +75,9 @@ for (const theme of ["light", "dark"] as const) {
       await p.waitForTimeout(300);
     });
     await shot(browser, "/month/2026/9", "month", theme);
+    await shot(browser, "/month/2026/9?tab=bonus", "month-bonus", theme, false, async (p) => {
+      await p.getByLabel("Сортировка премий за переработку").selectOption("bonus:desc");
+    });
     await shot(browser, "/finances/2026/10", "finances", theme);
     await shot(browser, "/finances/2026/10?employee=1", "finance-detail", theme);
     await shot(browser, "/people/2", "employee", theme);

@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import type { Month, MonthRow } from "@/api/types";
+import { SortSelect, type SortOption } from "@/components/domain/SortSelect";
 import { cn } from "@/lib/cn";
 import { hm, money } from "@/lib/format";
 
@@ -18,15 +19,33 @@ const GET: Record<Key, (r: MonthRow) => number | string> = {
   rate: (r) => Number(r.summary.hourly_rate),
   bonus: (r) => Number(r.summary.bonus),
 };
+const OPTIONS: SortOption<Key>[] = [
+  { key: "bonus", dir: "desc", label: "Премия: больше → меньше" },
+  { key: "bonus", dir: "asc", label: "Премия: меньше → больше" },
+  { key: "overtime", dir: "desc", label: "Переработка: больше → меньше" },
+  { key: "overtime", dir: "asc", label: "Переработка: меньше → больше" },
+  { key: "rate", dir: "desc", label: "Ставка: больше → меньше" },
+  { key: "rate", dir: "asc", label: "Ставка: меньше → больше" },
+  { key: "total", dir: "desc", label: "Часы: больше → меньше" },
+  { key: "total", dir: "asc", label: "Часы: меньше → больше" },
+  { key: "norm", dir: "desc", label: "Норма: больше → меньше" },
+  { key: "norm", dir: "asc", label: "Норма: меньше → больше" },
+  { key: "name", dir: "asc", label: "Сотрудник: А–Я" },
+  { key: "name", dir: "desc", label: "Сотрудник: Я–А" },
+];
 
 export function BonusTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
   const [open, setOpen] = useState<number | null>(null);
-  const { sort, toggle } = useSort<Key>();
+  const { sort, toggle, setSort } = useSort<Key>();
   const sorted = sortRows(rows, sort, GET);
   const col = { sort, onSort: toggle };
   const total = rows.reduce((s, r) => s + Number(r.summary.bonus), 0);
   return (
     <div className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <SortSelect label="Сортировка премий за переработку" options={OPTIONS} sort={sort} onChange={setSort} />
+        <span className="text-[12px] text-ink-3">Порядок можно менять и нажатием на заголовки столбцов</span>
+      </div>
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="w-full min-w-[720px] border-collapse">
           <caption className="sr-only">Премии за переработку</caption>

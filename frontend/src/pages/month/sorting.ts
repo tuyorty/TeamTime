@@ -16,7 +16,7 @@ export function useSort<K extends string>() {
       if (cur.dir === first) return { key, dir: first === "asc" ? "desc" : "asc" };
       return null;
     });
-  return { sort, toggle };
+  return { sort, toggle, setSort };
 }
 
 /** Стабильная сортировка; без выбранной колонки — исходный порядок (по фамилии). */

@@ -67,6 +67,19 @@ test("финансы на телефоне: карточки и расшифро
   expect(await page.evaluate("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
 });
 
+test("месяц: явная сортировка премий синхронизирована с заголовками", async ({ page }) => {
+  const data: import("../src/api/types").Month = await (await page.request.get("/api/v1/months/2026/9?history=1")).json();
+  await page.goto("/month/2026/9?tab=bonus");
+  const table = page.getByRole("table", { name: "Премии за переработку" });
+  const names = table.locator("tbody > tr > th").getByRole("link");
+  const sorted = (dir: number) => [...data.rows].sort((a, b) => dir * (Number(a.summary.bonus) - Number(b.summary.bonus))).map((row) => row.employee.short_name);
+  await page.getByLabel("Сортировка премий за переработку").selectOption("bonus:desc");
+  await expect(names).toHaveText(sorted(-1));
+  await table.getByRole("button", { name: "Премия", exact: true }).click();
+  await expect(page.getByLabel("Сортировка премий за переработку")).toHaveValue("bonus:asc");
+  await expect(names).toHaveText(sorted(1));
+});
+
 test("сегодня: ключевые числа, день команды и лента", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /^Сегодня/, level: 1 })).toBeVisible();
