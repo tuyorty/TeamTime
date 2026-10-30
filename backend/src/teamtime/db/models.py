@@ -97,6 +97,8 @@ class Employee(Timestamped, Base):
     position: Mapped[str] = mapped_column(String(200), default="")
     phone: Mapped[str] = mapped_column(String(40), default="", server_default="")
     about: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    expertise: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    help_with: Mapped[str] = mapped_column(String(500), default="", server_default="")
     avatar_url: Mapped[str] = mapped_column(Text, default="", server_default="")
     monthly_norm_minutes: Mapped[int] = mapped_column(Integer, default=160 * 60)
     hourly_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal(0))
@@ -158,6 +160,126 @@ class DailyReminder(Base):
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+    deferred_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    snooze_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    snooze_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    followup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    followup_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class EmployeeTerms(Timestamped, Base):
+    """Норма и ставка с месяца действия; прежние месяцы сохраняют свои условия."""
+
+    __tablename__ = "employee_terms"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
+    effective_from: Mapped[date] = mapped_column(Date)
+    monthly_norm_minutes: Mapped[int] = mapped_column(Integer)
+    hourly_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    created_by: Mapped[str] = mapped_column(String(100), default="admin")
+    __table_args__ = (
+        UniqueConstraint("employee_id", "effective_from", name="employee_terms_month"),
+        CheckConstraint(
+            "monthly_norm_minutes >= 0 AND hourly_rate >= 0", name="terms_non_negative"
+        ),
+    )
+
+
+class CalculationVersion(Timestamped, Base):
+    """Версии правил расчёта; настройки доставки бота применяются независимо."""
+
+    __tablename__ = "calculation_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    effective_from: Mapped[date] = mapped_column(Date, unique=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_by: Mapped[str] = mapped_column(String(100), default="admin")
+
+
+class StatusRequest(Timestamped, Base):
+    """Запрос сотрудника; до одобрения действующие статусы не меняются."""
+
+    __tablename__ = "status_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
+    start: Mapped[date] = mapped_column(Date)
+    end: Mapped[date] = mapped_column(Date)
+    kind: Mapped[StatusKind | None] = mapped_column(_enum(StatusKind, "status_kind"))
+    note: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    state: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    requested_by: Mapped[str] = mapped_column(String(100))
+    decided_by: Mapped[str | None] = mapped_column(String(100))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    employee: Mapped[Employee] = relationship()
+    __table_args__ = (
+        CheckConstraint('"end" >= start', name="status_request_dates"),
+        CheckConstraint("state IN ('pending','accepted','rejected')", name="status_request_state"),
+        Index("ix_status_requests_state", "state", "created_at"),
+    )
+
+
+class NotificationPreference(Base):
+    """Личные настройки без изменения общего расписания или правил расчёта."""
+
+    __tablename__ = "notification_preferences"
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    delay_minutes: Mapped[int | None] = mapped_column(Integer)
+    quiet_start: Mapped[int | None] = mapped_column(Integer)
+    quiet_end: Mapped[int | None] = mapped_column(Integer)
+    __table_args__ = (
+        CheckConstraint("delay_minutes BETWEEN 1 AND 240", name="notification_delay"),
+        CheckConstraint(
+            "quiet_start BETWEEN 0 AND 1439 AND quiet_end BETWEEN 0 AND 1439",
+            name="notification_quiet",
+        ),
+    )
+
+
+class BotDraft(Timestamped, Base):
+    """Подтверждение мастера дейлика обрабатывается один раз даже при повторе callback."""
+
+    __tablename__ = "bot_drafts"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    daily_id: Mapped[int | None] = mapped_column(ForeignKey("dailies.id", ondelete="SET NULL"))
+
+
+class SystemStatus(Base):
+    """Состояние сервиса не зависит от открытого браузера или конкретного процесса API."""
+
+    __tablename__ = "system_status"
+    service: Mapped[str] = mapped_column(String(30), primary_key=True)
+    state: Mapped[str] = mapped_column(String(20))
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_update_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class BotDelivery(Timestamped, Base):
+    """История исходящих ответов: сохраняем коды ошибок, без токенов и текста лички."""
+
+    __tablename__ = "bot_deliveries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    employee_id: Mapped[int | None] = mapped_column(ForeignKey("employees.id", ondelete="SET NULL"))
+    raw_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_messages.id", ondelete="SET NULL")
+    )
+    state: Mapped[str] = mapped_column(String(20), default="attempted")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    __table_args__ = (Index("ix_bot_deliveries_created", "created_at"),)
 
 
 class BotChat(Base):
