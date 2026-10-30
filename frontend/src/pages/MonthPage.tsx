@@ -50,7 +50,9 @@ export default function MonthPage() {
           <h1 className="font-display text-[34px] font-semibold leading-none tracking-tight">
             {MONTHS[month - 1]} <span className="text-ink-3 tnum">{year}</span>
           </h1>
-          {data && !data.complete ? <Badge tone="deviation">месяц не закончился, итоги промежуточные</Badge> : null}
+          {data && !data.complete ? (
+            <Badge tone="deviation">месяц не закончился, итоги промежуточные</Badge>
+          ) : null}
         </div>
         <div className="no-print flex flex-wrap items-center gap-2">
           <div className="flex items-center">
@@ -86,12 +88,40 @@ export default function MonthPage() {
             <DropdownContent>
               <DropdownItem asChild>
                 <a href={exportUrl(`/months/${year}/${month}.xlsx`)} download>
-                  Excel: итог, опоздания, дни
+                  Вся команда · Excel: итог, опоздания, дни
                 </a>
               </DropdownItem>
               <DropdownItem asChild>
                 <a href={exportUrl(`/months/${year}/${month}.csv`)} download>
-                  CSV: итог за месяц
+                  Вся команда · CSV: итог за месяц
+                </a>
+              </DropdownItem>
+              <DropdownItem asChild disabled={!filter.visible.length}>
+                <a
+                  href={
+                    filter.visible.length
+                      ? exportUrl(
+                          `/months/${year}/${month}.xlsx?${filter.visible.map((row) => `employee_id=${row.employee.id}`).join("&")}`,
+                        )
+                      : undefined
+                  }
+                  download
+                >
+                  Текущий отбор ({filter.visible.length}) · Excel
+                </a>
+              </DropdownItem>
+              <DropdownItem asChild disabled={!filter.visible.length}>
+                <a
+                  href={
+                    filter.visible.length
+                      ? exportUrl(
+                          `/months/${year}/${month}.csv?${filter.visible.map((row) => `employee_id=${row.employee.id}`).join("&")}`,
+                        )
+                      : undefined
+                  }
+                  download
+                >
+                  Текущий отбор ({filter.visible.length}) · CSV
                 </a>
               </DropdownItem>
             </DropdownContent>

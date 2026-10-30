@@ -12,7 +12,16 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
-import { WEEKDAYS_SHORT, dateTime, dayMonthShort, hm, isoWeek, parseDate, rangeShort, shiftWeek } from "@/lib/format";
+import {
+  WEEKDAYS_SHORT,
+  dateTime,
+  dayMonthShort,
+  hm,
+  isoWeek,
+  parseDate,
+  rangeShort,
+  shiftWeek,
+} from "@/lib/format";
 
 function dayText(p: PlanDay | undefined): string {
   if (!p) return "—";
@@ -25,7 +34,12 @@ function byDate(v: PlanVersion): Map<string, PlanDay> {
   return new Map(v.days.map(([d, p]) => [d, p]));
 }
 
-const SOURCE = { telegram: "из сообщения", import: "из импорта", demo: "из сообщения", manual: "правка вручную" } as const;
+const SOURCE = {
+  telegram: "из сообщения",
+  import: "из импорта",
+  demo: "из сообщения",
+  manual: "правка вручную",
+} as const;
 
 export default function PlansPage() {
   const params = useParams();
@@ -48,7 +62,8 @@ export default function PlansPage() {
         <div>
           <h1 className="font-display text-[28px] font-semibold tracking-tight">Планы: {week} неделя</h1>
           <p className="mt-1 text-[13px] text-ink-2">
-            {data ? rangeShort(data.days[0]!, data.days[6]!) : " "}. Расписания из темы, их версии и задачи спринта.
+            {data ? rangeShort(data.days[0]!, data.days[6]!) : " "}. Расписания из темы, их версии и задачи
+            спринта.
           </p>
         </div>
         <div className="flex items-center">
@@ -63,6 +78,8 @@ export default function PlansPage() {
           </Button>
         </div>
       </header>
+
+      {data ? <ScheduleCompleteness rows={data.rows} days={data.required_days ?? data.days} /> : null}
 
       {error ? (
         <ErrorState error={error} onRetry={() => refetch()} />
@@ -84,13 +101,17 @@ export default function PlansPage() {
             </colgroup>
             <thead className="border-b border-line bg-surface-2/60 text-left text-[12px] text-ink-3">
               <tr>
-                <th scope="col" className="px-3 py-1.5 font-medium">Сотрудник</th>
+                <th scope="col" className="px-3 py-1.5 font-medium">
+                  Сотрудник
+                </th>
                 {data.days.map((d, i) => (
                   <th key={d} scope="col" className="border-l border-line px-2 py-1.5 font-medium">
                     {WEEKDAYS_SHORT[i]} <span className="font-normal tnum">{dayMonthShort(d)}</span>
                   </th>
                 ))}
-                <th scope="col" className="border-l border-line px-3 py-1.5 font-medium">Задачи спринта</th>
+                <th scope="col" className="border-l border-line px-3 py-1.5 font-medium">
+                  Задачи спринта
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -103,11 +124,17 @@ export default function PlansPage() {
                         <Avatar employee={r.employee} size={20} />
                         <span
                           className="truncate font-medium"
-                          title={r.current ? `Версия ${r.current.version}, ${SOURCE[r.current.source]}` : "Расписания нет"}
+                          title={
+                            r.current
+                              ? `Версия ${r.current.version}, ${SOURCE[r.current.source]}`
+                              : "Расписания нет"
+                          }
                         >
                           {r.employee.short_name}
                         </span>
-                        {!r.current ? <span className="shrink-0 text-[11px] text-ink-3">нет плана</span> : null}
+                        {!r.current ? (
+                          <span className="shrink-0 text-[11px] text-ink-3">нет плана</span>
+                        ) : null}
                         {r.current && r.versions.length > 1 ? (
                           <Button
                             size="icon"
@@ -149,7 +176,11 @@ export default function PlansPage() {
                           : undefined
                       }
                     >
-                      {r.current?.tasks.length ? <TaskList tasks={r.current.tasks} /> : <span className="text-ink-3">—</span>}
+                      {r.current?.tasks.length ? (
+                        <TaskList tasks={r.current.tasks} />
+                      ) : (
+                        <span className="text-ink-3">—</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -169,6 +200,33 @@ export default function PlansPage() {
   );
 }
 
+function ScheduleCompleteness({ rows, days }: { rows: PlanRow[]; days: string[] }) {
+  const missing = rows.filter((row) => !row.current);
+  const noTasks = rows.filter((row) => row.current && !row.current.tasks.length);
+  const incomplete = rows.filter((row) => row.current && days.some((day) => !byDate(row.current!).has(day)));
+  const unclear = rows.filter((row) =>
+    row.current?.days.some(([, plan]) => plan.kind === "note" || plan.note_has_time),
+  );
+  return (
+    <section aria-label="Полнота расписаний" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {[
+        { label: "Не прислали расписание", people: missing },
+        { label: "Не указали задачи", people: noTasks },
+        { label: "Не указаны рабочие дни", people: incomplete },
+        { label: "Нужно уточнить интервалы", people: unclear },
+      ].map((item) => (
+        <div key={item.label} className="rounded-lg border border-line bg-surface p-4">
+          <p className="text-[12px] text-ink-3">{item.label}</p>
+          <p className="my-2 font-display text-[28px] font-semibold tnum">{item.people.length}</p>
+          <p className="max-h-20 overflow-y-auto text-[12px] leading-5 text-ink-2">
+            {item.people.map((row) => row.employee.short_name).join(", ") || "У всех заполнено"}
+          </p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** Задачи спринта: свёрнуто — первый пункт в одну строку и счётчик остальных, чтобы вся
  * команда помещалась на экран. Развёрнуто — весь список. */
 function TaskList({ tasks }: { tasks: string[] }) {
@@ -183,7 +241,9 @@ function TaskList({ tasks }: { tasks: string[] }) {
       title={open ? "Свернуть" : "Показать все задачи"}
     >
       {open ? "свернуть" : `+${rest}`}
-      <ChevronDown className={cn("size-3 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+      <ChevronDown
+        className={cn("size-3 transition-transform motion-reduce:transition-none", open && "rotate-180")}
+      />
     </button>
   );
   if (!open) {
@@ -225,7 +285,11 @@ function VersionsDiff({ row, days }: { row: PlanRow; days: string[] }) {
           <li key={v.id} className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-display text-[15px] font-semibold">Версия {v.version}</span>
-              {v.retracted ? <Badge>отозвана</Badge> : idx === 0 ? <Badge tone="accent">актуальная</Badge> : null}
+              {v.retracted ? (
+                <Badge>отозвана</Badge>
+              ) : idx === 0 ? (
+                <Badge tone="accent">актуальная</Badge>
+              ) : null}
               {v.edited ? <Badge tone="outline">из правки сообщения</Badge> : null}
               <span className="text-[12px] text-ink-3">
                 {dateTime(v.created_at)}, {SOURCE[v.source]}

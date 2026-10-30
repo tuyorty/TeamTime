@@ -1,5 +1,7 @@
-import { AtSign, BriefcaseBusiness, CalendarDays, Clock3, Pencil, Phone } from "lucide-react";
+import { AtSign, BriefcaseBusiness, CalendarDays, Clock3, Copy, Pencil, Phone } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 
 import { useMeta, useToday } from "@/api/queries";
 import type { EmployeeDetail } from "@/api/types";
@@ -8,9 +10,12 @@ import { TaskList } from "@/components/domain/TaskList";
 import { STATUS } from "@/components/domain/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { copyText, formatPhone, phoneHref } from "@/lib/phone";
 import { clock, dayMonth, hm } from "@/lib/format";
 
 export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
+  const [photoOpen, setPhotoOpen] = useState(false);
   const { data: meta } = useMeta();
   const today = useToday().data;
   const employee = data.employee;
@@ -32,10 +37,24 @@ export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
               : "";
 
   return (
-    <section aria-label="Профиль сотрудника" className="overflow-hidden rounded-lg border border-line bg-surface">
+    <section
+      aria-label="Профиль сотрудника"
+      className="overflow-hidden rounded-lg border border-line bg-surface"
+    >
       <div className="h-1.5 bg-accent/60" />
       <header className="flex flex-wrap items-center gap-4 p-5 sm:p-6">
-        <Avatar employee={employee} size={80} />
+        {employee.avatar_url ? (
+          <button
+            type="button"
+            aria-label="Открыть фотографию сотрудника"
+            onClick={() => setPhotoOpen(true)}
+            className="shrink-0 rounded-full ring-offset-4 transition-shadow hover:ring-2 hover:ring-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Avatar employee={employee} size={80} />
+          </button>
+        ) : (
+          <Avatar employee={employee} size={80} />
+        )}
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">
             {employee.full_name}
@@ -80,13 +99,31 @@ export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
             </span>
           )}
           {employee.phone ? (
-            <a
-              href={`tel:${employee.phone.replace(/[^+\d]/g, "")}`}
-              className="flex w-fit items-center gap-2 text-[13px] hover:text-accent-ink"
-            >
-              <Phone className="size-4 text-ink-3" />
-              {employee.phone}
-            </a>
+            <div className="flex items-center gap-1">
+              <a
+                href={phoneHref(employee.phone)}
+                className="flex w-fit items-center gap-2 whitespace-nowrap text-[13px] tnum hover:text-accent-ink"
+              >
+                <Phone className="size-4 text-ink-3" />
+                {formatPhone(employee.phone)}
+              </a>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Скопировать номер телефона"
+                title="Скопировать номер"
+                onClick={async () => {
+                  try {
+                    await copyText(formatPhone(employee.phone));
+                    toast.success("Номер скопирован");
+                  } catch {
+                    toast.error("Не удалось скопировать. Выделите номер и скопируйте вручную.");
+                  }
+                }}
+              >
+                <Copy />
+              </Button>
+            </div>
           ) : (
             <span className="flex items-center gap-2 text-[13px] text-ink-3">
               <Phone className="size-4" /> Телефон не указан
@@ -117,8 +154,28 @@ export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
           <p className="whitespace-pre-wrap break-words text-[13px] text-ink-2">
             {employee.about || "Описание не добавлено."}
           </p>
+          {employee.expertise ? (
+            <p className="text-[12px] text-ink-2">
+              <b>Направления работы:</b> {employee.expertise}
+            </p>
+          ) : null}
+          {employee.help_with ? (
+            <p className="text-[12px] text-ink-2">
+              <b>С чем поможет:</b> {employee.help_with}
+            </p>
+          ) : null}
+          {data.upcoming_absence ? (
+            <p className="rounded-md bg-absence-soft p-2 text-[12px] text-absence-ink">
+              <b>{data.upcoming_absence.label}</b> · {dayMonth(data.upcoming_absence.start)}–
+              {dayMonth(data.upcoming_absence.end)}
+              {data.upcoming_absence.note ? ` · ${data.upcoming_absence.note}` : ""}
+            </p>
+          ) : null}
           <p className="text-[12px] text-ink-3">
-            Норма: <span className="font-medium text-ink-2 tnum">{hm(employee.monthly_norm_minutes * 60)} в месяц</span>
+            Норма:{" "}
+            <span className="font-medium text-ink-2 tnum">
+              {hm(employee.monthly_norm_minutes * 60)} в месяц
+            </span>
           </p>
         </div>
       </div>
@@ -128,6 +185,18 @@ export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
           <TaskList key={employee.id} tasks={row.tasks} columns={2} label="Задачи сотрудника на неделю" />
         </div>
       ) : null}
+      <Dialog open={photoOpen} onOpenChange={setPhotoOpen}>
+        <DialogContent
+          title={`Фотография · ${employee.full_name}`}
+          className="max-h-[90dvh] w-[min(92vw,34rem)] overflow-y-auto"
+        >
+          <img
+            src={employee.avatar_url}
+            alt={`Фотография ${employee.full_name}`}
+            className="mx-auto max-h-[70dvh] w-full rounded-lg object-contain"
+          />
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

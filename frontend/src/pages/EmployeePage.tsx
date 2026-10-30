@@ -12,16 +12,29 @@ import { Input, Select } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
-import { WEEKDAYS_SHORT, count, dateTime, ddmm, hm, isoDate, money, parseDate, percent, rangeShort, weekday } from "@/lib/format";
+import {
+  WEEKDAYS_SHORT,
+  count,
+  dateTime,
+  ddmm,
+  hm,
+  isoDate,
+  money,
+  parseDate,
+  percent,
+  rangeShort,
+  weekday,
+} from "@/lib/format";
 
 import { NormBar } from "./month/shared";
 import { EfficiencyChart, HoursChart, Punctuality } from "./employee/Charts";
 import { MonthHeatmap } from "./employee/Heatmap";
 import { EmployeeProfile } from "./employee/Profile";
 
-/** Готовые периоды статистики. Пустое значение — по умолчанию сервера (8 недель). */
+/** По умолчанию — текущий календарный месяц; вся статистика использует выбранные даты. */
 const PERIODS = [
-  { value: "", label: "8 недель" },
+  { value: "1m", label: "1 месяц" },
+  { value: "8w", label: "8 недель" },
   { value: "3m", label: "3 месяца" },
   { value: "6m", label: "Полгода" },
   { value: "year", label: "С начала года" },
@@ -32,14 +45,25 @@ const PERIODS = [
 /** Сервер отдаёт статистику не больше чем за год. */
 const MAX_DAYS = 370;
 
-function periodRange(period: string, today: string, from: string | null, to: string | null): [string, string] | null {
+function periodRange(
+  period: string,
+  today: string,
+  from: string | null,
+  to: string | null,
+): [string, string] | null {
   const end = parseDate(today);
   const back = (months: number) => {
     const d = new Date(end);
-    d.setMonth(d.getMonth() - months);
-    d.setDate(d.getDate() + 1);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - months + 1);
     return isoDate(d);
   };
+  if (period === "1m" || !period) return [back(1), today];
+  if (period === "8w") {
+    const start = new Date(end);
+    start.setDate(end.getDate() - ((end.getDay() + 6) % 7) - 49);
+    return [isoDate(start), today];
+  }
   if (period === "3m") return [back(3), today];
   if (period === "6m") return [back(6), today];
   if (period === "12m") return [back(12), today];
@@ -52,7 +76,7 @@ export default function EmployeePage() {
   const id = Number(useParams().id);
   const [search, setSearch] = useSearchParams();
   const today = useMeta().data?.today;
-  const period = search.get("period") ?? "";
+  const period = search.get("period") || "1m";
   const range = today ? periodRange(period, today, search.get("from"), search.get("to")) : null;
   const { data, error, refetch } = useEmployee(id, range?.[0], range?.[1]);
   const [selected, setSelected] = useState<DayRef | null>(null);
@@ -75,7 +99,10 @@ export default function EmployeePage() {
 
   return (
     <div className="grid grid-cols-1 gap-5">
-      <Link to="/people" className="inline-flex w-fit items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
+      <Link
+        to="/people"
+        className="inline-flex w-fit items-center gap-1 text-[13px] text-ink-2 hover:text-ink"
+      >
         <ArrowLeft className="size-4" /> Люди
       </Link>
       <EmployeeProfile data={data} />
@@ -89,11 +116,16 @@ export default function EmployeePage() {
         />
       </div>
 
-      <MonthStrip data={data} />
-
+      {data.start === `${today.slice(0, 7)}-01` && data.end === today ? (
+        <MonthStrip data={data} />
+      ) : (
+        <PeriodStrip data={data} />
+      )}
       <p className="-mb-2 text-[13px] text-ink-2">
-        Статистика за {rangeShort(data.start, data.end)} {data.start.slice(0, 4) !== data.end.slice(0, 4) ? `${data.start.slice(0, 4)}–${data.end.slice(0, 4)}` : data.end.slice(0, 4)}
-        <span className="text-ink-3"> · итоги месяца выше — за текущий месяц</span>
+        Статистика за {rangeShort(data.start, data.end)}{" "}
+        {data.start.slice(0, 4) !== data.end.slice(0, 4)
+          ? `${data.start.slice(0, 4)}–${data.end.slice(0, 4)}`
+          : data.end.slice(0, 4)}
       </p>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -130,7 +162,8 @@ function PeriodPicker({
   to: string;
   onChange: (next: Record<string, string>) => void;
 }) {
-  const tooLong = (a: string, b: string) => (parseDate(b).getTime() - parseDate(a).getTime()) / 86_400_000 > MAX_DAYS;
+  const tooLong = (a: string, b: string) =>
+    (parseDate(b).getTime() - parseDate(a).getTime()) / 86_400_000 > MAX_DAYS;
   const [error, setError] = useState<string | null>(null);
   const setDates = (a: string, b: string) => {
     if (!a || !b) return;
@@ -160,13 +193,29 @@ function PeriodPicker({
         </Select>
         {period === "custom" ? (
           <>
-            <Input type="date" aria-label="Начало периода" className="w-36" value={from} onChange={(e) => setDates(e.target.value, to)} />
+            <Input
+              type="date"
+              aria-label="Начало периода"
+              className="w-36"
+              value={from}
+              onChange={(e) => setDates(e.target.value, to)}
+            />
             <span className="text-ink-3">–</span>
-            <Input type="date" aria-label="Конец периода" className="w-36" value={to} onChange={(e) => setDates(from, e.target.value)} />
+            <Input
+              type="date"
+              aria-label="Конец периода"
+              className="w-36"
+              value={to}
+              onChange={(e) => setDates(from, e.target.value)}
+            />
           </>
         ) : null}
       </div>
-      {error ? <span role="alert" className="text-[12px] text-late-ink">{error}</span> : null}
+      {error ? (
+        <span role="alert" className="text-[12px] text-late-ink">
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -174,30 +223,50 @@ function PeriodPicker({
 function MonthStrip({ data }: { data: EmployeeDetail }) {
   const s = data.month;
   return (
-    <section aria-label="Текущий месяц" className="grid gap-4 rounded-lg border border-line bg-surface p-4 md:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]">
+    <section
+      aria-label="Текущий месяц"
+      className="grid gap-4 rounded-lg border border-line bg-surface p-4 md:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]"
+    >
       <div className="grid content-start gap-2">
         <span className="text-[12px] text-ink-2">Итого за месяц и норма</span>
         <span className="font-display text-[30px] font-semibold leading-none tnum">
           {hm(s.total_sec)} <span className="text-[16px] font-medium text-ink-3">из {hm(s.norm_sec)}</span>
         </span>
         <NormBar total={s.total_sec} norm={s.norm_sec} max={Math.max(s.total_sec, s.norm_sec) * 1.1 || 1} />
-        <span className={cn("text-[12px] tnum", s.norm_progress >= 1 ? "font-semibold text-accent-ink" : "text-ink-3")}>
+        <span
+          className={cn(
+            "text-[12px] tnum",
+            s.norm_progress >= 1 ? "font-semibold text-accent-ink" : "text-ink-3",
+          )}
+        >
           {percent(s.norm_progress)} нормы
         </span>
       </div>
       {[
-        { label: "Часы(+)", value: hm(s.worked_sec), hint: `${count(s.days_worked, ["день", "дня", "дней"])} с дейликом` },
-        { label: "Часы(e%)", value: hm(s.result_sec), hint: s.days_without_efficiency ? `без e%: ${s.days_without_efficiency}` : "по дейликам" },
+        {
+          label: "Часы(+)",
+          value: hm(s.worked_sec),
+          hint: `${count(s.days_worked, ["день", "дня", "дней"])} с дейликом`,
+        },
+        {
+          label: "Часы(e%)",
+          value: hm(s.result_sec),
+          hint: s.days_without_efficiency ? `без e%: ${s.days_without_efficiency}` : "по дейликам",
+        },
         {
           label: "Опоздания(−)",
           value: s.penalty_sec ? `−${hm(s.penalty_sec)}` : "—",
-          hint: s.late_count ? `${count(s.late_count, ["опоздание", "опоздания", "опозданий"])}, ${hm(s.late_total_sec)}` : "опозданий нет",
+          hint: s.late_count
+            ? `${count(s.late_count, ["опоздание", "опоздания", "опозданий"])}, ${hm(s.late_total_sec)}`
+            : "опозданий нет",
           tone: s.penalty_sec ? "text-late-ink" : "",
         },
         {
           label: "Премия",
           value: Number(s.bonus) > 0 ? money(s.bonus) : "—",
-          hint: s.overtime_sec ? `переработка ${hm(s.overtime_sec)}` : `ставка ${Number(s.hourly_rate).toLocaleString("ru-RU")} ₽/ч`,
+          hint: s.overtime_sec
+            ? `переработка ${hm(s.overtime_sec)}`
+            : `ставка ${Number(s.hourly_rate).toLocaleString("ru-RU")} ₽/ч`,
         },
       ].map((it) => (
         <div key={it.label} className="grid content-start gap-1 border-line md:border-l md:pl-4">
@@ -210,13 +279,44 @@ function MonthStrip({ data }: { data: EmployeeDetail }) {
   );
 }
 
+function PeriodStrip({ data }: { data: EmployeeDetail }) {
+  const stats = data.totals;
+  return (
+    <section
+      aria-label="Итоги выбранного периода"
+      className="grid gap-4 rounded-lg border border-line bg-surface p-4 sm:grid-cols-2 xl:grid-cols-4"
+    >
+      {[
+        {
+          label: "Отработано за период",
+          value: hm(stats.worked_sec),
+          hint: count(stats.days_worked, ["день с дейликом", "дня с дейликом", "дней с дейликом"]),
+        },
+        { label: "С учётом эффективности", value: hm(stats.result_sec), hint: "По сохранённым дейликам" },
+        {
+          label: "Опоздания",
+          value: hm(stats.late_sec),
+          hint: count(stats.late_count, ["случай", "случая", "случаев"]),
+        },
+        { label: "Без дейлика", value: stats.days_missing, hint: "Рабочие дни по расписанию" },
+      ].map((item) => (
+        <div key={item.label} className="grid gap-2">
+          <p className="text-[12px] text-ink-3">{item.label}</p>
+          <b className="font-display text-[28px] tnum">{item.value}</b>
+          <p className="text-[12px] text-ink-3">{item.hint}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function StreaksPanel({ data }: { data: EmployeeDetail }) {
   const s = data.streaks;
   return (
     <Panel title="Серии" description="Считаются по дням с дейликом">
       <dl className="grid grid-cols-3 gap-3">
         {[
-          { icon: Target, label: "без опозданий сейчас", value: s.current_on_time },
+          { icon: Target, label: "без опозданий к концу периода", value: s.current_on_time },
           { icon: Flame, label: "лучшая серия без опозданий", value: s.best_on_time },
           { icon: ListChecks, label: "рабочих дней подряд с дейликом", value: s.current_dailies },
         ].map((it) => (
@@ -231,42 +331,95 @@ function StreaksPanel({ data }: { data: EmployeeDetail }) {
   );
 }
 
-function RecentDays({ data, onOpen }: { data: EmployeeDetail; onOpen: (c: EmployeeDetail["days"][number]) => void }) {
-  const days = [...data.days].reverse().filter((d) => d.fact || d.plan || d.status).slice(0, 14);
+function RecentDays({
+  data,
+  onOpen,
+}: {
+  data: EmployeeDetail;
+  onOpen: (c: EmployeeDetail["days"][number]) => void;
+}) {
+  const days = [...data.days]
+    .reverse()
+    .filter((d) => d.fact || d.plan || d.status)
+    .slice(0, 14);
   return (
-    <Panel title="Последние дни" description="План против факта. Нажмите на день, чтобы увидеть задачи и исходное сообщение" bodyClassName="px-0 pb-0">
+    <Panel
+      title="Последние дни"
+      description="План против факта. Нажмите на день, чтобы увидеть задачи и исходное сообщение"
+      bodyClassName="px-0 pb-0"
+    >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-[13px]">
           <thead className="border-y border-line bg-surface-2/60 text-left text-[12px] text-ink-3">
             <tr>
-              <th scope="col" className="px-4 py-2 font-medium">День</th>
-              <th scope="col" className="px-3 py-2 font-medium">План</th>
-              <th scope="col" className="px-3 py-2 font-medium">Факт</th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">Часы</th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">e%</th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">Итог</th>
-              <th scope="col" className="px-4 py-2 font-medium">Отметки</th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                День
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                План
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Факт
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-medium">
+                Часы
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-medium">
+                e%
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-medium">
+                Итог
+              </th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                Отметки
+              </th>
             </tr>
           </thead>
           <tbody>
             {days.map((d) => (
-              <tr key={d.date} className="cursor-pointer border-b border-line last:border-b-0 hover:bg-surface-2/50" onClick={() => onOpen(d)}>
+              <tr
+                key={d.date}
+                className="cursor-pointer border-b border-line last:border-b-0 hover:bg-surface-2/50"
+                onClick={() => onOpen(d)}
+              >
                 <th scope="row" className="px-4 py-2 text-left font-normal whitespace-nowrap tnum">
                   <button type="button" className="text-left hover:underline" onClick={() => onOpen(d)}>
                     {WEEKDAYS_SHORT[weekday(d.date)]} {ddmm(d.date)}
                   </button>
                 </th>
                 <td className="px-3 py-2 text-ink-2 tnum">
-                  {d.plan?.kind === "work" ? `${hm(d.plan.start)}–${hm(d.plan.end)}` : d.plan?.kind === "off" ? "выходной" : d.plan?.note ? <i>{d.plan.note}</i> : "—"}
+                  {d.plan?.kind === "work" ? (
+                    `${hm(d.plan.start)}–${hm(d.plan.end)}`
+                  ) : d.plan?.kind === "off" ? (
+                    "выходной"
+                  ) : d.plan?.note ? (
+                    <i>{d.plan.note}</i>
+                  ) : (
+                    "—"
+                  )}
                 </td>
-                <td className="px-3 py-2 tnum">{d.fact ? d.fact.intervals.map(([a, b]) => `${hm(a)}–${hm(b)}`).join("; ") : d.status ? STATUS[d.status].label : d.state === "missing" ? "нет дейлика" : "—"}</td>
+                <td className="px-3 py-2 tnum">
+                  {d.fact
+                    ? d.fact.intervals.map(([a, b]) => `${hm(a)}–${hm(b)}`).join("; ")
+                    : d.status
+                      ? STATUS[d.status].label
+                      : d.state === "missing"
+                        ? "нет дейлика"
+                        : "—"}
+                </td>
                 <td className="px-3 py-2 text-right tnum">{d.fact ? hm(d.fact.worked_sec) : "—"}</td>
                 <td className="px-3 py-2 text-right tnum">{d.fact?.efficiency ?? "—"}</td>
-                <td className="px-3 py-2 text-right font-medium tnum">{d.fact?.result_sec !== null && d.fact?.result_sec !== undefined ? hm(d.fact.result_sec) : "—"}</td>
+                <td className="px-3 py-2 text-right font-medium tnum">
+                  {d.fact?.result_sec !== null && d.fact?.result_sec !== undefined
+                    ? hm(d.fact.result_sec)
+                    : "—"}
+                </td>
                 <td className="px-4 py-2">
                   <span className="flex flex-wrap gap-1">
                     {d.late_sec ? <Badge tone="late">опоздание {hm(d.late_sec)}</Badge> : null}
-                    {d.early_leave_sec ? <Badge tone="deviation">ранний уход {hm(d.early_leave_sec)}</Badge> : null}
+                    {d.early_leave_sec ? (
+                      <Badge tone="deviation">ранний уход {hm(d.early_leave_sec)}</Badge>
+                    ) : null}
                     {d.no_plan ? <Badge>без плана</Badge> : null}
                     {d.fact?.edited ? <Badge tone="outline">правка</Badge> : null}
                   </span>
@@ -326,7 +479,10 @@ function TasksPanel({ data }: { data: EmployeeDetail }) {
 
 function NotesPanel({ data }: { data: EmployeeDetail }) {
   return (
-    <Panel title="Заметки и статусы" description="Пометки у конкретных дней расписания и статусы из таблицы или бота">
+    <Panel
+      title="Заметки и статусы"
+      description="Пометки у конкретных дней расписания и статусы из таблицы или бота"
+    >
       {data.notes.length ? (
         <ul className="grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
           {data.notes.map((n, i) => {
@@ -343,13 +499,18 @@ function NotesPanel({ data }: { data: EmployeeDetail }) {
                 ) : (
                   <NotebookPen className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
                 )}
-                <span className="text-ink-2">{n.kind === "status" && S && n.text === S.label ? "" : n.text}</span>
+                <span className="text-ink-2">
+                  {n.kind === "status" && S && n.text === S.label ? "" : n.text}
+                </span>
               </li>
             );
           })}
         </ul>
       ) : (
-        <p className="text-[13px] leading-relaxed text-ink-2">За выбранный период пометок и статусов нет. Здесь появляются, например, «Пт: по ситуации», отпуск, больничный или удалёнка. Статус можно поставить в карточке дня или командой /absent в боте.</p>
+        <p className="text-[13px] leading-relaxed text-ink-2">
+          За выбранный период пометок и статусов нет. Здесь появляются, например, «Пт: по ситуации», отпуск,
+          больничный или удалёнка. Статус можно поставить в карточке дня или командой /absent в боте.
+        </p>
       )}
     </Panel>
   );
@@ -377,7 +538,9 @@ function HistoryPanel({ employeeId }: { employeeId: number }) {
           <li key={a.id} className="flex flex-wrap gap-x-3">
             <span className="text-ink-3 tnum">{dateTime(a.at)}</span>
             <span>{ACTION_LABEL[a.action] ?? a.action}</span>
-            <span className="text-ink-3">{a.actor === "admin" ? "админ" : a.actor.startsWith("bot:") ? "через бота" : a.actor}</span>
+            <span className="text-ink-3">
+              {a.actor === "admin" ? "админ" : a.actor.startsWith("bot:") ? "через бота" : a.actor}
+            </span>
             {a.reason ? <span className="text-ink-2">«{a.reason}»</span> : null}
           </li>
         ))}

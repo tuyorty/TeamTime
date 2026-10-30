@@ -86,7 +86,10 @@ export default function WeekPage() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.rows.filter((r) => {
-      if (q && !`${r.employee.full_name} ${r.employee.short_name} ${r.employee.position}`.toLowerCase().includes(q))
+      if (
+        q &&
+        !`${r.employee.full_name} ${r.employee.short_name} ${r.employee.position}`.toLowerCase().includes(q)
+      )
         return false;
       if (filter === "deviations") return r.cells.some(hasDeviation);
       if (filter === "missing") return r.cells.some((c) => c.state === "missing");
@@ -179,12 +182,40 @@ export default function WeekPage() {
             <DropdownContent>
               <DropdownItem asChild>
                 <a href={exportUrl(`/weeks/${year}/${week}.xlsx`)} download>
-                  Excel (XLSX), как в таблице
+                  Вся команда · Excel (XLSX)
                 </a>
               </DropdownItem>
               <DropdownItem asChild>
                 <a href={exportUrl(`/weeks/${year}/${week}.csv`)} download>
-                  CSV по дням
+                  Вся команда · CSV по дням
+                </a>
+              </DropdownItem>
+              <DropdownItem asChild disabled={!rows.length}>
+                <a
+                  href={
+                    rows.length
+                      ? exportUrl(
+                          `/weeks/${year}/${week}.xlsx?${rows.map((row) => `employee_id=${row.employee.id}`).join("&")}`,
+                        )
+                      : undefined
+                  }
+                  download
+                >
+                  Текущий отбор ({rows.length}) · Excel
+                </a>
+              </DropdownItem>
+              <DropdownItem asChild disabled={!rows.length}>
+                <a
+                  href={
+                    rows.length
+                      ? exportUrl(
+                          `/weeks/${year}/${week}.csv?${rows.map((row) => `employee_id=${row.employee.id}`).join("&")}`,
+                        )
+                      : undefined
+                  }
+                  download
+                >
+                  Текущий отбор ({rows.length}) · CSV
                 </a>
               </DropdownItem>
             </DropdownContent>
@@ -234,7 +265,11 @@ export default function WeekPage() {
       ) : !data ? (
         <WeekSkeleton />
       ) : (
-        <div className={cn("transition-opacity", isPlaceholderData && "opacity-60")}>
+        <div
+          className={cn("transition-opacity", isPlaceholderData && "opacity-60")}
+          inert={isPlaceholderData}
+          aria-busy={isPlaceholderData}
+        >
           <div className="hidden md:block">
             <WeekTable data={data} rows={rows} axis={axis} density={density} dim={dim} onOpen={open} />
           </div>
@@ -243,7 +278,9 @@ export default function WeekPage() {
           </div>
           <div className="mt-2 flex flex-wrap justify-between gap-2">
             <TruncationNote />
-            <p className="text-[12px] text-ink-3">Нажмите на день, чтобы увидеть задачи и исходное сообщение.</p>
+            <p className="text-[12px] text-ink-3">
+              Нажмите на день, чтобы увидеть задачи и исходное сообщение.
+            </p>
           </div>
         </div>
       )}
@@ -298,12 +335,23 @@ function WeekSkeleton() {
   );
 }
 
-function EmployeeCell({ employee, row, planHref }: { employee: EmployeeBrief; row: WeekRow; planHref: string }) {
+function EmployeeCell({
+  employee,
+  row,
+  planHref,
+}: {
+  employee: EmployeeBrief;
+  row: WeekRow;
+  planHref: string;
+}) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <Avatar employee={employee} size={28} />
       <div className="min-w-0">
-        <Link to={`/people/${employee.id}`} className="block truncate text-[13px] font-medium hover:underline">
+        <Link
+          to={`/people/${employee.id}`}
+          className="block truncate text-[13px] font-medium hover:underline"
+        >
           {employee.short_name}
         </Link>
         <div className="flex items-center gap-1.5 truncate text-[12px] text-ink-3">
@@ -486,10 +534,15 @@ function WeekTable({
                 )}
               >
                 <div className="flex items-baseline gap-1.5 text-[13px]">
-                  <span className={cn("font-semibold", i >= 5 ? "text-ink-2" : "text-ink")}>{WEEKDAYS_SHORT[i]}</span>
+                  <span className={cn("font-semibold", i >= 5 ? "text-ink-2" : "text-ink")}>
+                    {WEEKDAYS_SHORT[i]}
+                  </span>
                   <span className="whitespace-nowrap text-ink-3 tnum">{dayMonthShort(d)}</span>
                   {d === data.today ? (
-                    <span className="ml-auto size-1.5 shrink-0 self-center rounded-full bg-accent" title="Сегодня">
+                    <span
+                      className="ml-auto size-1.5 shrink-0 self-center rounded-full bg-accent"
+                      title="Сегодня"
+                    >
                       <span className="sr-only">сегодня</span>
                     </span>
                   ) : null}
@@ -497,7 +550,10 @@ function WeekTable({
                 <AxisTicks axis={axis} className="mt-1" />
               </th>
             ))}
-            <th scope="col" className="border-l border-line px-3 py-2 text-right text-[12px] font-medium text-ink-3">
+            <th
+              scope="col"
+              className="border-l border-line px-3 py-2 text-right text-[12px] font-medium text-ink-3"
+            >
               Итого
             </th>
           </tr>
@@ -506,7 +562,11 @@ function WeekTable({
           {rows.map((r) => (
             <tr key={r.employee.id} className="border-b border-line last:border-b-0">
               <th scope="row" className="px-3 py-2 text-left font-normal">
-                <EmployeeCell employee={r.employee} row={r} planHref={`/plans/${data.iso_year}/${data.iso_week}`} />
+                <EmployeeCell
+                  employee={r.employee}
+                  row={r}
+                  planHref={`/plans/${data.iso_year}/${data.iso_week}`}
+                />
               </th>
               {r.cells.map((c) => (
                 <DayCellButton

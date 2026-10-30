@@ -130,6 +130,11 @@ export function PeriodFacts({
               { label: "Сотрудников с дейликом", value: data.employees_reported },
               { label: "Отработано", value: hm(data.worked_sec) },
               { label: "Без дейлика за прошедшие дни", value: data.missing_days },
+              { label: "Работа в выходные по календарю", value: hm(data.calendar_off_sec ?? 0) },
+              { label: "Вечерние и ночные часы · 20:00–06:00", value: hm(data.evening_night_sec ?? 0) },
+              { label: "Дней дольше 10 часов", value: data.long_days ?? 0 },
+              { label: "Самая длинная серия дней с работой", value: data.longest_daily_series ?? 0 },
+              { label: "Изменённых дней расписания", value: data.changed_schedule_days ?? 0 },
             ].map((item) => (
               <div key={item.label} className="rounded-md bg-surface-2/70 p-3">
                 <p className="font-display text-[23px] font-semibold tnum">{item.value}</p>
