@@ -18,6 +18,7 @@ from teamtime.bot.dates import date_key, shift_period
 from teamtime.services.reports import MONTHS
 
 MENU = {
+    "✍️ Дейлик": "daily",
     "🗓 Моя неделя": "week",
     "📊 Месяц": "month",
     "👥 Сегодня": "today",
@@ -25,12 +26,19 @@ MENU = {
     "👤 Сотрудники": "people",
     "🙅 Не приду": "absent",
     "✏️ Исправить": "fix",
+    "🔎 Мой день": "check",
+    "🔔 Уведомления": "notifications",
 }
 """Кнопки постоянного меню в личке: подпись → действие (те же, что у MenuCb)."""
 
 
 class MenuCb(CallbackData, prefix="m"):
     action: str
+
+
+class PersonalCb(CallbackData, prefix="ps"):
+    action: str
+    value: str = ""
 
 
 class ReportCb(CallbackData, prefix="rp"):
@@ -61,6 +69,26 @@ class FixCb(CallbackData, prefix="fx"):
 
 class StatusCb(CallbackData, prefix="st"):
     kind: str
+
+
+class StatusRequestCb(CallbackData, prefix="sr"):
+    action: str
+    request_id: int
+
+
+def status_request_menu(request_id: int, pending: bool = True) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="Проверить решение",
+        callback_data=StatusRequestCb(action="check", request_id=request_id),
+    )
+    if pending:
+        kb.button(
+            text="Отозвать заявку",
+            callback_data=StatusRequestCb(action="withdraw", request_id=request_id),
+        )
+    kb.adjust(1)
+    return kb.as_markup()
 
 
 def reply_menu() -> ReplyKeyboardMarkup:
@@ -245,11 +273,23 @@ def calendar_menu(
     return kb.as_markup()
 
 
-def reminder_menu(topic_url: str | None) -> InlineKeyboardMarkup:
+class ReminderCb(CallbackData, prefix="rm"):
+    action: str
+    day: str
+
+
+def reminder_menu(
+    topic_url: str | None, work_date: date | None = None, *, followup: bool = False
+) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if topic_url:
         kb.button(text="✍️ Открыть тему «Дейлики»", url=topic_url)
     kb.button(text="🔎 Проверить мои сообщения", callback_data=MenuCb(action="fix"))
+    if work_date and not followup:
+        kb.button(
+            text="⏰ Напомнить через 30 минут · один раз",
+            callback_data=ReminderCb(action="snooze", day=date_key(work_date)),
+        )
     kb.adjust(1)
     return kb.as_markup()
 

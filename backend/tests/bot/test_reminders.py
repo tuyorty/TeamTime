@@ -17,8 +17,8 @@ from teamtime.bot.identity import identity_for
 from teamtime.bot.reminders import due_reminders, send_due_reminders
 from teamtime.calc import StatusKind
 from teamtime.core import clock
-from teamtime.db.models import DailyReminder, Employee, TelegramIdentity
-from teamtime.services import manual
+from teamtime.db.models import DailyReminder, Employee, NotificationPreference, TelegramIdentity
+from teamtime.services import manual, notifications
 from teamtime.services.ingest import ingest
 from teamtime.services.settings import AppSettings, load_settings, save_settings
 from tests import factories as f
@@ -47,6 +47,111 @@ async def setup_reminder(maker, schedule: str = "10:00 - 18:00") -> int:
 
 def at(value: str = "2026-10-26T18:15:00+05:00") -> None:
     clock.freeze(datetime.fromisoformat(value))
+
+
+async def test_personal_delay_and_disabled_reminders(maker):
+    employee_id = await setup_reminder(maker)
+    async with maker() as session:
+        session.add(NotificationPreference(employee_id=employee_id, delay_minutes=30, enabled=True))
+        await session.commit()
+    at()
+    async with maker() as session:
+        assert await due_reminders(session) == []
+    at("2026-10-26T18:30:00+05:00")
+    async with maker() as session:
+        reminders = await due_reminders(session)
+        assert len(reminders) == 1 and reminders[0].delay_minutes == 30
+        assert reminders[0].shift_end.hour == 18 and reminders[0].shift_end.minute == 0
+        preference = await session.get(NotificationPreference, employee_id)
+        preference.enabled = False
+        await session.commit()
+    async with maker() as session:
+        assert await due_reminders(session) == []
+
+
+async def test_quiet_hours_defer_delivery_and_survive_restart(maker):
+    employee_id = await setup_reminder(maker)
+    async with maker() as session:
+        session.add(
+            NotificationPreference(
+                employee_id=employee_id, quiet_start=18 * 60, quiet_end=9 * 60, enabled=True
+            )
+        )
+        await session.commit()
+    fake = FakeSession()
+    bot = Bot("123456:TEST-TOKEN", session=fake)
+    at()
+    assert await send_due_reminders(bot, maker) == 0
+    assert await send_due_reminders(bot, maker) == 0
+    at("2026-10-27T09:00:00+05:00")
+    assert await send_due_reminders(bot, maker) == 1
+    assert await send_due_reminders(bot, maker) == 0
+    assert len(fake.of(SendMessage)) == 1
+
+
+async def test_snooze_is_explicit_once_and_never_repeats_after_restart(maker):
+    employee_id = await setup_reminder(maker)
+    fake = FakeSession()
+    bot = Bot("123456:TEST-TOKEN", session=fake)
+    at()
+    assert await send_due_reminders(bot, maker) == 1
+    async with maker() as session:
+        await notifications.snooze(session, employee_id, WORK_DATE, 501)
+        await session.commit()
+        with pytest.raises(manual.EditError, match="уже запрошен"):
+            await notifications.snooze(session, employee_id, WORK_DATE, 501)
+    at("2026-10-26T18:44:59+05:00")
+    assert await send_due_reminders(bot, maker) == 0
+    at("2026-10-26T18:45:00+05:00")
+    assert await send_due_reminders(bot, maker) == 1
+    assert await send_due_reminders(bot, maker) == 0
+    assert len(fake.of(SendMessage)) == 2
+    async with maker() as session:
+        record = await session.scalar(select(DailyReminder))
+        assert record.followup_sent_at and record.attempts == 2
+
+
+async def test_snooze_stops_after_daily_arrives(maker):
+    employee_id = await setup_reminder(maker)
+    bot = Bot("123456:TEST-TOKEN", session=FakeSession())
+    at()
+    assert await send_due_reminders(bot, maker) == 1
+    async with maker() as session:
+        await notifications.snooze(session, employee_id, WORK_DATE, 501)
+        await manual.set_daily(
+            session,
+            employee_id=employee_id,
+            work_date=WORK_DATE,
+            intervals=[(10 * 3600, 18 * 3600)],
+            efficiency=80,
+            actor="bot:501",
+        )
+        await session.commit()
+    at("2026-10-26T18:45:00+05:00")
+    assert await send_due_reminders(bot, maker) == 0
+
+
+async def test_unknown_snooze_delivery_is_not_repeated(maker):
+    employee_id = await setup_reminder(maker)
+    fake = FakeSession()
+    bot = Bot("123456:TEST-TOKEN", session=fake)
+    at()
+    assert await send_due_reminders(bot, maker) == 1
+    async with maker() as session:
+        await notifications.snooze(session, employee_id, WORK_DATE, 501)
+        await session.commit()
+    fake.send_failures = [
+        TelegramNetworkError(
+            method=SendMessage(chat_id=501, text="пример"), message="Вымышленный обрыв связи"
+        )
+    ]
+    at("2026-10-26T18:45:00+05:00")
+    assert await send_due_reminders(bot, maker) == 0
+    assert await send_due_reminders(bot, maker) == 0
+    async with maker() as session:
+        reminder = await session.scalar(select(DailyReminder))
+        assert reminder.followup_attempted_at and not reminder.followup_sent_at
+        assert reminder.attempts == 2
 
 
 @pytest.mark.parametrize(

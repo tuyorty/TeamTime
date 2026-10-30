@@ -19,13 +19,17 @@ from teamtime.core.config import Settings
 from teamtime.core.logging import configure_logging, get_logger
 from teamtime.db.session import get_sessionmaker
 
-from .handlers import browse, commands, group, private
+from .handlers import browse, commands, group, personal, private
 from .middleware import DbSessionMiddleware
 from .reminders import reminder_loop
+from .telemetry import TelemetryMiddleware
 
 log = get_logger(__name__)
 
 COMMANDS = [
+    BotCommand(command="daily", description="Заполнить дейлик по шагам"),
+    BotCommand(command="check", description="Что сохранено за мой день"),
+    BotCommand(command="notifications", description="Напоминания и тихое время"),
     BotCommand(command="today", description="Кто сегодня на работе"),
     BotCommand(command="day", description="Выбрать день: расписание и итоги"),
     BotCommand(command="people", description="Часы и статистика сотрудника"),
@@ -46,7 +50,9 @@ def build_dispatcher(maker: async_sessionmaker[AsyncSession], config: Settings) 
     dp.callback_query.middleware(CallbackAnswerMiddleware())
     # Порядок важен: в группе «любой текст» не ловит команды, а в личке запасной обработчик
     # стоит последним, после команд.
-    dp.include_routers(group.router, commands.router, browse.router, private.router)
+    dp.include_routers(
+        group.router, commands.router, personal.router, browse.router, private.router
+    )
     return dp
 
 
@@ -85,24 +91,35 @@ async def run(config: Settings) -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True),
     )
     dp = build_dispatcher(maker, config)
+    telemetry = TelemetryMiddleware(maker)
+    bot.session.middleware(telemetry)
+    await telemetry.record("starting")
     if config.telegram_proxy:
         log.info("bot.proxy", proxy=config.telegram_proxy.split("@")[-1])  # без логина и пароля
-    me = await bot.get_me()
-    log.info("bot.started", username=me.username)
-    if config.bot_username is None:
-        config.bot_username = me.username
-    await bot.set_my_commands(COMMANDS, scope=BotCommandScopeAllPrivateChats())
-    reminders = asyncio.create_task(reminder_loop(bot, maker), name="reminders")
+    reminders: asyncio.Task[None] | None = None
+    stop_state = "stopped"
     try:
+        me = await bot.get_me()
+        log.info("bot.started", username=me.username)
+        if config.bot_username is None:
+            config.bot_username = me.username
+        await bot.set_my_commands(COMMANDS, scope=BotCommandScopeAllPrivateChats())
+        reminders = asyncio.create_task(reminder_loop(bot, maker), name="reminders")
         await dp.start_polling(
             bot,
             allowed_updates=["message", "edited_message", "callback_query"],
             polling_timeout=30,
         )  # при сетевых ошибках aiogram сам повторяет запросы с экспоненциальной паузой
+    except Exception as exc:
+        stop_state = "error"
+        await telemetry.record("error", type(exc).__name__)
+        raise
     finally:
-        reminders.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await reminders
+        if reminders is not None:
+            reminders.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reminders
         await bot.session.close()
+        await telemetry.record(stop_state)
         await engine.dispose()
         log.info("bot.stopped")

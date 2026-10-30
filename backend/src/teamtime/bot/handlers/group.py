@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from datetime import UTC, datetime
+from weakref import WeakValueDictionary
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
+from aiohttp_socks import ProxyConnectionError, ProxyError, ProxyTimeoutError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +21,7 @@ from teamtime.bot.richtext import rich_plain_text
 from teamtime.core.config import Settings
 from teamtime.core.logging import get_logger
 from teamtime.db.models import BotChat, RawMessage, Source, TopicBinding, TopicKind
-from teamtime.services import audit
+from teamtime.services import audit, diagnostics
 from teamtime.services.ingest import IncomingMessage, IngestOutcome, ingest
 from teamtime.services.settings import AppSettings
 
@@ -36,6 +38,8 @@ BIND_KINDS = {
     "daily": TopicKind.DAILY,
 }
 CLEANUP_SECONDS = 20
+_MESSAGE_LOCKS: WeakValueDictionary[tuple[int, int, int], asyncio.Lock] = WeakValueDictionary()
+DELIVERY_ERRORS = (TelegramAPIError, ProxyConnectionError, ProxyError, ProxyTimeoutError)
 
 
 def incoming(message: Message, *, edited: bool = False) -> IncomingMessage:
@@ -86,25 +90,75 @@ async def give_feedback(
 
     reply = fb.reply
     if fb.reaction:
+        delivery = await diagnostics.begin_delivery(
+            session,
+            "reaction",
+            employee_id=outcome.employee_id,
+            raw_message_id=outcome.raw_message_id,
+        )
+
+        async def attempted(attempt: int) -> None:
+            delivery.attempts = attempt
+            await session.commit()
+
         try:
-            await set_reaction(bot, message.chat.id, message.message_id, fb.reaction)
+            sent_reaction = await set_reaction(
+                bot, message.chat.id, message.message_id, fb.reaction, attempted
+            )
         except TelegramBadRequest as exc:
             # Реакции выключены в чате или эмодзи недоступно — короткий ответ вместо реакции.
             log.warning("bot.reaction_failed", error=str(exc))
+            await diagnostics.finish_delivery(session, delivery, "failed", type(exc).__name__)
             reply = reply or (accepted_text(outcome) if not outcome.needs_attention else None)
+        except DELIVERY_ERRORS as exc:
+            await diagnostics.finish_delivery(session, delivery, "failed", type(exc).__name__)
+        else:
+            await diagnostics.finish_delivery(
+                session,
+                delivery,
+                "sent" if sent_reaction else "unknown",
+                None if sent_reaction else "TransientFailure",
+            )
     if reply and outcome.needs_attention and raw and raw.bot_reply_message_id:
-        with contextlib.suppress(TelegramAPIError):
+        delivery = await diagnostics.begin_delivery(
+            session,
+            "reply_edit",
+            employee_id=outcome.employee_id,
+            raw_message_id=outcome.raw_message_id,
+        )
+        delivery.attempts = 1
+        await session.commit()
+        try:
             await bot.edit_message_text(
                 reply,
                 chat_id=message.chat.id,
                 message_id=raw.bot_reply_message_id,
                 disable_web_page_preview=True,
             )
+        except DELIVERY_ERRORS as exc:
+            state = (
+                "sent"
+                if isinstance(exc, TelegramBadRequest) and "message is not modified" in str(exc)
+                else "unknown"
+            )
+            await diagnostics.finish_delivery(session, delivery, state, type(exc).__name__)
+        else:
+            await diagnostics.finish_delivery(session, delivery, "sent")
         return
     if reply:
-        sent = await message.reply(reply, disable_web_page_preview=True)
+        delivery = await diagnostics.begin_delivery(
+            session, "reply", employee_id=outcome.employee_id, raw_message_id=outcome.raw_message_id
+        )
+        delivery.attempts = 1
+        await session.commit()
+        try:
+            sent = await message.reply(reply, disable_web_page_preview=True)
+        except DELIVERY_ERRORS as exc:
+            await diagnostics.finish_delivery(session, delivery, "unknown", type(exc).__name__)
+            return
         if raw and outcome.needs_attention:
             raw.bot_reply_message_id = sent.message_id
+        await diagnostics.finish_delivery(session, delivery, "sent")
 
 
 @router.message(Command("bind", "unbind"))
@@ -207,18 +261,35 @@ HAS_TEXT = F.text | F.caption | F.rich_message
 async def on_message(
     message: Message, bot: Bot, session: AsyncSession, settings: AppSettings, config: Settings
 ) -> None:
-    outcome = await ingest(session, incoming(message), settings)
-    await session.commit()  # данные сохранены, даже если Telegram не ответит
-    await give_feedback(bot, message, outcome, settings, session, config)
+    await process_message(message, bot, session, settings, config)
 
 
 @router.edited_message(HAS_TEXT)
 async def on_edit(
     message: Message, bot: Bot, session: AsyncSession, settings: AppSettings, config: Settings
 ) -> None:
-    outcome = await ingest(session, incoming(message, edited=True), settings)
-    await session.commit()
-    await give_feedback(bot, message, outcome, settings, session, config)
+    await process_message(message, bot, session, settings, config, edited=True)
+
+
+async def process_message(
+    message: Message,
+    bot: Bot,
+    session: AsyncSession,
+    settings: AppSettings,
+    config: Settings,
+    *,
+    edited: bool = False,
+) -> None:
+    # Сообщение и его правки обрабатываются последовательно: старый повтор не затрёт новую реакцию.
+    key = (bot.id, message.chat.id, message.message_id)
+    lock = _MESSAGE_LOCKS.setdefault(key, asyncio.Lock())
+    async with lock:
+        outcome = await ingest(session, incoming(message, edited=edited), settings)
+        await session.commit()
+        await give_feedback(bot, message, outcome, settings, session, config)
+        await (
+            session.commit()
+        )  # Ссылка на предупреждение видна следующей правке до снятия блокировки.
 
 
 @router.message(~HAS_TEXT)

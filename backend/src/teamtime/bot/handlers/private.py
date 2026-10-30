@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import date, timedelta
 from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -26,10 +28,12 @@ from teamtime.bot.keyboards import (
     FixCb,
     MenuCb,
     StatusCb,
+    StatusRequestCb,
     efficiency_menu,
     fix_menu,
     reply_menu,
     status_menu,
+    status_request_menu,
 )
 from teamtime.calc import STATUS_LABELS, StatusKind
 from teamtime.core import clock
@@ -42,7 +46,7 @@ from teamtime.db.models import (
 )
 from teamtime.parsing import Issue, MessageKind, PlanDayKind, Severity, parse_daily
 from teamtime.parsing.text import DATE_RE, closest_year, format_seconds, parse_interval_list
-from teamtime.services import manual
+from teamtime.services import manual, status_requests
 from teamtime.services.facts import today_local
 from teamtime.services.settings import AppSettings
 
@@ -150,7 +154,7 @@ async def absent(message: Message) -> None:
     await message.answer(texts.STATUS_PROMPT, reply_markup=status_menu())
 
 
-@router.callback_query(StatusCb.filter())
+@router.callback_query(StatusCb.filter(), flags={"callback_answer": {"disabled": True}})
 async def set_status(
     query: CallbackQuery,
     callback_data: StatusCb,
@@ -172,19 +176,26 @@ async def set_status(
             "Пример: <code>02.11 - 13.11</code>"
         )
         return
-    kind = None if callback_data.kind == "clear" else StatusKind(callback_data.kind)
-    await manual.set_status(
-        session,
-        employee_id=employee.id,
-        day=today,
-        kind=kind,
-        actor=actor(query.from_user),
-        reason="через бота",
-    )
+    try:
+        kind = None if callback_data.kind == "clear" else StatusKind(callback_data.kind)
+    except ValueError:
+        await query.answer("Неизвестный статус", show_alert=True)
+        return
     label = STATUS_LABELS[kind] if kind else "Статус снят"
-    await query.answer(label)
+    try:
+        request = await status_requests.request_status(
+            session, employee, today, today, kind, actor(query.from_user)
+        )
+    except manual.EditError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await session.commit()
+    await query.answer("Заявка отправлена")
     await msg.edit_text(
-        f"✅ <b>{label}</b>\n{texts.human_date(today)}\n\nСтатус обновлён в таблице."
+        f"🕓 <b>Заявка #{request.id} · {label if kind else 'Снять статус'}</b>\n"
+        f"{texts.human_date(today)}\n\nЖдёт решения администратора. "
+        "До одобрения действуют прежние данные.",
+        reply_markup=status_request_menu(request.id),
     )
 
 
@@ -226,23 +237,55 @@ async def vacation_range(
         return
     start, end = found
     try:
-        n = await manual.set_status_range(
-            session,
-            employee_id=employee.id,
-            start=start,
-            end=end,
-            kind=StatusKind.VACATION,
-            actor=actor(message.from_user),
-            reason="через бота",
+        request = await status_requests.request_status(
+            session, employee, start, end, StatusKind.VACATION, actor(message.from_user)
         )
     except manual.EditError as exc:
         await message.answer(f"⚠️ <b>Не удалось сохранить</b>\n\n{escape(str(exc))}")
         return
+    await session.commit()
     await state.clear()
     await message.answer(
-        f"🌴 <b>Отпуск отмечен</b>\n\nС <b>{start:%d.%m}</b> по <b>{end:%d.%m}</b> включительно.\n"
-        f"Всего: {n} {texts.plural(n, 'день', 'дня', 'дней')}. Статус обновлён в таблице."
+        f"🕓 <b>Заявка #{request.id} на отпуск</b>\n\n"
+        f"С <b>{start:%d.%m.%Y}</b> по <b>{end:%d.%m.%Y}</b> включительно.\n"
+        "Ждёт решения администратора. До одобрения действуют прежние данные.",
+        reply_markup=status_request_menu(request.id),
     )
+
+
+@router.callback_query(StatusRequestCb.filter(), flags={"callback_answer": {"disabled": True}})
+async def check_status_request(
+    query: CallbackQuery, callback_data: StatusRequestCb, session: AsyncSession
+) -> None:
+    from teamtime.db.models import StatusRequest
+
+    _, employee = await employee_for(session, query.from_user)
+    row = await session.get(StatusRequest, callback_data.request_id)
+    if employee is None or not employee.is_active or row is None or row.employee_id != employee.id:
+        await query.answer("Заявка не найдена", show_alert=True)
+        return
+    if callback_data.action == "withdraw":
+        try:
+            row = await status_requests.withdraw(
+                session, row.id, employee.id, actor(query.from_user)
+            )
+        except manual.EditError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+    await query.answer()
+    if isinstance(query.message, Message):
+        label = STATUS_LABELS[row.kind] if row.kind else "Снять статус"
+        state = {
+            "pending": "Ждёт решения администратора",
+            "accepted": "Одобрена · данные обновлены",
+            "rejected": "Отклонена · данные не изменены",
+        }[row.state]
+        with contextlib.suppress(TelegramBadRequest):
+            await query.message.edit_text(
+                f"🗓 <b>Заявка #{row.id} · {label}</b>\n{row.start:%d.%m.%Y}–{row.end:%d.%m.%Y}\n\n"
+                f"{state}" + (f"\n{escape(row.decision_note)}" if row.decision_note else ""),
+                reply_markup=status_request_menu(row.id, row.state == "pending"),
+            )
 
 
 # --- исправления ---------------------------------------------------------------------------

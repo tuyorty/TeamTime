@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import date
 from unittest.mock import AsyncMock
@@ -16,10 +17,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from teamtime.bot.app import build_dispatcher
-from teamtime.bot.keyboards import FixCb, MenuCb, ReportCb, StatusCb
+from teamtime.bot.keyboards import FixCb, MenuCb, PersonalCb, ReportCb, StatusCb
 from teamtime.calc import StatusKind
 from teamtime.core.config import Settings
-from teamtime.db.models import DayStatus, ParseResultRow, RawMessage, Resolution, TopicBinding
+from teamtime.db.models import (
+    BotDraft,
+    DayStatus,
+    NotificationPreference,
+    ParseResultRow,
+    RawMessage,
+    Resolution,
+    StatusRequest,
+    TopicBinding,
+)
+from teamtime.services import status_requests
 from teamtime.services.facts import current_dailies, current_plans
 from teamtime.services.settings import load_settings, save_settings
 from tests import factories as f
@@ -359,14 +370,131 @@ async def test_absent_today_and_vacation(tg: Telegram, maker) -> None:
     await tg.press(501, StatusCb(kind="vacation").pack())
     await tg.private(501, "02.11 - 06.11")
     reply = tg.session.texts()[-1]
-    assert "<b>Отпуск отмечен</b>" in reply
-    assert "<b>02.11</b> по <b>06.11</b> включительно" in reply
-    assert "Всего: 5 дней" in reply
+    assert "на отпуск" in reply
+    assert "<b>02.11.2026</b> по <b>06.11.2026</b> включительно" in reply
+    assert "Ждёт решения администратора" in reply
     async with maker() as s:
+        assert list(await s.scalars(select(DayStatus))) == []
+        requests = list(await s.scalars(select(StatusRequest).order_by(StatusRequest.id)))
+        assert len(requests) == 2
+        for request in requests:
+            await status_requests.decide(s, request.id, True, "admin")
+        await s.commit()
         statuses = list(await s.scalars(select(DayStatus).where(DayStatus.retracted_at.is_(None))))
     kinds = {(st.date, st.kind) for st in statuses}
     assert (date(2026, 10, 26), StatusKind.ABSENT) in kinds
     assert len(statuses) == 6
+
+
+async def test_daily_wizard_preview_and_save_survive_fsm_restart_without_duplicates(
+    tg: Telegram, maker
+):
+    await tg.private(501, "/daily")
+    await tg.press(501, PersonalCb(action="draft_day", value="20261023").pack())
+    await tg.private(501, "10:00 - 14:00; 15:00 - 18:00")
+    await tg.press(501, PersonalCb(action="draft_eff", value="80").pack())
+    async with maker() as session:
+        draft = await session.scalar(select(BotDraft))
+        assert draft is not None and draft.submitted_at is None
+        assert await current_dailies(session, date(2026, 10, 23), date(2026, 10, 23)) == []
+        draft_id = draft.id
+    tg.dp.fsm.storage = MemoryStorage()
+    await tg.press(501, PersonalCb(action="draft_save", value=draft_id).pack())
+    await tg.press(501, PersonalCb(action="draft_save", value=draft_id).pack())
+    async with maker() as session:
+        rows = await current_dailies(session, date(2026, 10, 23), date(2026, 10, 23))
+        assert len(rows) == 1 and rows[0].version == 1
+        assert rows[0].efficiency == 80 and len(rows[0].intervals) == 2
+        assert rows[0].tasks == []
+
+
+async def test_daily_cancel_and_commands_are_available_during_input(tg: Telegram, maker):
+    await tg.private(501, "/daily")
+    await tg.private(501, "/cancel")
+    assert tg.session.texts()[-1] == "Действие отменено."
+    await tg.private(501, "/daily")
+    await tg.private(501, "23.10.2026")
+    await tg.private(501, "25:00 - 28:00")
+    assert "Не понял время" in tg.session.texts()[-1]
+    await tg.private(501, "/notifications")
+    assert "Личные уведомления" in tg.session.texts()[-1]
+    async with maker() as session:
+        assert await session.scalar(select(BotDraft)) is None
+
+
+async def test_hours_wizard_preserves_existing_report_text(tg: Telegram, maker):
+    await tg.group(501, f.daily_text("23.10.2026"))
+    await tg.private(501, "/daily")
+    for value in ("23.10.2026", "11:00 - 19:00", "90"):
+        await tg.private(501, value)
+    async with maker() as session:
+        draft_id = (await session.scalar(select(BotDraft))).id
+    await tg.press(501, PersonalCb(action="draft_save", value=draft_id).pack())
+    async with maker() as session:
+        rows = await current_dailies(session, date(2026, 10, 23), date(2026, 10, 23))
+        assert rows[0].efficiency == 90
+        assert [task.text for task in rows[0].tasks] == ["сделал что-то"]
+
+
+async def test_daily_wizard_does_not_overwrite_a_newer_report(tg: Telegram, maker):
+    await tg.private(501, "/daily")
+    for text in ("23.10.2026", "10:00 - 18:00", "80"):
+        await tg.private(501, text)
+    async with maker() as session:
+        draft_id = (await session.scalar(select(BotDraft))).id
+    await tg.group(501, f.daily_text("23.10.2026", "11:00 - 19:00", 90))
+    await tg.press(501, PersonalCb(action="draft_save", value=draft_id).pack())
+    async with maker() as session:
+        rows = await current_dailies(session, date(2026, 10, 23), date(2026, 10, 23))
+        assert rows[0].efficiency == 90 and rows[0].source.value == "telegram"
+        assert (await session.get(BotDraft, draft_id)).submitted_at is None
+
+
+async def test_personal_notification_preferences_are_saved(tg: Telegram, maker):
+    await tg.private(501, "/notifications")
+    await tg.press(501, PersonalCb(action="notify_delay", value="30").pack())
+    await tg.press(501, PersonalCb(action="notify_quiet").pack())
+    await tg.private(501, "22:00–09:00")
+    await tg.press(501, PersonalCb(action="notify_toggle").pack())
+    async with maker() as session:
+        preference = await session.get(NotificationPreference, 1)
+        assert not preference.enabled and preference.delay_minutes == 30
+        assert preference.quiet_start == 22 * 60 and preference.quiet_end == 9 * 60
+
+
+async def test_edit_waits_for_old_reaction_retry_and_removes_old_warning(
+    tg: Telegram, maker, monkeypatch
+):
+    entered, release = asyncio.Event(), asyncio.Event()
+    request = tg.session.make_request
+    first = True
+
+    async def delayed(bot, method, timeout=None):  # noqa: ASYNC109 — сигнатура BaseSession
+        nonlocal first
+        if isinstance(method, SetMessageReaction) and first:
+            first = False
+            entered.set()
+            await release.wait()
+            raise ProxyTimeoutError("Вымышленный сбой прокси")
+        return await request(bot, method, timeout)
+
+    monkeypatch.setattr(tg.session, "make_request", delayed)
+    monkeypatch.setattr("teamtime.bot.reactions.sleep", AsyncMock())
+    original = asyncio.create_task(tg.group(501, f.daily_text(e=None), message_id=800))
+    await asyncio.wait_for(entered.wait(), 5)
+    edited = asyncio.create_task(tg.group(501, f.daily_text(e=80), message_id=800, edit=True))
+    try:
+        await asyncio.sleep(0.03)
+        assert not edited.done()
+    finally:
+        release.set()
+    await asyncio.gather(original, edited)
+    assert reactions(tg) == ["🤔", "✍"]
+    warning = tg.session.of(SendMessage)[0]
+    assert any(call.chat_id == warning.chat_id for call in tg.session.of(DeleteMessage))
+    async with maker() as session:
+        raw = await session.scalar(select(RawMessage))
+        assert raw.bot_reply_message_id is None
 
 
 # --- безопасность: бот публичный, найти и добавить его может кто угодно ----------------------
@@ -411,3 +539,34 @@ async def test_telegram_name_is_text_not_html_in_group_reply(tg: Telegram) -> No
     reply = tg.session.texts()[-1]
     assert "&lt;a href=" in reply  # имя показано как текст
     assert '<a href="https://evil' not in reply
+
+
+async def test_telemetry_does_not_block_other_users_while_reply_is_pending(
+    tg: Telegram, maker, monkeypatch
+):
+    from teamtime.services import diagnostics
+
+    async with maker() as session:
+        await diagnostics.set_service(session, "bot", "running", success=True)
+        await session.commit()
+    entered, release = asyncio.Event(), asyncio.Event()
+    original_request = tg.session.make_request
+    first = True
+
+    async def delayed(bot, method, timeout=None):  # noqa: ASYNC109 — сигнатура BaseSession
+        nonlocal first
+        if isinstance(method, SendMessage) and first:
+            first = False
+            entered.set()
+            await release.wait()
+        return await original_request(bot, method, timeout)
+
+    monkeypatch.setattr(tg.session, "make_request", delayed)
+    pending = asyncio.create_task(tg.private(501, "/help"))
+    await asyncio.wait_for(entered.wait(), 5)
+    try:
+        await asyncio.wait_for(tg.private(503, "/help"), 3)
+        assert not pending.done()
+    finally:
+        release.set()
+        await pending

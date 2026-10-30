@@ -9,6 +9,7 @@ from datetime import date, datetime, time, timedelta
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError, TelegramRetryAfter
+from aiohttp_socks import ProxyConnectionError, ProxyError, ProxyTimeoutError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -19,6 +20,7 @@ from teamtime.db.models import (
     BotChat,
     DailyReminder,
     Employee,
+    NotificationPreference,
     RawMessage,
     RawMessageVersion,
     TelegramIdentity,
@@ -26,6 +28,7 @@ from teamtime.db.models import (
     TopicKind,
 )
 from teamtime.services.facts import DayCell, active_employees, load_cells
+from teamtime.services.notifications import next_allowed
 from teamtime.services.settings import AppSettings, load_settings
 
 from .keyboards import reminder_menu
@@ -46,15 +49,18 @@ class Reminder:
     shift_end: datetime
     delay_minutes: int
     topic_url: str | None = None
+    followup: bool = False
 
 
-def _deadline(cell: DayCell, settings: AppSettings) -> datetime | None:
+def _deadline(cell: DayCell, settings: AppSettings, delay: int | None = None) -> datetime | None:
     """Ожидаем последний рабочий интервал, учитывая переход смены через полночь."""
     plan = cell.result.plan
     if cell.daily or not cell.result.planned or not plan or plan.end_abs is None:
         return None
     midnight = datetime.combine(cell.day, time.min, settings.tz)
-    return midnight + timedelta(seconds=plan.end_abs, minutes=settings.bot.reminder_delay_minutes)
+    return midnight + timedelta(
+        seconds=plan.end_abs, minutes=delay or settings.bot.reminder_delay_minutes
+    )
 
 
 def _is_due(deadline: datetime | None, now: datetime) -> bool:
@@ -71,7 +77,28 @@ async def due_reminders(session: AsyncSession) -> list[Reminder]:
     employees = await active_employees(session)
     by_id = {employee.id: employee for employee in employees}
     cells = await load_cells(session, settings, start, end, by_id)
-    due = {key: cell for key, cell in cells.items() if _is_due(_deadline(cell, settings), now)}
+    preferences = {p.employee_id: p for p in await session.scalars(select(NotificationPreference))}
+    existing = list(
+        await session.scalars(
+            select(DailyReminder).where(
+                DailyReminder.work_date.between(start, end), DailyReminder.employee_id.in_(by_id)
+            )
+        )
+    )
+    queued = {
+        (row.employee_id, row.work_date)
+        for row in existing
+        if _is_due(row.snooze_until if row.sent_at else row.deferred_until, now)
+    }
+    due = {}
+    for cell_key, cell in cells.items():
+        deadline = _deadline(
+            cell,
+            settings,
+            preferences[cell_key[0]].delay_minutes if cell_key[0] in preferences else None,
+        )
+        if deadline is not None and (_is_due(deadline, now) or cell_key in queued):
+            due[cell_key] = cell
     if not due:
         return []
     identities = list(
@@ -82,21 +109,23 @@ async def due_reminders(session: AsyncSession) -> list[Reminder]:
             )
         )
     )
-    existing = list(
-        await session.scalars(
-            select(DailyReminder).where(
-                DailyReminder.work_date.between(start, end),
-                DailyReminder.employee_id.in_(by_id),
-            )
-        )
-    )
+    records = {(row.employee_id, row.work_date, row.chat_id): row for row in existing}
     unavailable = {
         (row.employee_id, row.work_date, row.chat_id)
         for row in existing
-        if row.sent_at
-        or row.attempted_at
-        or row.attempts >= MAX_ATTEMPTS
-        or (row.next_attempt_at and row.next_attempt_at > now)
+        if (
+            bool(row.sent_at)
+            and (row.followup_attempted_at is not None or not _is_due(row.snooze_until, now))
+        )
+        or (
+            not row.sent_at
+            and (
+                row.attempted_at is not None
+                or row.attempts >= MAX_ATTEMPTS
+                or (row.next_attempt_at is not None and row.next_attempt_at > now)
+                or (row.deferred_until is not None and row.deferred_until > now)
+            )
+        )
     }
     topics = list(
         await session.scalars(
@@ -126,7 +155,13 @@ async def due_reminders(session: AsyncSession) -> list[Reminder]:
     reminders = []
     seen: set[tuple[int, date, int]] = set()
     for (employee_id, day), cell in sorted(due.items(), key=lambda item: item[0][1]):
-        deadline = _deadline(cell, settings)
+        preference = preferences.get(employee_id)
+        if preference and not preference.enabled:
+            continue
+        delay = (
+            preference.delay_minutes if preference else None
+        ) or settings.bot.reminder_delay_minutes
+        deadline = _deadline(cell, settings, delay)
         assert deadline is not None
         source_version = cell.plan.source_version_id if cell.plan else None
         source_chat = source_chats.get(source_version) if source_version is not None else None
@@ -155,9 +190,10 @@ async def due_reminders(session: AsyncSession) -> list[Reminder]:
                     name=by_id[employee_id].short_name,
                     work_date=day,
                     chat_id=chat_id,
-                    shift_end=deadline - timedelta(minutes=settings.bot.reminder_delay_minutes),
-                    delay_minutes=settings.bot.reminder_delay_minutes,
+                    shift_end=deadline - timedelta(minutes=delay),
+                    delay_minutes=delay,
                     topic_url=topic_url,
+                    followup=bool(records.get(key) and records[key].sent_at),
                 )
             )
     return reminders
@@ -192,13 +228,27 @@ async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) 
             now = clock.now()
             if (
                 record is None
-                or record.sent_at
-                or record.attempted_at
-                or record.attempts >= MAX_ATTEMPTS
-                or (record.next_attempt_at and record.next_attempt_at > now)
+                or (
+                    candidate.followup
+                    and (
+                        not record.sent_at
+                        or record.followup_attempted_at is not None
+                        or not _is_due(record.snooze_until, now)
+                    )
+                )
+                or (
+                    not candidate.followup
+                    and (
+                        record.sent_at is not None
+                        or record.attempted_at is not None
+                        or record.attempts >= MAX_ATTEMPTS
+                        or (record.next_attempt_at is not None and record.next_attempt_at > now)
+                    )
+                )
             ):
                 continue
             settings = await load_settings(session)
+            preference = await session.get(NotificationPreference, candidate.employee_id)
             employee = await session.get(Employee, candidate.employee_id)
             identity = await session.scalar(
                 select(TelegramIdentity)
@@ -213,19 +263,40 @@ async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) 
                 or not employee
                 or not employee.is_active
                 or not identity
+                or (preference and not preference.enabled)
             ):
                 continue
             cells = await load_cells(
                 session, settings, candidate.work_date, candidate.work_date, [candidate.employee_id]
             )
-            deadline = _deadline(cells[(candidate.employee_id, candidate.work_date)], settings)
-            if not _is_due(deadline, now):
+            delay = (
+                preference.delay_minutes if preference else None
+            ) or settings.bot.reminder_delay_minutes
+            cell = cells[(candidate.employee_id, candidate.work_date)]
+            deadline = _deadline(cell, settings, delay)
+            scheduled = (
+                record.snooze_until if candidate.followup else record.deferred_until or deadline
+            )
+            if scheduled is not None and deadline is not None:
+                scheduled = max(scheduled, deadline)
+            if cell.daily or deadline is None or not _is_due(scheduled, now):
                 continue
             assert deadline is not None
-            shift_end = deadline - timedelta(minutes=settings.bot.reminder_delay_minutes)
+            shift_end = deadline - timedelta(minutes=delay)
+            allowed = next_allowed(now.astimezone(settings.tz), preference)
+            if allowed > now:
+                if candidate.followup:
+                    record.snooze_until = allowed
+                else:
+                    record.deferred_until = allowed
+                await session.commit()
+                continue
             # Отдельный коммит до сети закрывает окно «отправлено, но бот упал до сохранения».
             # При падении или потере ответа эта попытка останется неопределённой без автоповтора.
-            record.attempted_at = now
+            if candidate.followup:
+                record.followup_attempted_at = now
+            else:
+                record.attempted_at = now
             record.attempts += 1
             record.next_attempt_at = None
             await session.commit()
@@ -236,19 +307,23 @@ async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) 
                         employee.short_name,
                         candidate.work_date,
                         shift_end,
-                        settings.bot.reminder_delay_minutes,
+                        delay,
                     ),
                     parse_mode=ParseMode.HTML,
-                    reply_markup=reminder_menu(candidate.topic_url),
+                    reply_markup=reminder_menu(
+                        candidate.topic_url, candidate.work_date, followup=candidate.followup
+                    ),
                 )
             except TelegramForbiddenError:
                 # Новое сообщение в личке снова включит доставку для этого аккаунта.
                 identity.dm_chat_id = None
                 record.attempted_at = None
+                record.error_code = "TelegramForbiddenError"
                 log.info("bot.reminder_unavailable", employee_id=candidate.employee_id)
             except TelegramRetryAfter as exc:
                 # 429 однозначно означает, что сообщение не отправлено. Число попыток ограничено.
-                if record.attempts < MAX_ATTEMPTS:
+                record.error_code = "TelegramRetryAfter"
+                if not candidate.followup and record.attempts < MAX_ATTEMPTS:
                     record.attempted_at = None
                     record.next_attempt_at = now + timedelta(
                         seconds=max(CHECK_SECONDS * 2 ** (record.attempts - 1), exc.retry_after)
@@ -259,14 +334,19 @@ async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) 
                     retry_after=exc.retry_after,
                     attempts=record.attempts,
                 )
-            except TelegramAPIError as exc:
+            except (TelegramAPIError, ProxyConnectionError, ProxyError, ProxyTimeoutError) as exc:
+                record.error_code = type(exc).__name__
                 log.warning(
                     "bot.reminder_delivery_unknown",
                     employee_id=candidate.employee_id,
                     error=type(exc).__name__,
                 )
             else:
-                record.sent_at = now
+                if candidate.followup:
+                    record.followup_sent_at = now
+                else:
+                    record.sent_at = now
+                record.error_code = None
                 record.next_attempt_at = None
                 sent += 1
             await session.commit()
