@@ -9,11 +9,12 @@ from datetime import UTC, datetime
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message, ReactionTypeEmoji
+from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from teamtime.bot.feedback import accepted_text, group_feedback
+from teamtime.bot.reactions import set_reaction
 from teamtime.bot.richtext import rich_plain_text
 from teamtime.core.config import Settings
 from teamtime.core.logging import get_logger
@@ -86,9 +87,7 @@ async def give_feedback(
     reply = fb.reply
     if fb.reaction:
         try:
-            await bot.set_message_reaction(
-                message.chat.id, message.message_id, reaction=[ReactionTypeEmoji(emoji=fb.reaction)]
-            )
+            await set_reaction(bot, message.chat.id, message.message_id, fb.reaction)
         except TelegramBadRequest as exc:
             # Реакции выключены в чате или эмодзи недоступно — короткий ответ вместо реакции.
             log.warning("bot.reaction_failed", error=str(exc))

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import date
+from unittest.mock import AsyncMock
 
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.methods import DeleteMessage, SendMessage, SetMessageReaction
+from aiohttp_socks import ProxyTimeoutError
 from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -170,6 +172,38 @@ async def test_reaction_failure_falls_back_to_short_reply(tg: Telegram) -> None:
     replies = tg.session.of(SendMessage)
     assert len(replies) == 1
     assert "<b>✅ Дейлик принят</b>" in replies[0].text
+
+
+@pytest.mark.parametrize("failures", [1, 3])
+async def test_proxy_timeout_keeps_daily_without_duplicate_feedback(
+    tg: Telegram, maker, monkeypatch, failures: int
+) -> None:
+    """Тайм-аут после сохранения дейлика не теряет данные и не порождает ответы-дубли."""
+    monkeypatch.setattr("teamtime.bot.reactions.sleep", AsyncMock())
+    tg.session.reaction_failures = [ProxyTimeoutError("Proxy timed out") for _ in range(failures)]
+    text = f.daily_text("23.10.2026")
+    message_id = await tg.group(501, text)
+    assert len(tg.session.of(SetMessageReaction)) == min(failures + 1, 3)
+    assert tg.session.of(SendMessage) == []
+    async with maker() as session:
+        dailies = await current_dailies(session, date(2026, 10, 23), date(2026, 10, 23))
+        assert len(dailies) == 1
+        assert dailies[0].efficiency == 80
+    calls = len(tg.session.calls)
+    await tg.group(501, text, message_id=message_id)
+    assert len(tg.session.calls) == calls
+
+
+async def test_proxy_failure_does_not_repeat_problem_reply(tg: Telegram, monkeypatch) -> None:
+    monkeypatch.setattr("teamtime.bot.reactions.sleep", AsyncMock())
+    tg.session.reaction_failures = [ProxyTimeoutError("Proxy timed out") for _ in range(3)]
+    text = f.daily_text("23.10.2026", e=None)
+    message_id = await tg.group(501, text)
+    assert len(tg.session.of(SetMessageReaction)) == 3
+    assert len(tg.session.of(SendMessage)) == 1
+    calls = len(tg.session.calls)
+    await tg.group(501, text, message_id=message_id)
+    assert len(tg.session.calls) == calls
 
 
 async def test_bind_requires_chat_admin(tg: Telegram, maker) -> None:

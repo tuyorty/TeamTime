@@ -48,6 +48,7 @@ class FakeSession(BaseSession):
         super().__init__()
         self.calls: list[TelegramMethod[Any]] = []
         self.fail_reactions = False
+        self.reaction_failures: list[BaseException] = []
         self.send_failures: list[TelegramAPIError] = []
         self.admins: set[int] = set()
         self._ids = count(10_000)
@@ -74,6 +75,8 @@ class FakeSession(BaseSession):
         if isinstance(method, GetMe):
             return BOT_USER
         if isinstance(method, SetMessageReaction):
+            if self.reaction_failures:
+                raise self.reaction_failures.pop(0)
             if self.fail_reactions:
                 raise TelegramBadRequest(method=method, message="Bad Request: REACTION_INVALID")
             return True
