@@ -50,6 +50,7 @@ class FakeSession(BaseSession):
         self.fail_reactions = False
         self.reaction_failures: list[BaseException] = []
         self.send_failures: list[TelegramAPIError] = []
+        self.edit_failures: list[TelegramAPIError] = []
         self.admins: set[int] = set()
         self._ids = count(10_000)
 
@@ -101,6 +102,8 @@ class FakeSession(BaseSession):
         if isinstance(method, DeleteMessage | AnswerCallbackQuery | EditMessageReplyMarkup):
             return True
         if isinstance(method, EditMessageText):
+            if self.edit_failures:
+                raise self.edit_failures.pop(0)
             return True
         return True
 
@@ -158,7 +161,7 @@ class Telegram:
         )
         await self.dp.feed_update(self.bot, Update(update_id=next(self._update_ids), message=msg))
 
-    async def press(self, uid: int, data: str) -> None:
+    async def press(self, uid: int, data: str, *, chat: Chat | None = None) -> None:
         query = CallbackQuery(
             id=str(next(self._update_ids)),
             from_user=self.user(uid),
@@ -167,7 +170,7 @@ class Telegram:
             message=Message(
                 message_id=next(self._message_ids),
                 date=clock.now(),
-                chat=Chat(id=uid, type="private"),
+                chat=chat or Chat(id=uid, type="private"),
                 text="меню",
             ),
         )

@@ -9,14 +9,14 @@ from unittest.mock import AsyncMock
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.methods import DeleteMessage, SendMessage, SetMessageReaction
+from aiogram.methods import DeleteMessage, EditMessageText, SendMessage, SetMessageReaction
 from aiohttp_socks import ProxyTimeoutError
 from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from teamtime.bot.app import build_dispatcher
-from teamtime.bot.keyboards import FixCb, MenuCb, StatusCb
+from teamtime.bot.keyboards import FixCb, MenuCb, ReportCb, StatusCb
 from teamtime.calc import StatusKind
 from teamtime.core.config import Settings
 from teamtime.db.models import DayStatus, ParseResultRow, RawMessage, Resolution, TopicBinding
@@ -238,11 +238,10 @@ async def test_today_has_summary_button_and_private_chat_is_registered(tg: Teleg
     response = tg.session.of(SendMessage)[-1]
     assert response.parse_mode == "HTML"
     buttons = [button for row in response.reply_markup.inline_keyboard for button in row]
-    assert any(button.callback_data == MenuCb(action="summary").pack() for button in buttons)
-    await tg.press(501, MenuCb(action="summary").pack())
+    summary = ReportCb(view="summary", day="20261026").pack()
+    assert any(button.callback_data == summary for button in buttons)
+    await tg.press(501, summary)
     assert "Итоги дня" in tg.session.texts()[-1]
-    await tg.press(999, MenuCb(action="summary").pack())
-    assert "не привязан" in tg.session.texts()[-1]
     async with maker() as session:
         from teamtime.db.models import TelegramIdentity
 
@@ -253,7 +252,20 @@ async def test_today_has_summary_button_and_private_chat_is_registered(tg: Teleg
 
 
 @pytest.mark.parametrize(
-    "action", ["/today", "/week", "/me", "/who", "week", "month", "today", "summary"]
+    "action",
+    [
+        "/today",
+        "/day",
+        "/people",
+        "/week",
+        "/me",
+        "/who",
+        "week",
+        "month",
+        "today",
+        "summary",
+        "people",
+    ],
 )
 async def test_reports_have_no_dashboard_links(tg: Telegram, action: str) -> None:
     if action.startswith("/"):
@@ -270,7 +282,7 @@ async def test_reports_have_no_dashboard_links(tg: Telegram, action: str) -> Non
                 assert all(button.url is None for button in row)
 
 
-async def test_week_keeps_all_tasks_in_telegram_and_splits_long_report(tg: Telegram) -> None:
+async def test_week_keeps_all_tasks_in_telegram_with_page_buttons(tg: Telegram) -> None:
     tasks = [f"Задача {index}: " + "описание " * 18 for index in range(15)]
     tasks.append("&" * 500)
     text = f.schedule_text().replace(
@@ -280,12 +292,30 @@ async def test_week_keeps_all_tasks_in_telegram_and_splits_long_report(tg: Teleg
     tg.session.calls.clear()
     await tg.private(501, "/week")
     messages = tg.session.of(SendMessage)
-    assert len(messages) > 1
-    report = "\n".join(message.text for message in messages)
+    assert len(messages) == 1
+    pages = [messages[0]]
+    while True:
+        next_page = next(
+            (
+                button
+                for row in pages[-1].reply_markup.inline_keyboard
+                for button in row
+                if button.text == "Страница ›"
+            ),
+            None,
+        )
+        if next_page is None:
+            break
+        await tg.press(501, next_page.callback_data)
+        pages.append(tg.session.of(EditMessageText)[-1])
+    assert len(pages) > 1
+    assert len(tg.session.of(SendMessage)) == 1
+    report = "\n".join(message.text for message in pages)
     assert all(f"Задача {index}:" in report for index in range(15))
     assert "&amp;" * 500 in report
     assert "на сайте" not in report
-    assert all(len(message.text.encode("utf-16-le")) // 2 <= 4096 for message in messages)
+    assert all("Иванов И.И." in message.text for message in pages)
+    assert all(len(message.text.encode("utf-16-le")) // 2 <= 4096 for message in pages)
 
 
 async def test_fix_efficiency_via_deep_link_and_buttons(tg: Telegram, maker) -> None:

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import calendar
+from datetime import date
+
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
     InlineKeyboardButton,
@@ -11,11 +14,15 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from teamtime.bot.dates import date_key, shift_period
+from teamtime.services.reports import MONTHS
+
 MENU = {
     "🗓 Моя неделя": "week",
     "📊 Месяц": "month",
     "👥 Сегодня": "today",
     "📋 Итоги дня": "summary",
+    "👤 Сотрудники": "people",
     "🙅 Не приду": "absent",
     "✏️ Исправить": "fix",
 }
@@ -24,6 +31,26 @@ MENU = {
 
 class MenuCb(CallbackData, prefix="m"):
     action: str
+
+
+class ReportCb(CallbackData, prefix="rp"):
+    view: str
+    day: str
+    employee_id: int = 0
+    page: int = 0
+
+
+class PeopleCb(CallbackData, prefix="pe"):
+    day: str
+    view: str = "month"
+    page: int = 0
+
+
+class CalendarCb(CallbackData, prefix="cl"):
+    view: str
+    day: str
+    month: str
+    employee_id: int = 0
 
 
 class FixCb(CallbackData, prefix="fx"):
@@ -39,7 +66,7 @@ class StatusCb(CallbackData, prefix="st"):
 def reply_menu() -> ReplyKeyboardMarkup:
     """Постоянная панель под полем ввода в личке: всегда под рукой, ничего не нужно набирать."""
     labels = list(MENU)
-    rows = [labels[0:2], labels[2:4], labels[4:]]
+    rows = [labels[index : index + 2] for index in range(0, len(labels), 2)]
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=t) for t in row] for row in rows],
         resize_keyboard=True,
@@ -48,10 +75,173 @@ def reply_menu() -> ReplyKeyboardMarkup:
     )
 
 
-def today_menu() -> InlineKeyboardMarkup:
-    """Итоги открываются сообщением в Telegram, без перехода на локальный сайт."""
+def report_menu(
+    view: str,
+    day: date,
+    today: date,
+    *,
+    employee_id: int = 0,
+    page: int = 0,
+    pages: int = 1,
+) -> InlineKeyboardMarkup:
+    """Период, дата и страницы отчёта хранятся в кнопках, независимо от других сообщений."""
     kb = InlineKeyboardBuilder()
-    kb.button(text="📋 Итоги дня", callback_data=MenuCb(action="summary"))
+    key = date_key(day)
+    previous, following = shift_period(day, view, -1), shift_period(day, view, 1)
+    arrows = []
+    if previous:
+        arrows.append(
+            InlineKeyboardButton(
+                text="‹ " + (previous.strftime("%d.%m") if view in {"day", "summary"} else "Назад"),
+                callback_data=ReportCb(
+                    view=view, day=date_key(previous), employee_id=employee_id
+                ).pack(),
+            )
+        )
+    arrows.append(
+        InlineKeyboardButton(
+            text=f"📅 {day:%d.%m.%Y}",
+            callback_data=CalendarCb(
+                view=view, day=key, month=date_key(day.replace(day=1)), employee_id=employee_id
+            ).pack(),
+        )
+    )
+    if following:
+        arrows.append(
+            InlineKeyboardButton(
+                text=(following.strftime("%d.%m") if view in {"day", "summary"} else "Вперёд")
+                + " ›",
+                callback_data=ReportCb(
+                    view=view, day=date_key(following), employee_id=employee_id
+                ).pack(),
+            )
+        )
+    kb.row(*arrows)
+    tabs = (
+        (("day", "День"), ("week", "Неделя"), ("month", "Месяц"))
+        if employee_id
+        else (("day", "Расписание"), ("summary", "📋 Итоги дня"), ("week", "Неделя"))
+    )
+    kb.row(
+        *[
+            InlineKeyboardButton(
+                text=f"· {label} ·" if target == view else label,
+                callback_data=ReportCb(view=target, day=key, employee_id=employee_id).pack(),
+            )
+            for target, label in tabs
+        ]
+    )
+    if pages > 1:
+        paging = []
+        for target, label in (
+            (page - 1, "‹ Страница"),
+            (page, f"{page + 1}/{pages}"),
+            (page + 1, "Страница ›"),
+        ):
+            if 0 <= target < pages:
+                paging.append(
+                    InlineKeyboardButton(
+                        text=label,
+                        callback_data=ReportCb(
+                            view=view, day=key, employee_id=employee_id, page=target
+                        ).pack(),
+                    )
+                )
+        kb.row(*paging)
+    kb.row(
+        InlineKeyboardButton(
+            text="Сегодня" if view in {"day", "summary"} else "Текущий период",
+            callback_data=ReportCb(view=view, day=date_key(today), employee_id=employee_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text="👤 Сотрудники",
+            callback_data=PeopleCb(day=key, view=view if employee_id else "month").pack(),
+        ),
+    )
+    return kb.as_markup()
+
+
+def people_menu(
+    employees: list[tuple[int, str]], day: date, view: str, page: int, pages: int
+) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for employee_id, name in employees:
+        kb.button(
+            text=name[:50],
+            callback_data=ReportCb(view=view, day=date_key(day), employee_id=employee_id),
+        )
+    kb.adjust(2)
+    if pages > 1:
+        paging = []
+        for target, label in ((page - 1, "‹"), (page, f"{page + 1}/{pages}"), (page + 1, "›")):
+            if 0 <= target < pages:
+                paging.append(
+                    InlineKeyboardButton(
+                        text=label,
+                        callback_data=PeopleCb(day=date_key(day), view=view, page=target).pack(),
+                    )
+                )
+        kb.row(*paging)
+    kb.row(
+        InlineKeyboardButton(
+            text="👥 День команды", callback_data=ReportCb(view="day", day=date_key(day)).pack()
+        )
+    )
+    return kb.as_markup()
+
+
+def calendar_menu(
+    view: str, selected: date, month: date, today: date, employee_id: int = 0
+) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    key = date_key(selected)
+    navigation = []
+    for step, label in ((-1, "‹"), (0, f"{MONTHS[month.month - 1]} {month.year}"), (1, "›")):
+        target = shift_period(month, "month", step)
+        if target:
+            navigation.append(
+                InlineKeyboardButton(
+                    text=label,
+                    callback_data=CalendarCb(
+                        view=view, day=key, month=date_key(target), employee_id=employee_id
+                    ).pack(),
+                )
+            )
+    kb.row(*navigation)
+    kb.row(
+        *[
+            InlineKeyboardButton(text=label, callback_data="browse:noop")
+            for label in ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+        ]
+    )
+    for week in calendar.monthcalendar(month.year, month.month):
+        buttons = []
+        for number in week:
+            day = month.replace(day=number) if number else None
+            label = (
+                f"[{number}]" if day == selected else f"{number}•" if day == today else str(number)
+            )
+            buttons.append(
+                InlineKeyboardButton(
+                    text=label if day else " ",
+                    callback_data=ReportCb(
+                        view=view, day=date_key(day), employee_id=employee_id
+                    ).pack()
+                    if day
+                    else "browse:noop",
+                )
+            )
+        kb.row(*buttons)
+    kb.row(
+        InlineKeyboardButton(
+            text="Сегодня",
+            callback_data=ReportCb(view=view, day=date_key(today), employee_id=employee_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text="‹ К отчёту",
+            callback_data=ReportCb(view=view, day=key, employee_id=employee_id).pack(),
+        ),
+    )
     return kb.as_markup()
 
 

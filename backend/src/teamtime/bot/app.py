@@ -19,7 +19,7 @@ from teamtime.core.config import Settings
 from teamtime.core.logging import configure_logging, get_logger
 from teamtime.db.session import get_sessionmaker
 
-from .handlers import commands, group, private
+from .handlers import browse, commands, group, private
 from .middleware import DbSessionMiddleware
 from .reminders import reminder_loop
 
@@ -27,6 +27,8 @@ log = get_logger(__name__)
 
 COMMANDS = [
     BotCommand(command="today", description="Кто сегодня на работе"),
+    BotCommand(command="day", description="Выбрать день: расписание и итоги"),
+    BotCommand(command="people", description="Часы и статистика сотрудника"),
     BotCommand(command="week", description="Моя неделя"),
     BotCommand(command="who", description="Команда за неделю"),
     BotCommand(command="me", description="Моя статистика за месяц"),
@@ -44,7 +46,7 @@ def build_dispatcher(maker: async_sessionmaker[AsyncSession], config: Settings) 
     dp.callback_query.middleware(CallbackAnswerMiddleware())
     # Порядок важен: в группе «любой текст» не ловит команды, а в личке запасной обработчик
     # стоит последним, после команд.
-    dp.include_routers(group.router, commands.router, private.router)
+    dp.include_routers(group.router, commands.router, browse.router, private.router)
     return dp
 
 

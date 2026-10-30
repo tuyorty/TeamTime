@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from teamtime.bot import texts
 from teamtime.bot.feedback import issue_text
+from teamtime.bot.handlers.browse import send_people
 from teamtime.bot.handlers.commands import send_day_summary, send_my_month, send_my_week, send_today
 from teamtime.bot.identity import employee_for, not_linked_text
 from teamtime.bot.keyboards import (
@@ -107,6 +108,8 @@ async def run_menu(
         await send_today(msg, session, settings, user)
     elif action == "summary":
         await send_day_summary(msg, session, settings, user)
+    elif action == "people":
+        await send_people(msg, session, settings, user)
     elif action == "absent":
         await msg.answer(texts.STATUS_PROMPT, reply_markup=status_menu())
     elif action == "fix":

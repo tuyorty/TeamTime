@@ -8,7 +8,15 @@ from textwrap import wrap
 
 from teamtime.calc import DayState
 from teamtime.calc.duration import format_hm
-from teamtime.schemas import DayCellOut, EmployeeBrief, MonthSummaryOut, TodayOut, WeekOut, WeekRow
+from teamtime.schemas import (
+    DayCellOut,
+    EmployeeBrief,
+    MonthSummaryOut,
+    TodayOut,
+    TodayRow,
+    WeekOut,
+    WeekRow,
+)
 from teamtime.services.reports import MONTHS_GENITIVE
 
 WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
@@ -132,7 +140,7 @@ def format_day_summary(report: TodayOut) -> str:
     received = [row for row in report.rows if row.cell.fact]
     late = [row for row in received if row.cell.late_sec]
     lines = [
-        f"📋 <b>Итоги дня · {human_date(report.date)}</b>",
+        f"📋 <b>Итоги дня · {human_date(report.date)} {report.date.year}</b>",
         "",
         f"Прислали дейлик: <b>{len(received)}</b>",
         f"Пока без дейлика: <b>{len(waiting)}</b>",
@@ -168,10 +176,68 @@ def format_day_summary(report: TodayOut) -> str:
     return "\n".join(lines)
 
 
+def format_day(report: TodayOut, today: date) -> str:
+    """Прошлую и будущую дату показываем без текущего времени и присутствия «сейчас»."""
+    if report.date == today:
+        return format_today(report)
+    lines = [
+        f"👥 <b>День команды · {human_date(report.date)} {report.date.year}</b>",
+        f"В команде: <b>{len(report.rows)}</b> · по расписанию работают: "
+        f"<b>{report.counts.get('planned', 0)}</b>",
+    ]
+    for row in report.rows:
+        lines += ["", f"<b>{_name(row.employee)}</b>", f"План: {plan_text(row.cell)}"]
+        if report.date < today or row.cell.fact:
+            lines.append(f"Факт: {fact_text(row.cell)}")
+    if not report.rows:
+        lines += ["", "Активных сотрудников пока нет."]
+    if report.date > today:
+        lines += ["", "<i>План на будущую дату. Рабочий день ещё не наступил.</i>"]
+    return "\n".join(lines)
+
+
+def format_employee_day(row: TodayRow, today: date) -> str:
+    cell = row.cell
+    lines = [
+        f"👤 <b>{_name(row.employee)} · день</b>",
+        f"{human_date(cell.date)} {cell.date.year}",
+        "",
+        f"План: <b>{plan_text(cell)}</b>",
+    ]
+    if cell.date <= today or cell.fact:
+        lines.append(f"Факт: {fact_text(cell)}")
+    else:
+        lines.append("Рабочий день ещё не наступил.")
+    if cell.fact:
+        efficiency = cell.fact.efficiency
+        lines.append(
+            f"Эффективность: <b>{efficiency}%</b> · с её учётом "
+            f"<b>{format_hm(cell.fact.result_sec)}</b>"
+            if efficiency is not None
+            else "Эффективность не указана."
+        )
+    for value, label in (
+        (cell.late_sec, "Опоздание"),
+        (cell.early_leave_sec, "Ранний уход"),
+        (cell.undertime_sec, "Недоработка"),
+    ):
+        if value:
+            lines.append(f"⚠️ {label}: <b>{format_hm(value)}</b>")
+    if cell.status_note:
+        lines += ["", f"Статус: {short_text(cell.status_note, 500)}"]
+    if cell.plan and cell.plan.note:
+        lines += ["", f"Заметка в расписании: {short_text(cell.plan.note, 500)}"]
+    if row.tasks:
+        lines += ["", "<b>🎯 Задачи из расписания на неделю</b>", *_tasks(row.tasks)]
+    if cell.fact and cell.fact.tasks:
+        lines += ["", "<b>✅ Выполнено за день</b>", *_tasks(cell.fact.tasks)]
+    return "\n".join(lines)
+
+
 def format_my_week(week: WeekOut, row: WeekRow) -> str:
     lines = [
         f"🗓 <b>{short_text(week.label)}</b>",
-        f"{_name(row.employee)} · {week.days[0]:%d.%m}–{week.days[-1]:%d.%m}",
+        f"{_name(row.employee)} · {week.days[0]:%d.%m.%Y}–{week.days[-1]:%d.%m.%Y}",
     ]
     for cell in row.cells:
         lines += [
@@ -295,11 +361,15 @@ HELP = (
     "Расписание задаёт план, дейлик в конце дня — фактические часы и выполненные задачи.\n\n"
     "<b>👥 Рабочий день</b>\n"
     "/today — кто, где и во сколько работает сегодня\n"
+    "/day — другой день: стрелки и календарь; можно /day 29.10.2026\n"
     "/absent — отсутствие, удалёнка, больничный или отпуск\n\n"
     "<b>📊 Мои отчёты</b>\n"
     "/week — расписание, часы и задачи на неделю\n"
     "/me — часы, норма и итоги месяца\n"
     "/who — итоги команды за неделю\n\n"
+    "<b>👤 Сотрудники</b>\n"
+    "/people — выбрать человека и посмотреть его день, неделю или месяц\n"
+    "В отчётах можно менять дату и листать периоды стрелками.\n\n"
     "<b>✏️ Исправления</b>\n"
     "/fix — сообщения, в которых нужна ваша помощь\n"
     "Ошибку можно исправить прямо в исходном сообщении в теме — таблица обновится.\n\n"

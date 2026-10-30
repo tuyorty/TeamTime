@@ -12,14 +12,14 @@ def _size(text: str) -> int:
     return len(text.encode("utf-16-le")) // 2
 
 
-def report_parts(text: str) -> list[str]:
+def report_parts(text: str, *, limit: int = REPORT_LIMIT) -> list[str]:
     """Форматтеры завершают HTML-теги внутри каждой строки и ограничивают длину полей."""
     parts: list[str] = []
     current = ""
     for line in text.splitlines():
-        if _size(line) > REPORT_LIMIT:
+        if _size(line) > limit:
             raise ValueError("Строка отчёта превышает допустимую длину")
-        if current and _size(current) + _size(line) + 1 > REPORT_LIMIT:
+        if current and _size(current) + _size(line) + 1 > limit:
             parts.append(current.rstrip())
             current = ""
         current += ("\n" if current else "") + line
