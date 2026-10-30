@@ -196,6 +196,31 @@ class CalculationVersion(Timestamped, Base):
     created_by: Mapped[str] = mapped_column(String(100), default="admin")
 
 
+class ProjectBonus(Timestamped, Base):
+    """Ручная премия за месяц; отмена сохраняет запись и журнал правок."""
+
+    __tablename__ = "project_bonuses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(36), unique=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="RESTRICT"))
+    month: Mapped[date] = mapped_column(Date)
+    title: Mapped[str] = mapped_column(String(200))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    note: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    created_by: Mapped[str] = mapped_column(String(100), default="admin")
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    __table_args__ = (
+        CheckConstraint("amount > 0 AND amount <= 1000000000", name="bonus_amount"),
+        CheckConstraint(
+            "EXTRACT(DAY FROM month) = 1 AND month BETWEEN '2000-01-01' AND '2100-12-01'",
+            name="bonus_month",
+        ),
+        Index("ix_project_bonuses_month_employee", "month", "employee_id"),
+    )
+
+
 class StatusRequest(Timestamped, Base):
     """Запрос сотрудника; до одобрения действующие статусы не меняются."""
 

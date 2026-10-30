@@ -74,7 +74,7 @@ TABLES = (
     "schedule_plans, parse_results, raw_message_versions, raw_messages, day_statuses, "
     "topic_bindings, bot_chats, telegram_identities, daily_reminders, employees, employee_terms, "
     "calculation_versions, status_requests, notification_preferences, bot_drafts, "
-    "system_status, bot_deliveries"
+    "system_status, bot_deliveries, project_bonuses"
 )
 
 

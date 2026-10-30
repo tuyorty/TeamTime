@@ -258,6 +258,42 @@ class MonthRow(BaseModel):
     weeks: list[WeekPoint]
 
 
+class ProjectBonusOut(Schema):
+    id: int
+    employee_id: int
+    month: date
+    title: str
+    amount: Decimal
+    note: str
+    version: int
+    created_at: datetime
+    cancelled_at: datetime | None
+    cancel_reason: str
+
+
+class FinanceAmounts(BaseModel):
+    salary: Decimal
+    overtime_pay: Decimal
+    project_bonuses: Decimal
+    total: Decimal
+
+
+class FinanceRow(BaseModel):
+    employee: EmployeeBrief
+    summary: MonthSummaryOut
+    amounts: FinanceAmounts
+    bonuses: list[ProjectBonusOut]
+
+
+class FinanceOut(BaseModel):
+    year: int
+    month: int
+    label: str
+    complete: bool
+    rows: list[FinanceRow]
+    totals: FinanceAmounts
+
+
 class PenaltyScaleOut(BaseModel):
     soft_limit_h: float
     hard_limit_h: float

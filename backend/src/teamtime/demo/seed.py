@@ -15,6 +15,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from uuid import NAMESPACE_URL, uuid5
 
 from faker import Faker
 from sqlalchemy import func, select, text
@@ -23,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from teamtime.calc import StatusKind
 from teamtime.core import clock
 from teamtime.core.logging import get_logger
-from teamtime.db.models import Employee, Source, TelegramIdentity
+from teamtime.db.models import Employee, ProjectBonus, Source, TelegramIdentity
 from teamtime.demo.constants import (
     DAILY_THREAD_ID,
     DEMO_CHAT_ID,
@@ -31,7 +32,7 @@ from teamtime.demo.constants import (
     SCHEDULE_THREAD_ID,
 )
 from teamtime.demo.forum import ensure_demo_forum
-from teamtime.services import manual, status_requests
+from teamtime.services import finance, manual, status_requests
 from teamtime.services.ingest import IncomingMessage, ingest
 from teamtime.services.settings import AppSettings, load_settings, save_settings
 
@@ -505,7 +506,8 @@ async def clear_all(session: AsyncSession) -> None:
             "TRUNCATE audit_log, daily_tasks, daily_intervals, dailies, sprint_tasks, plan_days, "
             "schedule_plans, parse_results, raw_message_versions, raw_messages, day_statuses, "
             "topic_bindings, bot_chats, telegram_identities, employees, "
-            "bot_deliveries, system_status, calculation_versions RESTART IDENTITY CASCADE"
+            "bot_deliveries, system_status, calculation_versions, project_bonuses "
+            "RESTART IDENTITY CASCADE"
         )
     )
 
@@ -533,5 +535,33 @@ async def seed_demo(
         settings.holidays = [date(2026, 11, 4), date(2026, 12, 31), date(2027, 1, 1)]
         await save_settings(session, settings)
     await Seeder(session, settings, seed).run(weeks)
+    await seed_finance_examples(session, settings)
     log.info("demo.seeded", weeks=weeks, seed=seed)
     return True
+
+
+async def seed_finance_examples(session: AsyncSession, settings: AppSettings) -> None:
+    """Вымышленные премии для уже созданной демо-команды; повторный вызов безопасен."""
+    month = clock.now().astimezone(settings.tz).date().replace(day=1)
+    people = list(await session.scalars(select(Employee).order_by(Employee.id).limit(3)))
+    for employee, title, amount in zip(
+        people,
+        ("Личный кабинет", "Обновление сайта", "Дизайн-система"),
+        ("15000.00", "10000.00", "7500.00"),
+        strict=False,
+    ):
+        request_id = str(uuid5(NAMESPACE_URL, f"xtime-demo-bonus:{employee.id}:{month}"))
+        if await session.scalar(
+            select(ProjectBonus.id).where(ProjectBonus.request_id == request_id)
+        ):
+            continue
+        await finance.add_bonus(
+            session,
+            "seed",
+            request_id=request_id,
+            employee_id=employee.id,
+            month=month,
+            title=title,
+            amount=Decimal(amount),
+            note="Демонстрационная премия за закрытие проекта",
+        )
