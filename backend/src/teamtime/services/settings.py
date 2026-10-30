@@ -133,10 +133,29 @@ class AppSettings(BaseModel):
 
 async def load_settings(session: AsyncSession) -> AppSettings:
     row = await session.get(AppSetting, SETTINGS_KEY)
-    return AppSettings.model_validate(row.value) if row else AppSettings()
+    value = AppSettings.model_validate(row.value) if row else AppSettings()
+    from teamtime.core import clock
+    from teamtime.services.history import settings_current
+
+    return await settings_current(session, value, clock.now())
 
 
-async def save_settings(session: AsyncSession, value: AppSettings) -> None:
+async def save_settings(
+    session: AsyncSession,
+    value: AppSettings,
+    *,
+    effective_from: date | None = None,
+    actor: str = "admin",
+) -> None:
+    from sqlalchemy import text
+
+    from teamtime.services.history import default_effective_month, record_settings
+
+    await session.execute(text("SELECT pg_advisory_xact_lock(21333)"))
+    previous = await load_settings(session)
+    await record_settings(
+        session, previous, value, effective_from or default_effective_month(previous), actor
+    )
     row = await session.get(AppSetting, SETTINGS_KEY)
     payload = value.model_dump(mode="json")
     if row is None:

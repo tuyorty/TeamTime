@@ -39,6 +39,8 @@ class EmployeeOut(EmployeeBrief):
     match_key: str
     phone: str
     about: str
+    expertise: str = ""
+    help_with: str = ""
 
 
 class EmployeeIn(BaseModel):
@@ -49,6 +51,9 @@ class EmployeeIn(BaseModel):
     position: str = Field("", max_length=200)
     phone: str = Field("", max_length=40, pattern=r"^[+\d\s().-]*$")
     about: str = Field("", max_length=500)
+    expertise: str = Field("", max_length=500)
+    help_with: str = Field("", max_length=500)
+    terms_effective_from: date | None = None
     avatar_url: str = Field(
         "",
         max_length=200_000,
@@ -307,6 +312,11 @@ class HighlightRecord(BaseModel):
 
 
 class PeriodHighlights(BaseModel):
+    calendar_off_sec: int = 0
+    evening_night_sec: int = 0
+    long_days: int = 0
+    longest_daily_series: int = 0
+    changed_schedule_days: int = 0
     reported_days: int = 0
     employees_reported: int = 0
     worked_sec: int = 0
@@ -380,8 +390,17 @@ class NoteItem(BaseModel):
     status: StatusKind | None = None
 
 
+class UpcomingAbsenceOut(BaseModel):
+    start: date
+    end: date
+    kind: str
+    label: str
+    note: str = ""
+
+
 class EmployeeDetailOut(BaseModel):
     employee: EmployeeOut
+    upcoming_absence: UpcomingAbsenceOut | None = None
     identities: list[IdentityOut]
     start: date
     end: date
@@ -424,6 +443,7 @@ class PlanRow(BaseModel):
 
 
 class PlansOut(BaseModel):
+    required_days: list[date] = Field(default_factory=list)
     iso_year: int
     iso_week: int
     label: str

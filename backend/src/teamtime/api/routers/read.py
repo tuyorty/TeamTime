@@ -169,7 +169,14 @@ async def inbox(
     ] = None,
     problem: Annotated[str | None, Query(pattern="^(failed|partial|unlinked)$")] = None,
     kind: Annotated[MessageKind | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    start: date | None = None,
+    end: date | None = None,
+    oldest: bool = False,
 ) -> InboxOut:
+    if start and end and end < start:
+        raise HTTPException(422, "Конец периода раньше начала")
     return await messages.inbox(
         session,
         view,
@@ -177,6 +184,11 @@ async def inbox(
         unlinked=employee == "none",
         problem=problem,
         kind=kind,
+        limit=limit,
+        offset=offset,
+        start=start,
+        end=end,
+        oldest=oldest,
     )
 
 

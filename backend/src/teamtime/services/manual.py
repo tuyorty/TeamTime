@@ -365,6 +365,8 @@ def _employee_snapshot(e: Employee) -> dict[str, Any]:
         "position": e.position,
         "phone": e.phone,
         "about": e.about,
+        "expertise": e.expertise,
+        "help_with": e.help_with,
         "has_photo": bool(e.avatar_url),
         "monthly_norm_minutes": e.monthly_norm_minutes,
         "hourly_rate": str(e.hourly_rate),
@@ -376,6 +378,11 @@ def _employee_snapshot(e: Employee) -> dict[str, Any]:
 async def save_employee(
     session: AsyncSession, data: dict[str, Any], *, actor: str, employee: Employee | None = None
 ) -> Employee:
+    from teamtime.services.history import default_effective_month, record_terms
+    from teamtime.services.settings import load_settings
+
+    data = dict(data)
+    effective_from = data.pop("terms_effective_from", None)
     key = short_name_key(data["short_name"])
     clash = await session.scalar(select(Employee).where(Employee.match_key == key))
     if clash is not None and (employee is None or clash.id != employee.id):
@@ -389,6 +396,16 @@ async def save_employee(
             setattr(employee, field, value)
         employee.match_key = key
     await session.flush()
+    try:
+        await record_terms(
+            session,
+            employee,
+            before,
+            effective_from or default_effective_month(await load_settings(session)),
+            actor,
+        )
+    except ValueError as exc:
+        raise EditError(str(exc)) from exc
     await audit.record(
         session,
         actor=actor,

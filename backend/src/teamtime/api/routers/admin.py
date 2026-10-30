@@ -374,9 +374,16 @@ class SettingsOut(BaseModel):
 
 @router.put("/settings", summary="Сохранить бизнес-настройки")
 async def put_settings(
-    body: AppSettings, session: SessionDep, settings: AppSettingsDep, actor: AdminDep
+    body: AppSettings,
+    session: SessionDep,
+    settings: AppSettingsDep,
+    actor: AdminDep,
+    effective_from: date | None = None,
 ) -> SettingsOut:
-    await save_settings(session, body)
+    try:
+        await save_settings(session, body, effective_from=effective_from, actor=actor)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     await audit.record(
         session, actor=actor, action="settings.update", entity_type="settings", entity_id="app",
         before=settings.model_dump(mode="json"), after=body.model_dump(mode="json"),

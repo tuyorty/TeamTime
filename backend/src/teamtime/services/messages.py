@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -97,6 +99,10 @@ async def inbox(
     unlinked: bool = False,
     problem: str | None = None,
     kind: MessageKind | None = None,
+    offset: int = 0,
+    start: date | None = None,
+    end: date | None = None,
+    oldest: bool = False,
 ) -> InboxOut:
     """Записи инбокса. Фильтры: сотрудник (или «не определён»), вид проблемы, тип сообщения."""
     resolutions = INBOX_FILTERS.get(view, INBOX_FILTERS["pending"])
@@ -113,18 +119,34 @@ async def inbox(
         where.append(ParseResultRow.status == ParseStatus(problem))
     if kind is not None:
         where.append(ParseResultRow.kind == kind)
-    total = await session.scalar(select(func.count()).select_from(ParseResultRow).where(*where))
+    settings = await load_settings(session)
+    stamp = func.coalesce(RawMessageVersion.edited_at, RawMessage.sent_at)
+    local_day = func.date(func.timezone(settings.timezone, stamp))
+    if start:
+        where.append(local_day >= start)
+    if end:
+        where.append(local_day <= end)
+    base = (
+        select(ParseResultRow.id)
+        .join(RawMessageVersion, ParseResultRow.message_version_id == RawMessageVersion.id)
+        .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
+        .where(*where)
+    )
+    total = await session.scalar(select(func.count()).select_from(base.subquery()))
     rows = await session.execute(
         select(ParseResultRow, RawMessageVersion)
         .join(RawMessageVersion, ParseResultRow.message_version_id == RawMessageVersion.id)
         .where(*where)
         .join(RawMessage, RawMessageVersion.raw_message_id == RawMessage.id)
-        .order_by(func.coalesce(RawMessageVersion.edited_at, RawMessage.sent_at).desc())
+        .order_by(
+            stamp.asc() if oldest else stamp.desc(),
+            ParseResultRow.id.asc() if oldest else ParseResultRow.id.desc(),
+        )
+        .offset(offset)
         .limit(limit)
         .options(selectinload(ParseResultRow.employee))
     )
     items: list[InboxItem] = []
-    settings = await load_settings(session)
     for row, ver in rows.all():
         msg = await message_out(session, ver.raw_message_id)
         assert msg is not None

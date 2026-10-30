@@ -264,6 +264,47 @@ async def active_employees(
     return list(await session.scalars(q))
 
 
+async def employees_for_period(session: AsyncSession, start: date, end: date) -> list[Employee]:
+    """Неактивного человека сохраняем в периодах, где есть его данные."""
+    from sqlalchemy import or_
+
+    has_daily = (
+        select(Daily.id)
+        .where(
+            Daily.employee_id == Employee.id,
+            Daily.work_date.between(start, end),
+            Daily.retracted_at.is_(None),
+        )
+        .exists()
+    )
+    has_plan = (
+        select(SchedulePlan.id)
+        .join(PlanDay)
+        .where(
+            SchedulePlan.employee_id == Employee.id,
+            PlanDay.date.between(start, end),
+            SchedulePlan.retracted_at.is_(None),
+        )
+        .exists()
+    )
+    has_status = (
+        select(DayStatus.id)
+        .where(
+            DayStatus.employee_id == Employee.id,
+            DayStatus.date.between(start, end),
+            DayStatus.retracted_at.is_(None),
+        )
+        .exists()
+    )
+    return list(
+        await session.scalars(
+            select(Employee)
+            .where(or_(Employee.is_active, has_daily, has_plan, has_status))
+            .order_by(Employee.short_name)
+        )
+    )
+
+
 async def load_cells(
     session: AsyncSession,
     settings: AppSettings,
@@ -277,7 +318,9 @@ async def load_cells(
     """Все ячейки «сотрудник × день» за диапазон, включая пустые."""
     ids = list(employee_ids)
     today = today or today_local(settings)
-    rules = settings.day_rules()
+    from teamtime.services.history import calculation_versions, settings_on
+
+    versions = await calculation_versions(session, end)
 
     plan_days: dict[tuple[int, date], tuple[SchedulePlan, PlanDay]] = {}
     late_edits: dict[tuple[int, date], SchedulePlan] = {}
@@ -294,7 +337,9 @@ async def load_cells(
             key = (p.employee_id, day)
             if key in plan_days and plan_days[key][0].created_at >= p.created_at:
                 continue
-            used, chosen, ignored = plan_in_force(day, p, history[p.id], settings, sent, approved)
+            used, chosen, ignored = plan_in_force(
+                day, p, history[p.id], settings_on(settings, versions, day), sent, approved
+            )
             if chosen is None:
                 plan_days.pop(key, None)
             else:
@@ -325,7 +370,7 @@ async def load_cells(
                 plan_input(pday) if pday else None,
                 fact_input(daily) if daily else None,
                 status.kind if status else None,
-                rules,
+                settings_on(settings, versions, day).day_rules(),
                 today,
             )
             cells[key] = DayCell(emp, day, result, plan, pday, daily, status, late_edits.get(key))

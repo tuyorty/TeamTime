@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Query
 from fastapi.responses import Response
 
 from teamtime.api.deps import AppSettingsDep, SessionDep
@@ -35,8 +35,11 @@ async def week(
     iso_year: int,
     iso_week: Annotated[int, Path(ge=1, le=53)],
     fmt: Fmt,
+    employee_id: Annotated[list[int] | None, Query()] = None,
 ) -> Response:
-    data = await reports.week_report(session, settings, iso_year, iso_week)
+    data = await reports.week_report(
+        session, settings, iso_year, iso_week, employee_ids=employee_id
+    )
     name = f"xtime-{iso_year}-w{iso_week:02d}"
     if fmt == "csv":
         return _file(export.to_csv(export.DAY_HEADER, export.week_day_rows(data)), fmt, name)
@@ -58,8 +61,11 @@ async def month(
     year: Annotated[int, Path(ge=2000, le=2100)],
     month: Annotated[int, Path(ge=1, le=12)],
     fmt: Fmt,
+    employee_id: Annotated[list[int] | None, Query()] = None,
 ) -> Response:
-    data = await reports.month_report(session, settings, year, month, history=1)
+    data = await reports.month_report(
+        session, settings, year, month, history=1, employee_ids=employee_id
+    )
     name = f"xtime-{year}-{month:02d}"
     summary_header, summary_rows = export.month_summary_rows(data)
     if fmt == "csv":

@@ -20,7 +20,9 @@ from teamtime.calc.duration import truncate_seconds
 from teamtime.core import clock
 from teamtime.db.models import (
     Daily,
+    DayStatus,
     Employee,
+    EmployeeTerms,
     ParseResultRow,
     PlanDay,
     RawMessage,
@@ -57,6 +59,7 @@ from teamtime.schemas import (
     TodayOut,
     TodayRow,
     Totals,
+    UpcomingAbsenceOut,
     WeekOut,
     WeekPlanInfo,
     WeekPoint,
@@ -67,10 +70,12 @@ from teamtime.services.facts import (
     DayCell,
     active_employees,
     date_range,
+    employees_for_period,
     load_cells,
     today_local,
 )
-from teamtime.services.highlights import period_highlights
+from teamtime.services.highlights import highlights_for
+from teamtime.services.history import settings_at, terms_at
 from teamtime.services.settings import AppSettings
 
 MONTHS = (
@@ -221,11 +226,18 @@ async def plan_versions_count(
 
 
 async def week_report(
-    session: AsyncSession, settings: AppSettings, iso_year: int, iso_week: int
+    session: AsyncSession,
+    settings: AppSettings,
+    iso_year: int,
+    iso_week: int,
+    *,
+    employee_ids: list[int] | None = None,
 ) -> WeekOut:
     start = iso_week_start(iso_year, iso_week)
     days = list(date_range(start, start + timedelta(days=6)))
-    employees = await active_employees(session)
+    employees = await employees_for_period(session, days[0], days[-1])
+    if employee_ids is not None:
+        employees = [employee for employee in employees if employee.id in employee_ids]
     cells = await load_cells(session, settings, days[0], days[-1], [e.id for e in employees])
     versions = await plan_versions_count(session, [(e.id, iso_year, iso_week) for e in employees])
 
@@ -261,8 +273,12 @@ async def week_report(
         day_totals=[day_totals(d, [cells[(e.id, d)] for e in employees]) for d in days],
         totals=totals(cells.values()),
         today=today_local(settings),
-        highlights=period_highlights(
-            cells.values(), {e.id: brief(e) for e in employees}, today_local(settings)
+        highlights=await highlights_for(
+            session,
+            settings,
+            cells.values(),
+            {e.id: brief(e) for e in employees},
+            today_local(settings),
         ),
     )
 
@@ -291,11 +307,16 @@ def summary_out(m: MonthSummary) -> MonthSummaryOut:
     )
 
 
-def summarize(employee: Employee, cells: Iterable[DayCell], settings: AppSettings) -> MonthSummary:
+def summarize(
+    employee: Employee,
+    cells: Iterable[DayCell],
+    settings: AppSettings,
+    terms: EmployeeTerms | None = None,
+) -> MonthSummary:
     return summarize_month(
         (c.result for c in cells),
-        norm=employee.monthly_norm_minutes * 60,
-        hourly_rate=Decimal(employee.hourly_rate),
+        norm=(terms.monthly_norm_minutes if terms else employee.monthly_norm_minutes) * 60,
+        hourly_rate=Decimal(terms.hourly_rate if terms else employee.hourly_rate),
         scale=settings.penalty.scale(),
     )
 
@@ -336,11 +357,21 @@ def scale_out(settings: AppSettings) -> PenaltyScaleOut:
 
 
 async def month_report(
-    session: AsyncSession, settings: AppSettings, year: int, month: int, *, history: int = 6
+    session: AsyncSession,
+    settings: AppSettings,
+    year: int,
+    month: int,
+    *,
+    history: int = 6,
+    employee_ids: list[int] | None = None,
 ) -> MonthOut:
     first, last = month_bounds(year, month)
-    employees = await active_employees(session)
+    employees = await employees_for_period(session, first, last)
+    if employee_ids is not None:
+        employees = [employee for employee in employees if employee.id in employee_ids]
     ids = [e.id for e in employees]
+    rules = await settings_at(session, settings, first)
+    conditions = await terms_at(session, ids, first)
     cells = await load_cells(session, settings, first, last, ids)
     days = list(date_range(first, last))
 
@@ -348,6 +379,7 @@ async def month_report(
     deviations: list[Deviation] = []
     for e in employees:
         ecells = [cells[(e.id, d)] for d in days]
+        summary = summarize(e, ecells, rules, conditions.get(e.id))
         late_days = [
             LateDay(
                 date=c.day,
@@ -360,8 +392,15 @@ async def month_report(
         ]
         rows.append(
             MonthRow(
-                employee=EmployeeOut.model_validate(e),
-                summary=summary_out(summarize(e, ecells, settings)),
+                employee=EmployeeOut.model_validate(e).model_copy(
+                    update={
+                        "monthly_norm_minutes": conditions[e.id].monthly_norm_minutes,
+                        "hourly_rate": conditions[e.id].hourly_rate,
+                    }
+                )
+                if e.id in conditions
+                else EmployeeOut.model_validate(e),
+                summary=summary_out(summary),
                 late_days=late_days,
                 weeks=_weeks(ecells),
             )
@@ -407,10 +446,22 @@ async def month_report(
             summaries = [r.summary for r in rows]
         else:
             hf, hl = month_bounds(hy, hm_)
-            hcells = await load_cells(session, settings, hf, hl, ids)
+            hemployees = await employees_for_period(session, hf, hl)
+            if employee_ids is not None:
+                hemployees = [employee for employee in hemployees if employee.id in employee_ids]
+            hconditions = await terms_at(session, [e.id for e in hemployees], hf)
+            hrules = await settings_at(session, settings, hf)
+            hcells = await load_cells(session, settings, hf, hl, [e.id for e in hemployees])
             summaries = [
-                summary_out(summarize(e, [hcells[(e.id, d)] for d in date_range(hf, hl)], settings))
-                for e in employees
+                summary_out(
+                    summarize(
+                        e,
+                        [hcells[(e.id, d)] for d in date_range(hf, hl)],
+                        hrules,
+                        hconditions.get(e.id),
+                    )
+                )
+                for e in hemployees
             ]
         history_points.append(
             MonthHistoryPoint(
@@ -432,12 +483,16 @@ async def month_report(
         first_day=first,
         last_day=last,
         rows=rows,
-        scale=scale_out(settings),
+        scale=scale_out(rules),
         history=history_points,
         deviations=deviations[:20],
         complete=today_local(settings) > last,
-        highlights=period_highlights(
-            cells.values(), {e.id: brief(e) for e in employees}, today_local(settings)
+        highlights=await highlights_for(
+            session,
+            settings,
+            cells.values(),
+            {e.id: brief(e) for e in employees},
+            today_local(settings),
         ),
     )
 
@@ -523,7 +578,11 @@ async def today_report(
         if day == now_local.date()
         else (86400 if day < now_local.date() else 0)
     )
-    employees = await active_employees(session)
+    employees = (
+        await active_employees(session)
+        if day >= now_local.date()
+        else await employees_for_period(session, day, day)
+    )
     ids = [e.id for e in employees]
     week_start = day - timedelta(days=day.weekday())
     cells = await load_cells(session, settings, week_start, week_start + timedelta(days=6), ids)
@@ -596,12 +655,47 @@ async def employee_report(
     today = today_local(settings)
     end = end or today
     month_first, month_last = month_bounds(today.year, today.month)
-    # По умолчанию восемь недель, но так, чтобы текущий месяц попал целиком (для хитмапа).
-    start = start or min(end - timedelta(days=end.weekday()) - timedelta(weeks=7), month_first)
+    # По умолчанию показываем текущий календарный месяц до выбранной даты.
+    start = start or end.replace(day=1)
     lo, hi = min(start, month_first), max(end, month_last)
     all_cells = await load_cells(session, settings, lo, hi, [employee.id])
     cells = [all_cells[(employee.id, d)] for d in date_range(start, end)]
     month_cells = [all_cells[(employee.id, d)] for d in date_range(month_first, month_last)]
+    conditions = await terms_at(session, [employee.id], month_first)
+    month_rules = await settings_at(session, settings, month_first)
+    current_summary = summarize(employee, month_cells, month_rules, conditions.get(employee.id))
+    future_statuses = list(
+        await session.scalars(
+            select(DayStatus)
+            .where(
+                DayStatus.employee_id == employee.id,
+                DayStatus.date >= today,
+                DayStatus.date <= today + timedelta(days=366),
+                DayStatus.retracted_at.is_(None),
+                DayStatus.kind.in_(
+                    [StatusKind.VACATION, StatusKind.SICK, StatusKind.DAYOFF, StatusKind.ABSENT]
+                ),
+            )
+            .order_by(DayStatus.date)
+        )
+    )
+    upcoming = None
+    if future_statuses:
+        first_absence = future_statuses[0]
+        last_absence = first_absence.date
+        for following in future_statuses[1:]:
+            if following.kind != first_absence.kind or following.date != last_absence + timedelta(
+                days=1
+            ):
+                break
+            last_absence = following.date
+        upcoming = UpcomingAbsenceOut(
+            start=first_absence.date,
+            end=last_absence,
+            kind=first_absence.kind.value,
+            label=STATUS_LABELS[first_absence.kind],
+            note=first_absence.note,
+        )
 
     facts = [c.result.fact for c in cells if c.result.fact is not None]
     late_minutes = [
@@ -651,7 +745,15 @@ async def employee_report(
         )
     )
     return EmployeeDetailOut(
-        employee=EmployeeOut.model_validate(employee),
+        employee=EmployeeOut.model_validate(employee).model_copy(
+            update={
+                "monthly_norm_minutes": conditions[employee.id].monthly_norm_minutes,
+                "hourly_rate": conditions[employee.id].hourly_rate,
+            }
+            if employee.id in conditions
+            else {}
+        ),
+        upcoming_absence=upcoming,
         identities=[IdentityOut.model_validate(i) for i in identities],
         start=start,
         end=end,
@@ -664,7 +766,7 @@ async def employee_report(
         weeks=_weeks(cells),
         tasks=sorted(tasks_by_week.values(), key=lambda w: (w.iso_year, w.iso_week), reverse=True),
         notes=sorted(notes, key=lambda n: n.date, reverse=True),
-        month=summary_out(summarize(employee, month_cells, settings)),
+        month=summary_out(current_summary),
     )
 
 
@@ -692,7 +794,7 @@ async def plans_report(
 ) -> PlansOut:
     start = iso_week_start(iso_year, iso_week)
     days = list(date_range(start, start + timedelta(days=6)))
-    employees = await active_employees(session)
+    employees = await employees_for_period(session, days[0], days[-1])
     plans = await session.scalars(
         select(SchedulePlan)
         .where(SchedulePlan.iso_year == iso_year, SchedulePlan.iso_week == iso_week)
@@ -707,6 +809,15 @@ async def plans_report(
     for p in plans:
         by_emp[p.employee_id].append(p)
     cells = await load_cells(session, settings, days[0], days[-1], [e.id for e in employees])
+    from teamtime.services.history import calculation_versions, settings_on
+
+    rules = await calculation_versions(session, days[-1])
+    required_days = [
+        day
+        for day in days
+        if day.weekday() not in settings_on(settings, rules, day).weekly_off
+        and day not in settings_on(settings, rules, day).holidays
+    ]
 
     rows = []
     for e in employees:
@@ -730,6 +841,7 @@ async def plans_report(
         week_start=start,
         days=days,
         rows=rows,
+        required_days=required_days,
     )
 
 
