@@ -15,7 +15,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: { baseURL, locale: "ru-RU", trace: "retain-on-failure" },
   projects: [
-    { name: "smoke", testMatch: /smoke\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "smoke", testMatch: /(?:smoke|tv)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "screenshots", testMatch: /screenshots\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
   ],
 });

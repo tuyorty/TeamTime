@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, CircleAlert, ListChecks, MapPin, PencilLine, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleAlert, ListChecks, MapPin, MonitorPlay, PencilLine, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -99,10 +99,15 @@ export default function TodayPage() {
               {tomorrow ? "Завтра" : "Сегодня"} <span className="text-ink-3">·</span>{" "}
               <span className="whitespace-nowrap">{dayMonth(selectedDay)}</span>
             </h1>
-            <p className="mt-2 h-5 truncate text-[13px] capitalize text-ink-2">
-              {WEEKDAYS_LONG[weekday(selectedDay)]}
-              {tomorrow ? " · расписание на завтра" : ""}
-            </p>
+            <div className="mt-2 flex h-5 items-center gap-3 text-[13px]">
+              <p className="truncate capitalize text-ink-2">
+                {WEEKDAYS_LONG[weekday(selectedDay)]}
+                {tomorrow ? " · расписание на завтра" : ""}
+              </p>
+              {!tomorrow ? <Link to="/tv" target="_blank" rel="noopener noreferrer" className="flex shrink-0 items-center gap-1.5 text-accent-ink hover:underline" aria-label="Открыть экран для телевизора">
+                <MonitorPlay className="size-3.5" />Экран ТВ
+              </Link> : null}
+            </div>
           </div>
           <div className="text-right" aria-label="Часы команды">
             <time

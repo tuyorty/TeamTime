@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { avatarFixture, lateScheduleExample } from "./fixtures";
+import { tvFixture, tvMeta } from "./tv-fixtures";
 
 /**
  * Скриншоты и GIF для README на демо-данных:
@@ -41,6 +42,27 @@ async function shot(
 }
 
 test.describe.configure({ mode: "serial" });
+
+test("ТВ: экран команды в Full HD и HD", async ({ browser }) => {
+  for (const theme of ["light", "dark"] as const) {
+    for (const [width, height, name] of [[1920, 1080, "tv"], [1280, 720, "tv-720"]] as const) {
+      const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme, locale: "ru-RU", reducedMotion: "reduce" });
+      const page = await context.newPage();
+      const start = new Date("2026-10-23T09:30:00Z");
+      await page.clock.setFixedTime(start);
+      await page.route("**/api/v1/meta", (route) => route.fulfill({ json: tvMeta }));
+      await page.route("**/api/v1/today**", (route) => {
+        const day = new URL(route.request().url()).searchParams.get("day");
+        return route.fulfill({ json: tvFixture(day ?? undefined) });
+      });
+      await page.goto("/tv");
+      await expect(page.getByRole("article").first()).toBeVisible();
+      await page.evaluate("document.fonts.ready");
+      await page.screenshot({ path: path.join(OUT, `${name}${theme === "dark" ? "-dark" : ""}.png`) });
+      await context.close();
+    }
+  }
+});
 
 for (const theme of ["light", "dark"] as const) {
   test(`десктоп, ${theme}`, async ({ browser }) => {

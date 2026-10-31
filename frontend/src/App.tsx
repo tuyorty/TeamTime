@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import NotFound from "./pages/NotFound";
 
 const TodayPage = lazy(() => import("./pages/TodayPage"));
+const TvPage = lazy(() => import("./pages/TvPage"));
 const DaySummaryPage = lazy(() => import("./pages/DaySummaryPage"));
 const WeekPage = lazy(() => import("./pages/WeekPage"));
 const MonthPage = lazy(() => import("./pages/MonthPage"));
@@ -31,6 +32,7 @@ function PageFallback() {
 const page = (el: React.ReactNode) => <Suspense fallback={<PageFallback />}>{el}</Suspense>;
 
 const router = createBrowserRouter([
+  { path: "tv", element: <Suspense fallback={<div className="min-h-dvh bg-bg" />}><TvPage /></Suspense> },
   {
     element: <AppShell />,
     children: [
