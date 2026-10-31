@@ -271,6 +271,58 @@ class TestHeader:
         assert r.status is ParseStatus.OK
 
 
+class TestSprintWeek:
+    @pytest.mark.parametrize("sprint", ["02.10 - 07.10", "02.10 - 08.10"])
+    def test_wrong_month_warns_without_moving_dates(self, sprint: str) -> None:
+        sent = datetime(2026, 10, 31, 8, 0, tzinfo=UTC)
+        r = plan(f"Спринт {sprint}\nИванов И.И.\nПн: 10:00 - 18:00", sent)
+        assert r.status is ParseStatus.PARTIAL
+        assert r.schedule is not None and r.schedule.week_start == date(2026, 9, 28)
+        warning = next(i for i in r.issues if i.code == "suspicious_sprint_week")
+        assert warning.severity is Severity.WARNING
+        assert warning.line_no == 1 and warning.line == f"Спринт {sprint}"
+        assert "31.10.2026" in warning.message
+        assert "28.09.2026–04.10.2026" in warning.message
+        assert "уже закончилась" in warning.message
+
+    @pytest.mark.parametrize(
+        ("sprint", "sent", "warns"),
+        [
+            ("26.10 - 01.11", "2026-10-31T12:00:00+05:00", False),
+            ("02.11 - 08.11", "2026-10-31T12:00:00+05:00", False),
+            ("26.10 - 31.10", "2026-11-01T12:00:00+05:00", False),
+            ("02.11 - 08.11", "2026-11-01T18:59:00+00:00", False),
+            ("26.10 - 01.11", "2026-11-01T18:59:00+00:00", False),
+            ("26.10 - 01.11", "2026-11-01T19:00:00+00:00", True),
+            ("09.11 - 15.11", "2026-11-01T18:59:00+00:00", True),
+            ("09.11 - 15.11", "2026-11-01T19:00:00+00:00", False),
+            ("28.12 - 03.01", "2026-12-31T12:00:00+05:00", False),
+            ("04.01 - 10.01", "2026-12-31T12:00:00+05:00", False),
+            ("11.01 - 17.01", "2026-12-31T12:00:00+05:00", True),
+            ("02.11.2025 - 08.11.2025", "2026-10-31T12:00:00+05:00", True),
+        ],
+    )
+    def test_current_and_next_weeks_in_team_timezone(
+        self, sprint: str, sent: str, warns: bool
+    ) -> None:
+        r = plan(
+            f"Спринт {sprint}\nИванов И.И.\nПн: 10:00 - 18:00",
+            datetime.fromisoformat(sent),
+        )
+        assert ("suspicious_sprint_week" in codes(r)) is warns
+        assert r.status is (ParseStatus.PARTIAL if warns else ParseStatus.OK)
+
+    def test_far_future_week_explains_warning(self) -> None:
+        r = plan(
+            "Спринт 30.11 - 06.12\nИванов И.И.\nПн: 10:00 - 18:00",
+            datetime(2026, 10, 31, 8, 0, tzinfo=UTC),
+        )
+        warning = next(i for i in r.issues if i.code == "suspicious_sprint_week")
+        assert "позже следующей недели" in warning.message
+        assert "30.11.2026–06.12.2026" in warning.message
+        assert r.schedule is not None and r.schedule.week_start == date(2026, 11, 30)
+
+
 class TestPerson:
     @pytest.mark.parametrize(
         ("line", "surname", "initials"),

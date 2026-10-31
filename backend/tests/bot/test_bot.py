@@ -100,6 +100,35 @@ async def test_problem_reply_says_what_and_how_to_fix(tg: Telegram) -> None:
     assert "https://t.me/teamtime_test_bot?start=fix_" in text
 
 
+@pytest.mark.parametrize("sprint", ["02.10 - 08.10", "30.11 - 06.12"])
+async def test_suspicious_schedule_warns_and_edit_clears_warning(
+    tg: Telegram, maker, sprint: str
+) -> None:
+    text = f.schedule_text(sprint=sprint)
+    mid = await tg.group(501, text, thread=f.SCHEDULE_THREAD)
+    assert reactions(tg) == ["🤔"]
+    reply = tg.session.of(SendMessage)[0].text
+    assert "Нужно уточнить в расписании" in reply
+    assert "сообщение отправлено 26.10.2026" in reply
+    assert "Проверьте месяц и год в заголовке" in reply
+    assert "Сохранено в таблице" not in reply
+    async with maker() as session:
+        row = await session.scalar(select(ParseResultRow).where(ParseResultRow.is_latest))
+        assert row is not None and row.resolution is Resolution.PENDING
+
+    # Повтор доставки не создаёт ещё одно предупреждение.
+    calls = len(tg.session.calls)
+    await tg.group(501, text, thread=f.SCHEDULE_THREAD, message_id=mid)
+    assert len(tg.session.calls) == calls
+
+    await tg.group(501, f.schedule_text(), thread=f.SCHEDULE_THREAD, message_id=mid, edit=True)
+    assert reactions(tg) == ["🤔", "✍"]
+    assert len(tg.session.of(DeleteMessage)) == 1
+    async with maker() as session:
+        row = await session.scalar(select(ParseResultRow).where(ParseResultRow.is_latest))
+        assert row is not None and row.resolution is Resolution.AUTO
+
+
 async def test_unlinked_account_is_not_blamed_on_author(tg: Telegram) -> None:
     await tg.group(888, f.daily_text("23.10.2026"))
     text = tg.session.of(SendMessage)[0].text

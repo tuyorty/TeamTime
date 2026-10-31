@@ -27,7 +27,7 @@ from teamtime.parsing.types import (
     person_key,
 )
 
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 """Увеличивается при изменении правил разбора: по нему можно найти и переразобрать сообщения."""
 
 __all__ = [

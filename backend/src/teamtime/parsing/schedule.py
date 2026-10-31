@@ -121,6 +121,26 @@ def _sprint_dates(m: re.Match[str], around: date) -> tuple[date | None, date | N
     return start, end
 
 
+def _check_sprint_week(start: date, sent_date: date, line_no: int, raw: str) -> Issue | None:
+    """Сверить неделю с датой отправки, сохранив написанные автором даты без догадок."""
+    week_start = start - timedelta(days=start.weekday())
+    sent_week = sent_date - timedelta(days=sent_date.weekday())
+    if sent_week <= week_start <= sent_week + timedelta(days=7):
+        return None
+    week_end = week_start + timedelta(days=6)
+    reason = (
+        "эта неделя уже закончилась" if week_start < sent_week else "это позже следующей недели"
+    )
+    return Issue(
+        "suspicious_sprint_week",
+        Severity.WARNING,
+        f"Сообщение отправлено {sent_date:%d.%m.%Y}, а расписание относится к неделе "
+        f"{week_start:%d.%m.%Y}–{week_end:%d.%m.%Y}: {reason}",
+        line_no,
+        raw,
+    )
+
+
 def _parse_day_value(
     rest: str, line_no: int, raw: str, issues: list[Issue]
 ) -> tuple[PlanDayKind, tuple[Interval, ...], str | None, bool]:
@@ -192,7 +212,7 @@ def _parse_day_value(
 def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
     """Разобрать сообщение с расписанием на неделю.
 
-    ``sent_at`` нужен только чтобы вывести год спринта: в заголовке его нет.
+    ``sent_at`` задаёт опорный год и допустимые недели: текущую и следующую.
     """
     issues: list[Issue] = []
     tags = hashtags(text)
@@ -227,6 +247,8 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                         raw,
                     )
                 )
+            elif warning := _check_sprint_week(start, around, line_no, raw):
+                issues.append(warning)
             continue
 
         if TASKS_HEADER_RE.match(fold(content)):
