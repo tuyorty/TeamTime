@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { useMeta, useToday } from "@/api/queries";
-import type { DayCell, FeedItem, Today, TodayRow } from "@/api/types";
+import type { FeedItem, Today, TodayRow } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { TaskList } from "@/components/domain/TaskList";
 import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
@@ -29,6 +29,7 @@ import {
   parseDate,
 } from "@/lib/format";
 import { useFlashed } from "@/lib/realtime";
+import { scheduleCell } from "@/lib/schedule";
 import { DaySummary } from "./DaySummaryPage";
 
 type Presence = TodayRow["presence"];
@@ -48,25 +49,6 @@ function presenceText(row: TodayRow): string {
   if (row.presence === "expected_later") return `Начнёт в ${clock(row.cell.plan?.start)}`;
   if (row.presence === "left") return `До ${clock(row.cell.plan?.end)} по расписанию`;
   return PRESENCE[row.presence].label;
-}
-
-/** На рабочем экране показываем расписание, не подменяя его вечерним отчётом. */
-function scheduleCell(row: TodayRow): DayCell {
-  return {
-    ...row.cell,
-    fact: null,
-    late_sec: null,
-    early_leave_sec: null,
-    undertime_sec: null,
-    state:
-      row.presence === "off"
-        ? "off"
-        : row.presence === "absent"
-          ? "absence"
-          : row.cell.plan?.kind === "work"
-            ? "pending"
-            : "unplanned",
-  };
 }
 
 export default function TodayPage() {

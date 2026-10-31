@@ -80,7 +80,7 @@ function describe(event: RealtimeEvent): string | null {
   return `${who} ${verb} ${what}${event.kind === "daily" ? when : ""}`;
 }
 
-export function handleEvent(qc: QueryClient, event: RealtimeEvent) {
+export function handleEvent(qc: QueryClient, event: RealtimeEvent, notifications = true) {
   if (event.type === "resync") {
     void qc.invalidateQueries();
     return;
@@ -88,7 +88,7 @@ export function handleEvent(qc: QueryClient, event: RealtimeEvent) {
   for (const root of INVALIDATE[event.type] ?? []) void qc.invalidateQueries({ queryKey: [root] });
   flash(event);
   const text = describe(event);
-  if (text) {
+  if (text && notifications) {
     const problem = event.status && event.status !== "ok";
     toast(text, {
       description: problem ? "Есть вопросы к разбору: загляните в инбокс" : undefined,
@@ -97,7 +97,7 @@ export function handleEvent(qc: QueryClient, event: RealtimeEvent) {
   }
 }
 
-export function useRealtime() {
+export function useRealtime(notifications = true) {
   const qc = useQueryClient();
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
@@ -110,12 +110,12 @@ export function useRealtime() {
     source.onerror = () => set(source.readyState === EventSource.CLOSED ? "offline" : "connecting");
     const onMessage = (e: MessageEvent<string>) => {
       try {
-        handleEvent(qc, JSON.parse(e.data) as RealtimeEvent);
+        handleEvent(qc, JSON.parse(e.data) as RealtimeEvent, notifications);
       } catch {
         /* битое событие — пропускаем */
       }
     };
     for (const type of [...Object.keys(INVALIDATE), "resync"]) source.addEventListener(type, onMessage);
     return () => source.close();
-  }, [qc]);
+  }, [qc, notifications]);
 }
