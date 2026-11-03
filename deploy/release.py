@@ -100,6 +100,10 @@ def main() -> None:
         (release / "UPDATE.md").write_text(
             notes.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
         )
+    for source, target in (("multiple-chats.md", "MULTIPLE_CHATS.md"), ("finance.md", "FINANCE.md")):
+        (release / target).write_text(
+            (ROOT / "docs" / source).read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
+        )
     # Поток Docker сжимаем напрямую: PowerShell 5 не должен преобразовать бинарные данные в текст.
     with subprocess.Popen(["docker", "save", *images], stdout=subprocess.PIPE, cwd=ROOT) as process:
         assert process.stdout is not None
