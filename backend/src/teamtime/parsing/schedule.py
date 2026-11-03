@@ -65,8 +65,10 @@ _WEEKDAYS: dict[str, int] = {
 }  # fmt: skip
 WEEKDAY_SHORT = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
+_DAY_NAME = "|".join(sorted(_WEEKDAYS, key=len, reverse=True))
 DAY_RE = re.compile(
-    r"^(?P<day>" + "|".join(sorted(_WEEKDAYS, key=len, reverse=True)) + r")\.?(?![а-яё])"
+    r"^(?P<day>" + _DAY_NAME + r")\.?(?![а-яё])"
+    r"(?:\s*-\s*(?P<last>" + _DAY_NAME + r")\.?(?![а-яё]))?"
     r"\s*(?:[:\-]\s*)?(?P<rest>.*)$",
     re.IGNORECASE,
 )
@@ -187,7 +189,7 @@ def _parse_day_value(
                     Issue(
                         "plan_split",
                         Severity.INFO,
-                        "Несколько интервалов: план от начала первого до конца последнего",
+                        "Несколько интервалов: перерывы не входят в плановые часы",
                         line_no,
                         raw,
                     )
@@ -233,8 +235,10 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
         content = strip_hashtags(line)
         if not content:
             continue
+        # Telegram передаёт форматирование отдельно; принимаем и скопированный Markdown.
+        structural = re.sub(r"(\*\*|__)(.+?)\1", r"\2", content)
 
-        if not header_seen and (m := HEADER_RE.match(content)):
+        if not header_seen and (m := HEADER_RE.match(structural)):
             header_seen = True
             start, end = _sprint_dates(m, around)
             if start is None or end is None:
@@ -251,18 +255,12 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                 issues.append(warning)
             continue
 
-        if TASKS_HEADER_RE.match(fold(content)):
+        if TASKS_HEADER_RE.match(fold(structural)):
             section = _Section.TASKS
             last_bullet = False
             continue
 
-        if (task := bullet_text(content)) is not None:
-            section = _Section.TASKS
-            tasks.append(task)
-            last_bullet = True
-            continue
-
-        if m := DAY_RE.match(content):
+        if m := DAY_RE.match(structural):
             if section is _Section.TASKS:
                 issues.append(
                     Issue(
@@ -275,12 +273,13 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                 )
             section = _Section.DAYS
             weekday = _WEEKDAYS[fold(m["day"])]
-            if weekday in days:
+            last = _WEEKDAYS[fold(m["last"])] if m["last"] else weekday
+            if last < weekday:
                 issues.append(
                     Issue(
-                        "duplicate_day",
+                        "bad_day_range",
                         Severity.WARNING,
-                        f"{WEEKDAY_SHORT[weekday]} указан повторно, взята первая строка",
+                        "Конец диапазона дней раньше начала: укажите дни в пределах одной недели",
                         line_no,
                         raw,
                     )
@@ -298,10 +297,28 @@ def parse_schedule(text: str, sent_at: datetime, tz: ZoneInfo) -> ParseResult:
                 )
                 continue
             kind, intervals, note, has_time = _parse_day_value(m["rest"], line_no, raw, issues)
-            days[weekday] = (raw, line_no, m["rest"], kind, intervals, note, has_time)
+            for selected in range(weekday, last + 1):
+                if selected in days:
+                    issues.append(
+                        Issue(
+                            "duplicate_day",
+                            Severity.WARNING,
+                            f"{WEEKDAY_SHORT[selected]} указан повторно, взята первая строка",
+                            line_no,
+                            raw,
+                        )
+                    )
+                    continue
+                days[selected] = (raw, line_no, m["rest"], kind, intervals, note, has_time)
             continue
 
-        if section is _Section.HEAD and person is None and (p := _parse_person(content)):
+        if (task := bullet_text(content)) is not None:
+            section = _Section.TASKS
+            tasks.append(task)
+            last_bullet = True
+            continue
+
+        if section is _Section.HEAD and person is None and (p := _parse_person(structural)):
             person = p
             continue
 

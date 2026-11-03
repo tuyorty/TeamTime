@@ -40,6 +40,11 @@ def test_chat_id_matches_bot_api() -> None:
     assert bot_api_chat_id(-1001234567890, "private_supergroup") == -1001234567890
 
 
+@pytest.mark.parametrize("title", ["виклики", "Виклики. Расписание", "weekly"])
+def test_laboratory_weekly_topic(title: str) -> None:
+    assert topic_kind(title) is MessageKind.SCHEDULE
+
+
 @pytest.mark.parametrize("data", [b"not json", b"[]", b'{"name": "x"}'])
 def test_rejects_non_export(data: bytes) -> None:
     with pytest.raises(ExportFormatError):

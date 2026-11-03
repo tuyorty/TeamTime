@@ -33,6 +33,8 @@ router.edited_message.filter(F.chat.type.in_({"group", "supergroup"}))
 BIND_KINDS = {
     "расписание": TopicKind.SCHEDULE,
     "schedule": TopicKind.SCHEDULE,
+    "виклики": TopicKind.SCHEDULE,
+    "weekly": TopicKind.SCHEDULE,
     "дейлики": TopicKind.DAILY,
     "дейли": TopicKind.DAILY,
     "daily": TopicKind.DAILY,

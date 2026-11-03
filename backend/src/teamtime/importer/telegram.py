@@ -100,7 +100,7 @@ def author_id(raw: str | None) -> int | None:
 def topic_kind(title: str) -> MessageKind | None:
     """Подсказка по названию темы. Общая тема («Расписание и дейлики») подсказки не даёт."""
     t = fold(title)
-    schedule = "распис" in t or "спринт" in t or "schedule" in t
+    schedule = any(word in t for word in ("распис", "спринт", "schedule", "викли", "weekly"))
     daily = "дейл" in t or "daily" in t or "отчет" in t
     if schedule == daily:
         return None
