@@ -95,6 +95,9 @@ class Employee(Timestamped, Base):
         String(100), unique=True, comment="Ключ сопоставления: «иванов ии»"
     )
     position: Mapped[str] = mapped_column(String(200), default="")
+    department: Mapped[str] = mapped_column(
+        String(32), default="software", server_default="software"
+    )
     phone: Mapped[str] = mapped_column(String(40), default="", server_default="")
     about: Mapped[str] = mapped_column(String(500), default="", server_default="")
     expertise: Mapped[str] = mapped_column(String(500), default="", server_default="")
@@ -115,6 +118,7 @@ class Employee(Timestamped, Base):
     __table_args__ = (
         CheckConstraint("monthly_norm_minutes >= 0", name="norm_non_negative"),
         CheckConstraint("hourly_rate >= 0", name="rate_non_negative"),
+        CheckConstraint("department IN ('software', 'laboratory')", name="employee_department"),
     )
 
 
@@ -132,6 +136,7 @@ class TelegramIdentity(Base):
         ForeignKey("employees.id", ondelete="SET NULL")
     )
     linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -312,6 +317,7 @@ class BotChat(Base):
 
     chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     title: Mapped[str] = mapped_column(String(255), default="")
+    department: Mapped[str | None] = mapped_column(String(32))
     is_forum: Mapped[bool] = mapped_column(Boolean, default=False)
     approved: Mapped[bool] = mapped_column(
         Boolean,
@@ -322,6 +328,9 @@ class BotChat(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     topics: Mapped[list[TopicBinding]] = relationship(back_populates="chat")
+    __table_args__ = (
+        CheckConstraint("department IN ('software', 'laboratory')", name="chat_department"),
+    )
 
 
 class TopicBinding(Timestamped, Base):

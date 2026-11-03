@@ -363,6 +363,7 @@ def _employee_snapshot(e: Employee) -> dict[str, Any]:
         "full_name": e.full_name,
         "short_name": e.short_name,
         "position": e.position,
+        "department": e.department,
         "phone": e.phone,
         "about": e.about,
         "expertise": e.expertise,
@@ -497,9 +498,13 @@ async def link_identity(
     *,
     actor: str,
 ) -> ReprocessReport:
-    identity = await session.get(TelegramIdentity, identity_id)
+    identity = await session.scalar(
+        select(TelegramIdentity).where(TelegramIdentity.id == identity_id).with_for_update()
+    )
     if identity is None:
         raise EditError("Аккаунт не найден")
+    if identity.removed_at is not None:
+        raise EditError("Сначала восстановите удалённый аккаунт")
     if employee_id is not None and await session.get(Employee, employee_id) is None:
         raise EditError("Сотрудник не найден")
     before = {"employee_id": identity.employee_id}

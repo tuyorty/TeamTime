@@ -128,6 +128,14 @@ async def ingest(
     # только чаты, которые админ разрешил на сайте; импорт и эмулятор запускает сам админ.
     if msg.source is Source.TELEGRAM and not await chat_approved(session, msg.chat_id):
         return IngestOutcome(skipped="chat_not_approved")
+    if msg.author_id is not None:
+        removed = await session.scalar(
+            select(TelegramIdentity.removed_at)
+            .where(TelegramIdentity.telegram_user_id == msg.author_id)
+            .with_for_update()
+        )
+        if removed is not None:
+            return IngestOutcome(skipped="author_removed")
     binding = await topic_binding(session, msg.chat_id, msg.thread_id)
     hint = TOPIC_TO_KIND.get(binding.kind) if binding else msg.topic_hint
 
@@ -317,6 +325,9 @@ async def interpret(
     if employee is not None:
         outcome.employee_id = employee.id
         outcome.employee_name = employee.short_name
+        from teamtime.services.departments import assign_from_chat
+
+        await assign_from_chat(session, employee, raw.chat_id, row.id)
 
     if employee is not None and status is not ParseStatus.FAILED:
         is_edit = version.version > 1

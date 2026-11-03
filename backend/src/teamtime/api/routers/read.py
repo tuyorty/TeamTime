@@ -141,6 +141,7 @@ async def employee(
 async def identities(session: SessionDep) -> list[IdentityOut]:
     rows = await session.scalars(
         select(TelegramIdentity)
+        .where(TelegramIdentity.removed_at.is_(None))
         .order_by(TelegramIdentity.employee_id.is_not(None), TelegramIdentity.last_seen_at.desc())
         .options(
             selectinload(TelegramIdentity.employee),

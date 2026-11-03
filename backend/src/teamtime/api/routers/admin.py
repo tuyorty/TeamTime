@@ -49,7 +49,10 @@ async def update_employee(
     if e is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Сотрудник не найден")
     try:
-        e = await manual.save_employee(session, body.model_dump(), actor=actor, employee=e)
+        data = body.model_dump()
+        if "department" not in body.model_fields_set:
+            data.pop("department", None)
+        e = await manual.save_employee(session, data, actor=actor, employee=e)
     except manual.EditError as exc:
         raise _bad(exc) from exc
     return EmployeeOut.model_validate(e)
@@ -106,7 +109,12 @@ async def chats(session: SessionDep, _: AdminReadDep) -> list[ChatOut]:
     )
     return [
         ChatOut(
-            chat_id=c.chat_id, title=c.title, is_forum=c.is_forum, approved=c.approved, topics=n
+            chat_id=c.chat_id,
+            title=c.title,
+            is_forum=c.is_forum,
+            approved=c.approved,
+            topics=n,
+            department=c.department,
         )
         for c, n in rows
     ]

@@ -663,9 +663,10 @@ async def employee_report(
 ) -> EmployeeDetailOut:
     today = today_local(settings)
     end = end or today
-    month_first, month_last = month_bounds(today.year, today.month)
     # По умолчанию показываем текущий календарный месяц до выбранной даты.
     start = start or end.replace(day=1)
+    summary_day = start if (start.year, start.month) == (end.year, end.month) else today
+    month_first, month_last = month_bounds(summary_day.year, summary_day.month)
     lo, hi = min(start, month_first), max(end, month_last)
     all_cells = await load_cells(session, settings, lo, hi, [employee.id])
     cells = [all_cells[(employee.id, d)] for d in date_range(start, end)]

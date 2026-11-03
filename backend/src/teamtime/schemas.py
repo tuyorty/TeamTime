@@ -22,12 +22,15 @@ class Schema(BaseModel):
 
 # --- справочники ---------------------------------------------------------------------------
 
+Department = Literal["software", "laboratory"]
+
 
 class EmployeeBrief(Schema):
     id: int
     short_name: str = Field(description="«Иванов И.И.»")
     full_name: str
     position: str
+    department: Department = "software"
     color: str
     is_active: bool
     avatar_url: str = ""
@@ -49,6 +52,7 @@ class EmployeeIn(BaseModel):
         min_length=3, max_length=100, description="Как в расписании: «Иванов И.И.»"
     )
     position: str = Field("", max_length=200)
+    department: Department = "software"
     phone: str = Field("", max_length=40, pattern=r"^[+\d\s().-]*$")
     about: str = Field("", max_length=500)
     expertise: str = Field("", max_length=500)
@@ -73,6 +77,7 @@ class IdentityOut(Schema):
     employee: EmployeeBrief | None
     suggested_employee: EmployeeBrief | None
     linked_at: datetime | None
+    removed_at: datetime | None = None
     last_seen_at: datetime
 
 
@@ -90,6 +95,7 @@ class ChatOut(Schema):
     title: str
     is_forum: bool
     approved: bool
+    department: Department | None = None
     topics: int = 0
 
 
