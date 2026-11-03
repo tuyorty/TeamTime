@@ -238,7 +238,7 @@ function Person({ row, axis }: { row: TodayRow; axis: Axis }) {
           {plan.intervals.length > 1 ? <span className="tv-interval-count">{count(plan.intervals.length, ["интервал", "интервала", "интервалов"])}</span> : null}
           <span className="tv-person-location">{remote ? <Monitor aria-hidden /> : <MapPin aria-hidden />}{remote ? "Удалённо" : "Офис"}</span>
         </div>
-        <DayStrip cell={scheduleCell(row)} axis={axis} height={8} label={`Рабочее время по расписанию: ${row.employee.short_name}`} className="tv-strip" />
+        <DayStrip cell={scheduleCell(row)} axis={axis} height={8} label={`Рабочее время по расписанию: ${row.employee.short_name}`} className={remote ? "tv-strip tv-strip-remote" : "tv-strip"} />
       </> : <p className="tv-person-day-label">{label}</p>}
     </div>
   </article>;

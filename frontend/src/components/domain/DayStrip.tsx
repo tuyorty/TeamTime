@@ -60,7 +60,7 @@ export function DayStrip({
         <div
           key={`p${i}`}
           className={cn(
-            "absolute inset-y-0 rounded-[3px] border",
+            "day-strip-plan absolute inset-y-0 rounded-[3px] border",
             missing ? "border-dashed border-ink-3" : "border-ink-3/70",
           )}
           style={{ left: x(a), width: w(a, b) }}

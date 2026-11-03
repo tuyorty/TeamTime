@@ -49,7 +49,7 @@
 .tv-section-heading h2 { font-size: 1.05em; font-weight: 600; }
 .tv-section-heading p { font-size: .7em; color: var(--ink-3); margin-top: 3px; }
 .tv-section-heading > span { color: var(--ink-2); font-size: .7em; padding: 3px 7px; border-radius: var(--radius-sm); background: var(--surface-2); white-space: nowrap; }
-.tv-columns, .tv-person { display: grid; grid-template-columns: minmax(205px, 28%) minmax(0, 1fr); column-gap: 20px; padding-inline: 20px; }
+.tv-columns, .tv-person { display: grid; grid-template-columns: clamp(205px, 14vw, 240px) minmax(0, 1fr); column-gap: 14px; padding-inline: 20px; }
 .tv-columns { align-items: center; padding-block: 4px 10px; font-size: .7em; color: var(--ink-3); flex-shrink: 0; }
 .tv-axis { height: 18px; font-size: 12px; line-height: 18px; margin-inline: 6px; }
 .tv-timeline { flex: 1; min-height: 0; }
@@ -68,6 +68,8 @@
 .tv-person-location svg { width: 14px; height: 14px; }
 .tv-interval-count { color: var(--ink-3); font-size: 10px; white-space: nowrap; }
 .tv-strip { margin-inline: 6px; width: calc(100% - 12px); }
+.tv-strip .day-strip-plan { background: var(--accent); border-color: var(--accent-ink); }
+.tv-strip-remote .day-strip-plan { background: var(--absence); border-color: var(--absence-ink); }
 .tv-person-day-label { padding: 5px 10px; border-radius: var(--radius-md); color: var(--ink-2); background: var(--surface-2); font-size: .8em; }
 .tv-team-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 20px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: .65em; flex-shrink: 0; }
 .tv-team-foot > span:first-child { display: flex; align-items: center; gap: 7px; }
