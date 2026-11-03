@@ -104,6 +104,32 @@ class FactInput:
     def worked_seconds(self) -> int:
         return sum(i.duration for i in self.intervals)
 
+    def arrival_for(self, plan: PlanInput) -> int:
+        """Приход к плановой смене, независимо от порядка отрезков в дейлике.
+
+        Дополнительная работа вне смены не заменяет приход к ней. Берём начало первого
+        фактического отрезка, пересекающегося с любым плановым. Если таких нет — первый
+        отрезок после начала смены, иначе последний из закончившихся до неё.
+        """
+        if not plan.has_time:
+            return self.start
+        matching = [
+            actual
+            for actual in self.intervals
+            if any(
+                max(actual.start, planned.start)
+                < min(actual.start + actual.duration, planned.start + planned.duration)
+                for planned in plan.intervals
+            )
+        ]
+        if matching:
+            return min(i.start for i in matching)
+        assert plan.start is not None
+        following = [i.start for i in self.intervals if i.start >= plan.start]
+        if following:
+            return min(following)
+        return max(self.intervals, key=lambda i: i.start + i.duration).start
+
 
 def _abs_end(intervals: tuple[Interval, ...]) -> int:
     """Конец последнего интервала в секундах от полуночи дня; после полуночи — больше суток."""
@@ -148,6 +174,15 @@ class DayResult:
     def is_late(self) -> bool:
         return bool(self.late)
 
+    @property
+    def arrival_start(self) -> int | None:
+        """Тот же приход, по которому посчитано опоздание, для таблиц и экспорта."""
+        if self.fact is None:
+            return None
+        if self.late is not None and self.plan is not None:
+            return self.fact.arrival_for(self.plan)
+        return self.fact.start
+
 
 def compute_day(
     day: date,
@@ -187,7 +222,7 @@ def compute_day(
     if fact is not None and planned_work and effective_plan is not None:
         assert effective_plan.start is not None
         assert effective_plan.end_abs is not None
-        late = _over(fact.start - effective_plan.start, rules.late_tolerance)
+        late = _over(fact.arrival_for(effective_plan) - effective_plan.start, rules.late_tolerance)
         early = _over(effective_plan.end_abs - fact.end_abs, rules.early_tolerance)
         planned_s = effective_plan.planned_seconds or 0
         under = _over(planned_s - fact.worked_seconds, rules.undertime_tolerance)

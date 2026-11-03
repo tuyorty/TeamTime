@@ -102,6 +102,47 @@ class TestLateness:
         r = day(work("10:00-18:00"), fact("10:30-12:00", "13:00-18:00"))
         assert format_hm(r.late) == "0:30"
 
+    @pytest.mark.parametrize(
+        "spans", [("03:00-05:30", "14:05-18:00"), ("14:05-18:00", "03:00-05:30")]
+    )
+    def test_extra_night_work_does_not_hide_arrival_late_for_the_shift(self, spans) -> None:
+        r = day(work("14:00-17:00"), fact(*spans, e=60))
+        assert r.late == 5 * 60
+        assert r.arrival_start == parse_hm("14:05")
+        assert r.worked == parse_hm("6:25")
+        assert r.result == parse_hm("3:51")
+        assert r.fact is not None and r.fact.intervals == fact(*spans).intervals
+
+    @pytest.mark.parametrize(
+        "spans", [("22:00-24:00", "11:40-16:40"), ("11:40-16:40", "22:00-24:00")]
+    )
+    def test_night_interval_listed_first_does_not_inflate_lateness(self, spans) -> None:
+        r = day(work("11:00-18:00"), fact(*spans, e=60))
+        assert r.late == 40 * 60
+        assert r.arrival_start == parse_hm("11:40")
+        assert r.worked == parse_hm("7:00")
+        assert r.result == parse_hm("4:12")
+
+    def test_arrival_before_the_shift_that_continues_into_it_is_not_late(self) -> None:
+        r = day(work("14:00-18:00"), fact("23:00-24:00", "13:00-14:30", "15:00-18:00"))
+        assert r.late == 0
+        assert r.arrival_start == parse_hm("13:00")
+
+    def test_shift_in_early_morning_is_not_ignored_as_extra_night_work(self) -> None:
+        r = day(work("03:00-06:00"), fact("14:00-18:00", "03:05-05:30"))
+        assert r.late == 5 * 60
+        assert r.arrival_start == parse_hm("03:05")
+
+    def test_work_only_after_the_shift_remains_late(self) -> None:
+        r = day(work("11:00-18:00"), fact("23:00-24:00", "22:00-22:30"))
+        assert r.late == 11 * 3600
+        assert r.arrival_start == parse_hm("22:00")
+
+    def test_work_during_the_break_does_not_replace_the_planned_session(self) -> None:
+        r = day(work("10:00-12:00", "13:00-17:00"), fact("12:20-12:40", "13:05-16:00"))
+        assert r.arrival_start == parse_hm("13:05")
+        assert r.late == parse_hm("3:05")
+
     def test_tolerance_within_is_zero_beyond_is_full(self) -> None:
         rules = DayRules(late_tolerance=5 * 60)
         assert day(work("10:00-18:00"), fact("10:05-18:00"), rules=rules).late == 0

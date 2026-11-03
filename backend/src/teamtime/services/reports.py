@@ -116,10 +116,10 @@ def plan_out(day: PlanDay) -> PlanOut:
     )
 
 
-def fact_out(daily: Daily, result_sec: int | None) -> FactOut:
+def fact_out(daily: Daily, result_sec: int | None, arrival_start: int | None = None) -> FactOut:
     intervals = [(i.start_sec, i.end_sec) for i in daily.intervals]
     return FactOut(
-        start=intervals[0][0],
+        start=arrival_start if arrival_start is not None else intervals[0][0],
         end=intervals[-1][1],
         intervals=intervals,
         worked_sec=sum((b - a) if b >= a else 86400 - a + b for a, b in intervals),
@@ -146,7 +146,9 @@ def cell_out(cell: DayCell) -> DayCellOut:
         if r.status and r.plan
         else None,
         plan=plan_out(cell.plan_day) if cell.plan_day else None,
-        fact=fact_out(daily, truncate_seconds(r.result) if r.result is not None else None)
+        fact=fact_out(
+            daily, truncate_seconds(r.result) if r.result is not None else None, r.arrival_start
+        )
         if daily
         else None,
         late_sec=r.late,
@@ -394,7 +396,7 @@ async def month_report(
                 date=c.day,
                 late_sec=c.result.late,
                 plan_start=c.result.plan.start or 0 if c.result.plan else 0,
-                fact_start=c.result.fact.start if c.result.fact else 0,
+                fact_start=c.result.arrival_start or 0,
             )
             for c in ecells
             if c.result.late
@@ -713,11 +715,14 @@ async def employee_report(
             note=first_absence.note,
         )
 
-    facts = [c.result.fact for c in cells if c.result.fact is not None]
+    arrivals = [c.result.arrival_start for c in cells if c.result.arrival_start is not None]
     late_minutes = [
-        (c.result.fact.start - c.result.plan.start) // 60
+        (c.result.arrival_start - c.result.plan.start) // 60
         for c in cells
-        if c.result.fact and c.result.plan and c.result.plan.start is not None and c.result.planned
+        if c.result.arrival_start is not None
+        and c.result.plan
+        and c.result.plan.start is not None
+        and c.result.planned
     ]
 
     tasks_by_week: dict[tuple[int, int], WeekTasks] = {}
@@ -775,8 +780,8 @@ async def employee_report(
         end=end,
         days=[cell_out(c) for c in cells],
         totals=totals(cells),
-        avg_start_sec=sum(f.start for f in facts) // len(facts) if facts else None,
-        arrivals=[f.start for f in facts],
+        avg_start_sec=sum(arrivals) // len(arrivals) if arrivals else None,
+        arrivals=arrivals,
         late_minutes=late_minutes,
         streaks=_streaks(cells),
         weeks=_weeks(cells),
