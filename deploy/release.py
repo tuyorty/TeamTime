@@ -100,7 +100,11 @@ def main() -> None:
         (release / "UPDATE.md").write_text(
             notes.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
         )
-    for source, target in (("multiple-chats.md", "MULTIPLE_CHATS.md"), ("finance.md", "FINANCE.md")):
+    for source, target in (
+        ("multiple-chats.md", "MULTIPLE_CHATS.md"),
+        ("finance.md", "FINANCE.md"),
+        ("legacy-import.md", "LEGACY_IMPORT.md"),
+    ):
         (release / target).write_text(
             (ROOT / "docs" / source).read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
         )
