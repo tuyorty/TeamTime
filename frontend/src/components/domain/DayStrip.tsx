@@ -48,6 +48,7 @@ export function DayStrip({
 
   return (
     <div
+      data-timeline-track
       role="img"
       aria-label={label ?? (describeCell(cell) || "нет данных")}
       className={cn("relative w-full overflow-hidden rounded-[3px] bg-surface-2", className)}

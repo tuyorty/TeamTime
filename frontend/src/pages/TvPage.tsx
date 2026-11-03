@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, Clock3, MapPin, Monitor, MoonStar, Users, WifiOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarDays, Clock3, MapPin, Monitor, Users, WifiOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/api/client";
 import { useMeta } from "@/api/queries";
 import type { Meta, Today, TodayRow } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
+import { TeamTimeline } from "@/components/domain/TeamTimeline";
 import { STATUS } from "@/components/domain/states";
 import { clock, count, dayMonth, timezoneLabel, WEEKDAYS_LONG, weekday } from "@/lib/format";
 import { useRealtime } from "@/lib/realtime";
@@ -14,7 +15,7 @@ import { useTheme } from "@/lib/theme";
 import { axisFor, type Axis } from "@/lib/axis";
 import { scheduleCell } from "@/lib/schedule";
 
-import { GROUPS, groupCounts, groupFor, nextDate, sortTeam, timedPlan, tomorrowSummary, tvClock, upcomingEvents, type TvEvent } from "./tv/model";
+import { GROUPS, groupCounts, groupFor, sortTeam, timedPlan, tvClock, upcomingEvents } from "./tv/model";
 import "./tv/tv.css";
 
 /** Экран офиса: только расписание, автоматическое обновление и смена страниц. */
@@ -27,14 +28,6 @@ export default function TvPage() {
     queryFn: () => api.get<Today>("/today"),
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
-    refetchOnWindowFocus: "always",
-  });
-  const tomorrowDate = today.data ? nextDate(today.data.date) : undefined;
-  const tomorrow = useQuery({
-    queryKey: ["today", "tv", tomorrowDate],
-    queryFn: () => api.get<Today>(`/today?day=${tomorrowDate}`),
-    enabled: !!tomorrowDate,
-    refetchInterval: 60_000,
     refetchOnWindowFocus: "always",
   });
   const [tick, setTick] = useState(() => Date.now());
@@ -84,20 +77,19 @@ export default function TvPage() {
       </header>
 
       {data ? <>
-        <section className="tv-summary" aria-label="Команда по расписанию сейчас">
-          <div className="tv-summary-heading"><h2><Users aria-hidden />Вся команда <strong>{data.rows.length}</strong></h2><span>Сейчас по расписанию</span></div>
-          <div className="tv-stats">
-          {GROUPS.map((group) => <div key={group.key} className="tv-stat" data-tone={group.key}>
-            <span className="tv-stat-value">{counts![group.key]}</span>
-            <span className="tv-stat-label"><i />{group.label}</span>
-          </div>)}
-          </div>
-        </section>
         <div className="tv-content">
           <Team key={data.date} rows={data.rows} now={data.now_sec} />
-          <aside className="tv-aside" aria-label="Ближайшее по расписанию">
-            <Upcoming rows={data.rows} now={data.now_sec} />
-            <Tomorrow date={tomorrowDate!} data={tomorrow.data} error={tomorrow.isError} />
+          <aside className="tv-aside" aria-label="Команда и ближайшие события">
+          <section className="tv-summary" aria-label="Команда по расписанию сейчас">
+            <div className="tv-summary-heading"><h2><Users aria-hidden />Вся команда <strong>{data.rows.length}</strong></h2><span>Сейчас по расписанию</span></div>
+            <div className="tv-stats">
+              {GROUPS.map((group) => <div key={group.key} className="tv-stat" data-tone={group.key}>
+                <span className="tv-stat-value">{counts![group.key]}</span>
+                <span className="tv-stat-label"><i />{group.label}</span>
+              </div>)}
+            </div>
+          </section>
+          <Upcoming rows={data.rows} now={data.now_sec} />
           </aside>
         </div>
       </> : <div className="tv-waiting" role="status">
@@ -139,17 +131,25 @@ function TeamClock({ meta, updatedAt }: { meta: Meta; updatedAt: number }) {
 }
 
 function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
+  const people = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState(() => capacity());
   const [page, setPage] = useState(0);
   const sorted = sortTeam(rows);
   const axis = axisFor(rows.filter((row) => row.presence !== "off" && row.presence !== "absent").map(scheduleCell), { start: 8 * 3600, end: 22 * 3600 });
   const pages = Math.max(1, Math.ceil(rows.length / size));
   const currentPage = page % pages;
+  const maxIntervals = Math.max(0, ...rows.map((row) => row.cell.plan?.intervals.length ?? 0));
   useEffect(() => {
-    const resize = () => setSize(capacity());
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, []);
+    const element = people.current;
+    if (!element) return;
+    const resize = () => {
+      const rowHeight = window.innerWidth < 750 ? 96 : maxIntervals >= 5 ? 60 : 39;
+      setSize(Math.max(1, Math.floor(element.clientHeight / rowHeight)));
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [rows.length, maxIntervals]);
   useEffect(() => {
     if (pages === 1) return;
     const timer = window.setInterval(() => {
@@ -159,25 +159,54 @@ function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
   }, [pages]);
   return <section className="tv-team" aria-label="Расписание сотрудников">
     <div className="tv-section-heading">
-      <div><h2>День команды</h2><p>Время и место работы — по расписанию команды</p></div>
+      <div><h2>День команды</h2></div>
       <span>{pages > 1 ? `Страница ${currentPage + 1} из ${pages}` : count(rows.length, ["сотрудник", "сотрудника", "сотрудников"])}</span>
     </div>
     {rows.length ? <>
       <div className="tv-columns"><span>Сотрудник</span><AxisTicks axis={axis} className="tv-axis" /></div>
-      <div className="tv-people" data-testid="tv-people" style={{ gridTemplateRows: `repeat(${Math.min(size, rows.length)}, minmax(0, 1fr))` }}>
-        {sorted.slice(currentPage * size, (currentPage + 1) * size).map((row) => <Person key={row.employee.id} row={row} axis={axis} now={now} />)}
-      </div>
+      <TeamTimeline axis={axis} now={now} className="tv-timeline">
+        <div ref={people} className="tv-people" data-testid="tv-people" style={{ gridTemplateRows: `repeat(${Math.min(size, rows.length)}, minmax(0, 1fr))` }}>
+          {sorted.slice(currentPage * size, (currentPage + 1) * size).map((row) => <Person key={row.employee.id} row={row} axis={axis} />)}
+        </div>
+      </TeamTimeline>
       <div className="tv-team-foot"><span><i />Линия на шкале — сейчас</span><span>{pages > 1 ? "Страницы меняются каждые 15 с" : "Все сотрудники на экране"}</span></div>
     </> : <div className="tv-empty-team"><h2>Команда пока не добавлена</h2><p>Сотрудники появятся здесь после настройки справочника.</p></div>}
   </section>;
 }
 
 function capacity() {
-  if (window.innerWidth < 750) return window.innerHeight < 650 ? 2 : 3;
-  return window.innerHeight >= 900 ? 9 : window.innerHeight >= 650 ? 6 : 4;
+  return Math.max(1, Math.floor((window.innerHeight - 230) / (window.innerWidth < 750 ? 96 : 40)));
 }
 
-function Person({ row, axis, now }: { row: TodayRow; axis: Axis; now: number }) {
+function Upcoming({ rows, now }: { rows: TodayRow[]; now: number }) {
+  const list = useRef<HTMLOListElement>(null);
+  const [limit, setLimit] = useState(3);
+  const events = upcomingEvents(rows, now);
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      // Строка 48 px и промежуток 8 px; используем только свободную высоту справа.
+      setLimit(Math.max(0, Math.min(6, Math.floor((element.clientHeight + 8) / 56))));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [events.length]);
+  return <section className="tv-upcoming" aria-label="Дальше по расписанию">
+    <h2><Clock3 aria-hidden />Дальше по расписанию</h2>
+    {events.length ? <ol ref={list} className="tv-events">
+      {events.slice(0, limit).map((event) => <li key={`${event.row.employee.id}-${event.kind}`}>
+        <time>{tvClock(event.time)}</time>
+        <div>
+          <strong>{event.row.employee.short_name}</strong>
+          <span>{event.kind === "end" ? "Конец работы" : event.row.cell.status === "remote" ? "Начало удалённо" : "Начало в офисе"}</span>
+        </div>
+      </li>)}
+    </ol> : <p className="tv-no-events">На сегодня больше нет начал и окончаний работы.</p>}
+  </section>;
+}
+
+function Person({ row, axis }: { row: TodayRow; axis: Axis }) {
   const group = groupFor(row);
   const plan = timedPlan(row);
   const away = group === "off" || group === "absent";
@@ -202,40 +231,8 @@ function Person({ row, axis, now }: { row: TodayRow; axis: Axis; now: number }) 
           {plan.intervals.length > 1 ? <span className="tv-interval-count">{count(plan.intervals.length, ["интервал", "интервала", "интервалов"])}</span> : null}
           <span className="tv-person-location">{remote ? <Monitor aria-hidden /> : <MapPin aria-hidden />}{remote ? "Удалённо" : "Офис"}</span>
         </div>
-        <DayStrip cell={scheduleCell(row)} axis={axis} now={now} height={12} label={`Рабочее время по расписанию: ${row.employee.short_name}`} className="tv-strip" />
+        <DayStrip cell={scheduleCell(row)} axis={axis} height={8} label={`Рабочее время по расписанию: ${row.employee.short_name}`} className="tv-strip" />
       </> : <p className="tv-person-day-label">{label}</p>}
     </div>
   </article>;
-}
-
-function eventLabel(event: TvEvent) {
-  return event.kind === "end" ? "Конец рабочего дня" : event.row.cell.status === "remote" ? "Начало удалённо" : "Начало в офисе";
-}
-
-function Upcoming({ rows, now }: { rows: TodayRow[]; now: number }) {
-  const events = upcomingEvents(rows, now).slice(0, 6);
-  return <section className="tv-upcoming">
-    <h2><Clock3 aria-hidden />Дальше по расписанию</h2>
-    <p className="tv-aside-description">Ближайшие начала и окончания работы</p>
-    {events.length ? <ol className="tv-events">{events.map((event) => <li key={`${event.row.employee.id}-${event.kind}`}>
-        <time>{tvClock(event.time)}</time>
-        <div><strong>{event.row.employee.short_name}</strong><span>{eventLabel(event)}</span></div>
-      </li>)}</ol> : <div className="tv-quiet"><MoonStar /><strong>Дальше без изменений</strong><p>По расписанию на сегодня больше нет начал и окончаний работы.</p></div>}
-  </section>;
-}
-
-function Tomorrow({ date, data, error }: { date: string; data?: Today; error: boolean }) {
-  const summary = data ? tomorrowSummary(data.rows) : null;
-  return <section className="tv-tomorrow">
-    <h2><CalendarDays aria-hidden />Завтра <span>{dayMonth(date)}</span></h2>
-    {summary && !error ? <>
-      <div className="tv-tomorrow-counts">
-        <div><strong>{summary.office}</strong><span>офис</span></div>
-        <div><strong>{summary.remote}</strong><span>удалённо</span></div>
-        <div><strong>{summary.away}</strong><span>не работают</span></div>
-      </div>
-      <p className="tv-tomorrow-note">{summary.firstStart !== null ? <>Первое начало в <strong>{tvClock(summary.firstStart)}</strong></> : "Рабочее время пока не запланировано"}</p>
-      {summary.unknown > 0 ? <p className="tv-tomorrow-missing">Без времени в расписании: {summary.unknown}</p> : null}
-    </> : <p className="tv-tomorrow-note">{error ? "Пока не удалось обновить расписание" : "Загружаем расписание…"}</p>}
-  </section>;
 }

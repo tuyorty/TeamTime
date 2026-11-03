@@ -1,5 +1,5 @@
 import type { TodayRow } from "@/api/types";
-import { groupCounts, groupFor, nextDate, tomorrowSummary, tvClock, upcomingEvents } from "./model";
+import { groupCounts, groupFor, nextDate, sortTeam, tomorrowSummary, tvClock, upcomingEvents } from "./model";
 
 function row(presence: TodayRow["presence"], id = 1): TodayRow {
   return {
@@ -12,6 +12,23 @@ function row(presence: TodayRow["presence"], id = 1): TodayRow {
     },
   };
 }
+
+it("статусы и начало смены не меняют алфавитный порядок команды", () => {
+  const office = row("on_site", 1);
+  office.employee.short_name = "Яковлев Я.Я.";
+  const absent = row("off", 2);
+  absent.employee.short_name = "Баранов К.А.";
+  const later = row("expected_later", 3);
+  later.employee.short_name = "Антонов А.А.";
+  later.cell.plan!.start = 20 * 3600;
+  const rows = [office, absent, later];
+  expect(sortTeam(rows).map((r) => r.employee.id)).toEqual([3, 2, 1]);
+  office.presence = "left";
+  later.presence = "on_site";
+  later.cell.plan!.start = 6 * 3600;
+  expect(sortTeam(rows).map((r) => r.employee.id)).toEqual([3, 2, 1]);
+  expect(rows.map((r) => r.employee.id)).toEqual([1, 2, 3]);
+});
 
 it("вся команда учитывается ровно один раз, включая выходные и отсутствие времени", () => {
   const rows = (["on_site", "remote", "expected_later", "left", "off", "absent", "no_plan"] as const).map((presence, i) => row(presence, i));

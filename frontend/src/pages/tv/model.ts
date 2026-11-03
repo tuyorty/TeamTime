@@ -1,5 +1,6 @@
 import type { TodayRow } from "@/api/types";
 import { clock, isoDate, parseDate } from "@/lib/format";
+import { compareEmployeeRows } from "@/lib/employees";
 
 export type TvGroup = "office" | "remote" | "later" | "finished" | "off" | "absent" | "unknown";
 
@@ -38,11 +39,7 @@ export function groupCounts(rows: TodayRow[]): Record<TvGroup, number> {
 }
 
 export function sortTeam(rows: TodayRow[]): TodayRow[] {
-  return [...rows].sort((a, b) =>
-    GROUPS.findIndex((g) => g.key === groupFor(a)) - GROUPS.findIndex((g) => g.key === groupFor(b)) ||
-    (a.cell.plan?.start ?? 86400) - (b.cell.plan?.start ?? 86400) ||
-    a.employee.short_name.localeCompare(b.employee.short_name, "ru"),
-  );
+  return [...rows].sort(compareEmployeeRows);
 }
 
 export interface TvEvent { row: TodayRow; time: number; kind: "start" | "end" }

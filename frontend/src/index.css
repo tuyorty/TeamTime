@@ -168,6 +168,29 @@
   animation: flash-row 2.4s ease-out;
 }
 
+.team-now-line {
+  position: absolute;
+  inset-block: 0;
+  width: 3px;
+  transform: translateX(-50%);
+  background: var(--late);
+  box-shadow: 0 0 0 1px var(--surface), 0 0 8px color-mix(in srgb, var(--late) 35%, transparent);
+  pointer-events: none;
+  z-index: 5;
+}
+.team-now-line::before, .team-now-line::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--late);
+  transform: translateX(-50%);
+}
+.team-now-line::before { top: 0; }
+.team-now-line::after { bottom: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

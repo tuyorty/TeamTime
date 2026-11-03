@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { compareEmployees, compareEmployeeRows } from "@/lib/employees";
 
 import { api, ApiError } from "./client";
 import type {
@@ -90,6 +91,7 @@ export const useWeek = (y: number, w: number) =>
   useQuery({
     queryKey: keys.week(y, w),
     queryFn: () => api.get<Week>(`/weeks/${y}/${w}`),
+    select: (data) => ({ ...data, rows: [...data.rows].sort(compareEmployeeRows) }),
     placeholderData: keepPreviousData,
   });
 
@@ -111,6 +113,7 @@ export const usePlans = (y: number, w: number) =>
   useQuery({
     queryKey: keys.plans(y, w),
     queryFn: () => api.get<Plans>(`/plans/${y}/${w}`),
+    select: (data) => ({ ...data, rows: [...data.rows].sort(compareEmployeeRows) }),
     placeholderData: keepPreviousData,
   });
 
@@ -118,6 +121,7 @@ export const useEmployees = (includeInactive = false) =>
   useQuery({
     queryKey: keys.employees(includeInactive),
     queryFn: () => api.get<Employee[]>(`/employees${includeInactive ? "?include_inactive=true" : ""}`),
+    select: (data) => [...data].sort(compareEmployees),
   });
 
 export const useEmployee = (id: number, start?: string, end?: string) =>

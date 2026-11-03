@@ -74,7 +74,7 @@ export function WeekPulse({ data }: { data: Week }) {
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <Panel
         title="Пульс недели"
-        description={`Часы команды по дням: план ${hm(planTotal * 3600)}, факт ${hm(factTotal * 3600)}`}
+        description={`Всего за неделю: план ${hm(planTotal * 3600)}, факт ${hm(factTotal * 3600)}`}
       >
         <div className="h-48" role="img" aria-label="План и факт часов команды по дням недели">
           <ResponsiveContainer width="100%" height="100%">

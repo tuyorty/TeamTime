@@ -8,6 +8,7 @@ import { Avatar } from "@/components/domain/Avatar";
 import { TaskList } from "@/components/domain/TaskList";
 import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
+import { TeamTimeline } from "@/components/domain/TeamTimeline";
 import { EmptyState, ErrorState } from "@/components/domain/feedback";
 import { STATUS } from "@/components/domain/states";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/segmented";
 import { axisFor } from "@/lib/axis";
 import { cn } from "@/lib/cn";
+import { compareEmployeeRows } from "@/lib/employees";
 import {
   WEEKDAYS_LONG,
   clock,
@@ -66,12 +68,7 @@ export default function TodayPage() {
   const [filter, setFilter] = useState<Presence | null>(null);
   const rows = useMemo(
     () =>
-      [...(data?.rows ?? [])].sort(
-        (a, b) =>
-          PRESENCE[a.presence].order - PRESENCE[b.presence].order ||
-          (a.cell.plan?.start ?? 86400) - (b.cell.plan?.start ?? 86400) ||
-          a.employee.short_name.localeCompare(b.employee.short_name, "ru"),
-      ),
+      [...(data?.rows ?? [])].sort(compareEmployeeRows),
     [data?.rows],
   );
 
@@ -226,19 +223,20 @@ export default function TodayPage() {
                       <AxisTicks axis={axis} />
                       <span />
                     </div>
-                    <ul aria-label="Расписание команды" className="divide-y divide-line border-t border-line">
-                      {visible.map((row) => (
-                        <TeamRow
-                          key={row.employee.id}
-                          row={row}
-                          axis={axis}
-                          now={data.now_sec}
-                          selected={selected?.employee.id === row.employee.id}
-                          onSelect={() => setEmployeeId(row.employee.id)}
-                          onDetails={() => setDetail({ employee: row.employee, cell: row.cell })}
-                        />
-                      ))}
-                    </ul>
+                    <TeamTimeline axis={axis} now={tomorrow ? null : data.now_sec}>
+                      <ul aria-label="Расписание команды" className="divide-y divide-line border-t border-line">
+                        {visible.map((row) => (
+                          <TeamRow
+                            key={row.employee.id}
+                            row={row}
+                            axis={axis}
+                            selected={selected?.employee.id === row.employee.id}
+                            onSelect={() => setEmployeeId(row.employee.id)}
+                            onDetails={() => setDetail({ employee: row.employee, cell: row.cell })}
+                          />
+                        ))}
+                      </ul>
+                    </TeamTimeline>
                   </>
                 ) : (
                   <div className="p-4">
@@ -325,14 +323,12 @@ function KeyNumbers({
 function TeamRow({
   row,
   axis,
-  now,
   selected,
   onSelect,
   onDetails,
 }: {
   row: TodayRow;
   axis: ReturnType<typeof axisFor>;
-  now: number;
   selected: boolean;
   onSelect: () => void;
   onDetails: () => void;
@@ -382,7 +378,6 @@ function TeamRow({
                 label="Рабочее время по расписанию"
                 cell={scheduleCell(row)}
                 axis={axis}
-                now={now}
                 height={10}
               />
             </>
