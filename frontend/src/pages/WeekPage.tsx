@@ -1,5 +1,8 @@
 import { ChevronLeft, ChevronRight, Download, Filter, Rows2, Rows3, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import { DEPARTMENTS, departmentOf } from "@/lib/departments";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { inDepartment, useDepartmentFilter } from "@/lib/departments";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
 import { exportUrl } from "@/api/client";
@@ -72,6 +75,7 @@ export default function WeekPage() {
   const [density, setDensity] = useDensity();
   const [filter, setFilter] = useState<FilterKind>("all");
   const [query, setQuery] = useState("");
+  const department = useDepartmentFilter();
   const selDay = search.get("day");
   const selEmployee = Number(search.get("e") ?? 0);
 
@@ -86,6 +90,7 @@ export default function WeekPage() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.rows.filter((r) => {
+      if (!inDepartment(r.employee, department.department)) return false;
       if (
         q &&
         !`${r.employee.full_name} ${r.employee.short_name} ${r.employee.position}`.toLowerCase().includes(q)
@@ -95,7 +100,7 @@ export default function WeekPage() {
       if (filter === "missing") return r.cells.some((c) => c.state === "missing");
       return true;
     });
-  }, [data, filter, query]);
+  }, [data, filter, query, department.department]);
   // Фильтр оставляет людей, у кого за неделю есть нужные дни, а остальные дни приглушает:
   // иначе при опозданиях почти у всех таблица выглядела бы так же, как без фильтра.
   const dim = useMemo<((c: DayCell) => boolean) | undefined>(() => {
@@ -224,6 +229,7 @@ export default function WeekPage() {
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
+        <DepartmentFilter value={department.department} onChange={department.setDepartment} />
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-2 size-4 text-ink-3" />
           <Input
@@ -559,8 +565,10 @@ function WeekTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.employee.id} className="border-b border-line last:border-b-0">
+          {rows.map((r, index) => (
+            <Fragment key={r.employee.id}>
+            {index === 0 || departmentOf(rows[index - 1]!.employee) !== departmentOf(r.employee) ? <tr data-department={departmentOf(r.employee)}><th colSpan={9} className="bg-surface-2 px-3 py-2 text-left text-[12px] font-semibold text-ink-2">{DEPARTMENTS[departmentOf(r.employee)]}</th></tr> : null}
+            <tr className="border-b border-line last:border-b-0">
               <th scope="row" className="px-3 py-2 text-left font-normal">
                 <EmployeeCell
                   employee={r.employee}
@@ -597,6 +605,7 @@ function WeekTable({
                 </div>
               </td>
             </tr>
+            </Fragment>
           ))}
           {!rows.length ? (
             <tr>
@@ -609,7 +618,8 @@ function WeekTable({
         <tfoot>
           <tr className="border-t border-line bg-surface-2/60 text-[12px] text-ink-2 tnum">
             <th scope="row" className="px-3 py-2 text-left align-top font-normal">
-              <div className="font-medium text-ink">Команда</div>
+              <div className="font-medium text-ink">Вся команда</div>
+              {rows.length !== data.rows.length ? <div className="text-ink-3">без учёта фильтра</div> : null}
               <div className="text-ink-3">часы, дейлики из плана</div>
             </th>
             {data.day_totals.map((t) => (

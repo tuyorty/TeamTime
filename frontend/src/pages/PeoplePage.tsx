@@ -1,4 +1,6 @@
 import { Users } from "lucide-react";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { useDepartmentFilter } from "@/lib/departments";
 import { Link } from "react-router";
 
 import { useMeta, useMonth, useWeek } from "@/api/queries";
@@ -14,6 +16,7 @@ import { NormBar } from "./month/shared";
 
 /** Команда: по фамилии, без рейтингов. Каждая строка ведёт в карточку сотрудника. */
 export default function PeoplePage() {
+  const department = useDepartmentFilter();
   const today = useMeta().data?.today;
   const d = today ? parseDate(today) : new Date();
   const w = isoWeek(d);
@@ -21,7 +24,7 @@ export default function PeoplePage() {
   const week = useWeek(w.year, w.week);
 
   if (month.error) return <ErrorState error={month.error} onRetry={() => month.refetch()} />;
-  const rows = month.data?.rows ?? [];
+  const rows = (month.data?.rows ?? []).filter((row) => department.matches(row.employee));
   const weekById = new Map(week.data?.rows.map((r) => [r.employee.id, r]) ?? []);
   const max = Math.max(1, ...rows.map((r) => Math.max(r.summary.total_sec, r.summary.norm_sec))) * 1.05;
 
@@ -31,6 +34,7 @@ export default function PeoplePage() {
         title="Люди"
         subtitle={`Команда по фамилии. Итоги за ${MONTHS[d.getMonth()]!.toLowerCase()} и текущую неделю.`}
       />
+      <DepartmentFilter value={department.department} onChange={department.setDepartment} />
       {!month.data ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
@@ -39,8 +43,8 @@ export default function PeoplePage() {
         </div>
       ) : !rows.length ? (
         <Panel>
-          <EmptyState icon={Users} title="В справочнике пока никого">
-            Добавьте сотрудников в админке: ФИО как в расписании, должность, норму и ставку.
+          <EmptyState icon={Users} title={department.department === "all" ? "В справочнике пока никого" : "В выбранном отделе пока никого"}>
+            {department.department === "all" ? "Добавьте сотрудников в админке: ФИО как в расписании, должность, норму и ставку." : "Выберите другой отдел или назначьте отдел сотрудникам в админке."}
           </EmptyState>
         </Panel>
       ) : (

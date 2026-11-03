@@ -21,6 +21,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/cn";
 import { dayMonth, hm, isoWeek, parseDate, relative } from "@/lib/format";
 import { StatusRequestsPanel } from "./StatusRequests";
+import { BulkDaily } from "./inbox/BulkDaily";
 
 const VIEWS = [
   { value: "pending", label: "Ждут решения" },
@@ -85,6 +86,7 @@ export default function InboxPage() {
         subtitle="Сообщения, в которых бот сомневается: непонятные строки, не найден сотрудник, нет эффективности"
       />
       <Tabs value={view} onValueChange={(v) => setParam("view", v)}>
+        {admin && view === "pending" ? <div className="mb-3"><BulkDaily /></div> : null}
         <TabsList>
           {VIEWS.map((v) => (
             <TabsTrigger key={v.value} value={v.value}>

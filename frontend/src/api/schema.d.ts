@@ -356,7 +356,8 @@ export interface paths {
         /** Привязать аккаунт Telegram к сотруднику */
         put: operations["link_identity_api_v1_admin_identities__identity_id__put"];
         post?: never;
-        delete?: never;
+        /** Remove Identity */
+        delete: operations["remove_identity_api_v1_admin_identities__identity_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -564,6 +565,91 @@ export interface paths {
         put?: never;
         /** Импорт экспорта Telegram Desktop (result.json) */
         post: operations["import_telegram_api_v1_admin_import_telegram_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/identities/removed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Removed Identities */
+        get: operations["removed_identities_api_v1_admin_identities_removed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/identities/{identity_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Identity */
+        post: operations["restore_identity_api_v1_admin_identities__identity_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/chats/{chat_id}/department": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Chat Department */
+        put: operations["chat_department_api_v1_admin_chats__chat_id__department_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inbox/bulk/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk Preview */
+        post: operations["bulk_preview_api_v1_admin_inbox_bulk_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inbox/bulk/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk Apply */
+        post: operations["bulk_apply_api_v1_admin_inbox_bulk_apply_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1004,6 +1090,42 @@ export interface components {
              */
             reminder_delay_minutes: number;
         };
+        /** BulkApply */
+        BulkApply: {
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "missing_efficiency" | "no_time";
+            /** Parse Ids */
+            parse_ids: number[];
+        };
+        /** BulkFilter */
+        BulkFilter: {
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "missing_efficiency" | "no_time";
+            /** Employee Id */
+            employee_id?: number | null;
+            /** Chat Id */
+            chat_id?: number | null;
+            /** Start */
+            start?: string | null;
+            /** End */
+            end?: string | null;
+            /**
+             * Import Only
+             * @default true
+             */
+            import_only: boolean;
+        };
+        /** ChatDepartmentIn */
+        ChatDepartmentIn: {
+            /** Department */
+            department: ("software" | "laboratory") | null;
+        };
         /** ChatIn */
         ChatIn: {
             /** Approved */
@@ -1019,6 +1141,8 @@ export interface components {
             is_forum: boolean;
             /** Approved */
             approved: boolean;
+            /** Department */
+            department?: ("software" | "laboratory") | null;
             /**
              * Topics
              * @default 0
@@ -1253,6 +1377,12 @@ export interface components {
             full_name: string;
             /** Position */
             position: string;
+            /**
+             * Department
+             * @default software
+             * @enum {string}
+             */
+            department: "software" | "laboratory";
             /** Color */
             color: string;
             /** Is Active */
@@ -1318,6 +1448,12 @@ export interface components {
              */
             position: string;
             /**
+             * Department
+             * @default software
+             * @enum {string}
+             */
+            department: "software" | "laboratory";
+            /**
              * Phone
              * @default
              */
@@ -1378,6 +1514,12 @@ export interface components {
             full_name: string;
             /** Position */
             position: string;
+            /**
+             * Department
+             * @default software
+             * @enum {string}
+             */
+            department: "software" | "laboratory";
             /** Color */
             color: string;
             /** Is Active */
@@ -1538,6 +1680,8 @@ export interface components {
             suggested_employee: components["schemas"]["EmployeeBrief"] | null;
             /** Linked At */
             linked_at: string | null;
+            /** Removed At */
+            removed_at?: string | null;
             /**
              * Last Seen At
              * Format: date-time
@@ -3389,6 +3533,41 @@ export interface operations {
             };
         };
     };
+    remove_identity_api_v1_admin_identities__identity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                identity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     chats_api_v1_admin_chats_get: {
         parameters: {
             query?: never;
@@ -3901,6 +4080,174 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    removed_identities_api_v1_admin_identities_removed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityOut"][];
+                };
+            };
+        };
+    };
+    restore_identity_api_v1_admin_identities__identity_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                identity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_department_api_v1_admin_chats__chat_id__department_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path: {
+                chat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatDepartmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_preview_api_v1_admin_inbox_bulk_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkFilter"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_apply_api_v1_admin_inbox_bulk_apply_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-requested-with"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkApply"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

@@ -1,5 +1,7 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import { useState } from "react";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { useDepartmentFilter } from "@/lib/departments";
 import { Link, Navigate, useSearchParams } from "react-router";
 
 import { useDaySummary, useMeta } from "@/api/queries";
@@ -39,6 +41,7 @@ export default function DaySummaryRedirect() {
 }
 
 export function DaySummary() {
+  const department = useDepartmentFilter();
   const { data: meta } = useMeta();
   const [search, setSearch] = useSearchParams();
   const requested = search.get("date");
@@ -59,10 +62,11 @@ export function DaySummary() {
         <Skeleton className="h-96" />
       </div>
     );
-  const waiting = data.rows.filter(waitingForDaily);
-  const received = data.rows.filter((row) => row.cell.fact);
+  const filteredRows = data.rows.filter((row) => department.matches(row.employee));
+  const waiting = filteredRows.filter(waitingForDaily);
+  const received = filteredRows.filter((row) => row.cell.fact);
   const late = received.filter((row) => row.cell.late_sec);
-  const rows = [...data.rows]
+  const rows = [...filteredRows]
     .filter((row) => row.cell.fact || waitingForDaily(row))
     .sort(
       (a, b) =>
@@ -83,6 +87,7 @@ export function DaySummary() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-display text-[22px] font-semibold">Итоги дня</h2>
+          <div className="mt-2"><DepartmentFilter value={department.department} onChange={department.setDepartment} /></div>
           <p className="mt-1 text-[13px] text-ink-2">
             {dayMonth(day)} ·{" "}
             {isToday ? "День ещё идёт, итоги предварительные" : "Часы, задачи и опоздания по дейликам"}

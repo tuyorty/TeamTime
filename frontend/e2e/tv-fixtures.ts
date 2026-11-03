@@ -16,7 +16,7 @@ export function tvFixture(date = "2026-10-23"): Today {
   return {
     date, now_sec: 14.5 * 3600, counts: { total: people.length }, worked_sec: 0, feed: [], week_pulse: [],
     rows: people.map(([name, position, presence, start, end, status], i) => ({
-      employee: { id: i + 1, short_name: name, full_name: name, position, color: "", is_active: true, avatar_url: "" },
+      employee: { id: i + 1, short_name: name, full_name: name, position, department: "software", color: "", is_active: true, avatar_url: "" },
       presence, daily_overdue: false, tasks: [],
       cell: {
         date, state: presence === "off" ? "off" : presence === "absent" ? "absence" : "pending",

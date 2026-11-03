@@ -1,4 +1,5 @@
 import { Search, X } from "lucide-react";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
 
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/field";
@@ -16,6 +17,7 @@ export function MonthFilters({
   const { filter, setFilter, positions, visible, active, reset } = state;
   return (
     <div className="no-print flex flex-wrap items-center gap-2">
+      <DepartmentFilter value={filter.department} onChange={(department) => setFilter({ ...filter, department })} />
       <label className="relative w-full sm:w-56">
         <span className="sr-only">Поиск по имени или должности</span>
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-3" aria-hidden />

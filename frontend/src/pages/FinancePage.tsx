@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { useDepartmentFilter } from "@/lib/departments";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import { exportUrl } from "@/api/client";
@@ -25,6 +27,7 @@ import { sortRows, useSort } from "./month/sorting";
 import NotFound from "./NotFound";
 
 export default function FinancePage() {
+  const department = useDepartmentFilter();
   const params = useParams();
   const meta = useMeta();
   if (!meta.data?.today) return meta.error ? <ErrorState error={meta.error} onRetry={() => void meta.refetch()} /> : <Skeleton className="h-80" />;
@@ -32,10 +35,10 @@ export default function FinancePage() {
   const year = Number(params.year ?? current.slice(0, 4));
   const month = Number(params.month ?? current.slice(5, 7));
   if (!Number.isInteger(year) || !Number.isInteger(month) || year < 2000 || year > 2100 || month < 1 || month > 12) return <NotFound />;
-  return <FinancePeriod key={`${year}-${month}`} year={year} month={month} current={current} />;
+  return <FinancePeriod key={`${year}-${month}`} year={year} month={month} current={current} department={department} />;
 }
 
-function FinancePeriod({ year, month, current }: { year: number; month: number; current: string }) {
+function FinancePeriod({ year, month, current, department }: { year: number; month: number; current: string; department: ReturnType<typeof useDepartmentFilter> }) {
   const { data, error, refetch, isFetching } = useFinance(year, month);
   const navigate = useNavigate();
   const admin = useIsAdmin();
@@ -51,6 +54,7 @@ function FinancePeriod({ year, month, current }: { year: number; month: number; 
     navigate(`/finances/${next.year}/${next.month}`);
   };
   const filtered = (data?.rows ?? []).filter((row) => {
+    if (!department.matches(row.employee)) return false;
     const e = row.employee;
     return `${e.full_name} ${e.short_name} ${e.position}`.toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU")) && (
       filter === "all" || (filter === "overtime" && row.summary.overtime_sec > 0) ||
@@ -95,6 +99,7 @@ function FinancePeriod({ year, month, current }: { year: number; month: number; 
           <FinanceSummary amounts={data.totals} count={data.rows.length} />
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-44 flex-1 sm:max-w-80"><Search className="pointer-events-none absolute left-2.5 top-2 size-4 text-ink-3" /><Input className="pl-8" aria-label="Найти сотрудника" placeholder="Имя или должность" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+            <DepartmentFilter value={department.department} onChange={department.setDepartment} />
             <Select className="w-auto" aria-label="Отбор начислений" value={filter} onChange={(event) => setFilter(event.target.value)}>
               <option value="all">Все сотрудники</option><option value="overtime">С переработкой</option><option value="bonuses">С проектными премиями</option><option value="no-rate">Без ставки</option>
             </Select>

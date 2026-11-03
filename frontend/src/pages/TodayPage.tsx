@@ -1,5 +1,5 @@
 import { ArrowRight, CalendarDays, CircleAlert, ListChecks, MapPin, MonitorPlay, PencilLine, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { useMeta, useToday } from "@/api/queries";
@@ -9,6 +9,9 @@ import { TaskList } from "@/components/domain/TaskList";
 import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
 import { TeamTimeline } from "@/components/domain/TeamTimeline";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { useDepartmentFilter } from "@/lib/departments";
+import { employeeGroups } from "@/lib/departments";
 import { EmptyState, ErrorState } from "@/components/domain/feedback";
 import { STATUS } from "@/components/domain/states";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +57,7 @@ function presenceText(row: TodayRow): string {
 }
 
 export default function TodayPage() {
+  const department = useDepartmentFilter();
   const meta = useMeta().data;
   const [search, setSearch] = useSearchParams();
   const tomorrow = search.get("day") === "tomorrow";
@@ -83,7 +87,7 @@ export default function TodayPage() {
         timeZone: meta.timezone,
       }).format(new Date(meta.now))
     : clock(data.now_sec);
-  const visible = rows.filter((row) => !filter || row.presence === filter);
+  const visible = rows.filter((row) => department.matches(row.employee) && (!filter || row.presence === filter));
   const selected = visible.find((row) => row.employee.id === employeeId) ?? visible[0];
   const axis = axisFor(rows.map(scheduleCell), { start: 8 * 3600, end: 22 * 3600 });
 
@@ -192,6 +196,7 @@ export default function TodayPage() {
         <DaySummary />
       ) : (
         <>
+          <DepartmentFilter value={department.department} onChange={department.setDepartment} />
           <KeyNumbers data={data} filter={filter} onFilter={setFilter} future={tomorrow} />
           <div
             className={cn(
@@ -211,7 +216,7 @@ export default function TodayPage() {
                       Показать всех
                     </Button>
                   ) : (
-                    <Badge>{count(rows.length, ["сотрудник", "сотрудника", "сотрудников"])}</Badge>
+                    <Badge>{count(visible.length, ["сотрудник", "сотрудника", "сотрудников"])}</Badge>
                   )
                 }
                 bodyClassName="px-0 pb-1"
@@ -225,7 +230,9 @@ export default function TodayPage() {
                     </div>
                     <TeamTimeline axis={axis} now={tomorrow ? null : data.now_sec}>
                       <ul aria-label="Расписание команды" className="divide-y divide-line border-t border-line">
-                        {visible.map((row) => (
+                        {employeeGroups(visible).map((group) => <Fragment key={group.department}>
+                          <li role="presentation" className="bg-surface-2 px-4 py-2 text-[12px] font-semibold text-ink-2" data-department={group.department}><h3>{group.label} · {group.rows.length}</h3></li>
+                          {group.rows.map((row) => (
                           <TeamRow
                             key={row.employee.id}
                             row={row}
@@ -234,7 +241,8 @@ export default function TodayPage() {
                             onSelect={() => setEmployeeId(row.employee.id)}
                             onDetails={() => setDetail({ employee: row.employee, cell: row.cell })}
                           />
-                        ))}
+                          ))}
+                        </Fragment>)}
                       </ul>
                     </TeamTimeline>
                   </>
@@ -242,7 +250,7 @@ export default function TodayPage() {
                   <div className="p-4">
                     <EmptyState title={rows.length ? "Здесь пока никого" : "Сотрудников пока нет"}>
                       {rows.length
-                        ? "Выберите другую категорию или покажите всю команду."
+                        ? "Выберите другой отдел или категорию, чтобы показать сотрудников."
                         : "Добавьте сотрудников в админке."}
                     </EmptyState>
                   </div>
@@ -506,6 +514,7 @@ function ScheduleFeed({ items }: { items: FeedItem[] }) {
                     short_name: item.author_name,
                     full_name: item.author_name,
                     position: "",
+                    department: "software",
                     color: "",
                     is_active: true,
                     avatar_url: "",

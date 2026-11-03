@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, Clock3, MapPin, Monitor, Users, WifiOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { employeeGroups } from "@/lib/departments";
 
 import { api } from "@/api/client";
 import { useMeta } from "@/api/queries";
@@ -138,18 +139,20 @@ function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
   const axis = axisFor(rows.filter((row) => row.presence !== "off" && row.presence !== "absent").map(scheduleCell), { start: 8 * 3600, end: 22 * 3600 });
   const pages = Math.max(1, Math.ceil(rows.length / size));
   const currentPage = page % pages;
+  const shownGroups = employeeGroups(sorted.slice(currentPage * size, (currentPage + 1) * size));
   const maxIntervals = Math.max(0, ...rows.map((row) => row.cell.plan?.intervals.length ?? 0));
   useEffect(() => {
     const element = people.current;
     if (!element) return;
     const resize = () => {
-      const rowHeight = window.innerWidth < 750 ? 96 : maxIntervals >= 5 ? 60 : 39;
-      setSize(Math.max(1, Math.floor(element.clientHeight / rowHeight)));
+      const rowHeight = window.innerWidth < 750 ? 96 : maxIntervals >= 5 ? 60 : 37;
+      const headings = employeeGroups(rows).length * 20;
+      setSize(Math.max(1, Math.floor((element.clientHeight - headings) / rowHeight)));
     };
     const observer = new ResizeObserver(resize);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [rows.length, maxIntervals]);
+  }, [rows, maxIntervals]);
   useEffect(() => {
     if (pages === 1) return;
     const timer = window.setInterval(() => {
@@ -165,8 +168,11 @@ function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
     {rows.length ? <>
       <div className="tv-columns"><span>Сотрудник</span><AxisTicks axis={axis} className="tv-axis" /></div>
       <TeamTimeline axis={axis} now={now} className="tv-timeline">
-        <div ref={people} className="tv-people" data-testid="tv-people" style={{ gridTemplateRows: `repeat(${Math.min(size, rows.length)}, minmax(0, 1fr))` }}>
-          {sorted.slice(currentPage * size, (currentPage + 1) * size).map((row) => <Person key={row.employee.id} row={row} axis={axis} />)}
+        <div ref={people} className="tv-people" data-testid="tv-people" style={{ gridTemplateRows: shownGroups.flatMap((group) => ["20px", `repeat(${group.rows.length}, minmax(0, 1fr))`]).join(" ") }}>
+          {shownGroups.map((group) => <Fragment key={group.department}>
+            <h3 className="tv-department" data-department={group.department}>{group.label}</h3>
+            {group.rows.map((row) => <Person key={row.employee.id} row={row} axis={axis} />)}
+          </Fragment>)}
         </div>
       </TeamTimeline>
       <div className="tv-team-foot"><span><i />Линия на шкале — сейчас</span><span>{pages > 1 ? "Страницы меняются каждые 15 с" : "Все сотрудники на экране"}</span></div>
@@ -177,6 +183,7 @@ function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
 function capacity() {
   return Math.max(1, Math.floor((window.innerHeight - 230) / (window.innerWidth < 750 ? 96 : 40)));
 }
+
 
 function Upcoming({ rows, now }: { rows: TodayRow[]; now: number }) {
   const list = useRef<HTMLOListElement>(null);

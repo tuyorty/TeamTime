@@ -99,6 +99,7 @@ export const useMonth = (y: number, m: number) =>
   useQuery({
     queryKey: keys.month(y, m),
     queryFn: () => api.get<Month>(`/months/${y}/${m}`),
+    select: (data) => ({ ...data, rows: [...data.rows].sort(compareEmployeeRows) }),
     placeholderData: keepPreviousData,
   });
 
@@ -106,6 +107,7 @@ export const useFinance = (y: number, m: number) =>
   useQuery({
     queryKey: ["finances", y, m],
     queryFn: () => api.get<Finance>(`/finances/${y}/${m}`),
+    select: (data) => ({ ...data, rows: [...data.rows].sort(compareEmployeeRows) }),
     placeholderData: keepPreviousData,
   });
 

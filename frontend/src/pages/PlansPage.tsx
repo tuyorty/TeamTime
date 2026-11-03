@@ -1,5 +1,8 @@
 import { ChevronDown, ChevronLeft, ChevronRight, ClipboardList, GitCompareArrows } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { DEPARTMENTS, departmentOf } from "@/lib/departments";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { useDepartmentFilter } from "@/lib/departments";
 import { useNavigate, useParams } from "react-router";
 
 import { useMeta, usePlans } from "@/api/queries";
@@ -42,6 +45,7 @@ const SOURCE = {
 } as const;
 
 export default function PlansPage() {
+  const department = useDepartmentFilter();
   const params = useParams();
   const navigate = useNavigate();
   const today = useMeta().data?.today;
@@ -50,6 +54,7 @@ export default function PlansPage() {
   const week = Number(params.week ?? fallback.week);
   const { data, error, refetch } = usePlans(year, week);
   const [diff, setDiff] = useState<PlanRow | null>(null);
+  const rows = (data?.rows ?? []).filter((row) => department.matches(row.employee));
 
   const go = (delta: number) => {
     const t = shiftWeek(year, week, delta);
@@ -79,13 +84,14 @@ export default function PlansPage() {
         </div>
       </header>
 
-      {data ? <ScheduleCompleteness rows={data.rows} days={data.required_days ?? data.days} /> : null}
+      <DepartmentFilter value={department.department} onChange={department.setDepartment} />
+      {data ? <ScheduleCompleteness rows={rows} days={data.required_days ?? data.days} /> : null}
 
       {error ? (
         <ErrorState error={error} onRetry={() => refetch()} />
       ) : !data ? (
         <Skeleton className="h-96" />
-      ) : !data.rows.some((r) => r.current) ? (
+      ) : !rows.some((r) => r.current) ? (
         <EmptyState icon={ClipboardList} title="Расписаний на эту неделю нет">
           Они появятся, когда сотрудники пришлют «Спринт ДД.ММ - ДД.ММ» в тему с расписанием.
         </EmptyState>
@@ -115,10 +121,12 @@ export default function PlansPage() {
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((r) => {
+              {rows.map((r, index) => {
                 const days = r.current ? byDate(r.current) : new Map<string, PlanDay>();
                 return (
-                  <tr key={r.employee.id} className="border-b border-line align-top last:border-b-0">
+                  <Fragment key={r.employee.id}>
+                  {index === 0 || departmentOf(rows[index - 1]!.employee) !== departmentOf(r.employee) ? <tr data-department={departmentOf(r.employee)}><th colSpan={9} className="bg-surface-2 px-3 py-2 text-left text-[12px] font-semibold text-ink-2">{DEPARTMENTS[departmentOf(r.employee)]}</th></tr> : null}
+                  <tr className="border-b border-line align-top last:border-b-0">
                     <th scope="row" className="px-3 py-1.5 text-left font-normal">
                       <div className="flex min-w-0 items-center gap-2">
                         <Avatar employee={r.employee} size={20} />
@@ -183,6 +191,7 @@ export default function PlansPage() {
                       )}
                     </td>
                   </tr>
+                  </Fragment>
                 );
               })}
             </tbody>

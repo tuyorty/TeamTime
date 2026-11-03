@@ -17,6 +17,8 @@ import { employeeColor } from "@/lib/colors";
 import { hm } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 import { CalculationHistory } from "./CalculationHistory";
+import { DEPARTMENTS, departmentOf, useDepartmentFilter, type Department } from "@/lib/departments";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
 import {
   DEFAULT_AVATAR_CROP,
   loadAvatar,
@@ -41,6 +43,7 @@ const SHORT_NAME = /^[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ]\.\
 
 export function EmployeesTab() {
   const { data } = useEmployees(true);
+  const department = useDepartmentFilter();
   const [search, setSearch] = useSearchParams();
   const prefill = search.get("new");
   const editId = search.get("edit");
@@ -61,6 +64,7 @@ export function EmployeesTab() {
           <Plus /> Добавить
         </Button>
       </div>
+      <DepartmentFilter value={department.department} onChange={department.setDepartment} />
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="w-full min-w-[760px] border-collapse text-[13px]">
           <thead className="border-b border-line bg-surface-2/60 text-left text-[12px] text-ink-3">
@@ -84,7 +88,7 @@ export function EmployeesTab() {
             </tr>
           </thead>
           <tbody>
-            {data.map((e) => (
+            {data.filter(department.matches).map((e) => (
               <tr
                 key={e.id}
                 className={cn("border-b border-line last:border-b-0", !e.is_active && "text-ink-3")}
@@ -93,6 +97,7 @@ export function EmployeesTab() {
                   <span className="flex items-center gap-2">
                     <Avatar employee={e} size={24} />
                     <span className="font-medium">{e.full_name}</span>
+                    <Badge>{DEPARTMENTS[departmentOf(e)]}</Badge>
                     {!e.is_active ? <Badge>не активен</Badge> : null}
                   </span>
                 </td>
@@ -144,6 +149,7 @@ function EmployeeForm({
     full_name: employee?.full_name ?? "",
     short_name: employee?.short_name ?? prefillShortName,
     position: employee?.position ?? "",
+    department: employee?.department ?? "software",
     phone: employee?.phone ?? "",
     about: employee?.about ?? "",
     expertise: employee?.expertise ?? "",
@@ -171,6 +177,7 @@ function EmployeeForm({
         full_name: form.full_name.trim(),
         short_name: form.short_name.trim(),
         position: form.position.trim(),
+        department: form.department as Department,
         phone: form.phone.trim(),
         about: form.about.trim(),
         expertise: form.expertise.trim(),
@@ -238,6 +245,11 @@ function EmployeeForm({
       </Field>
       <Field label="Должность" hint="Видна в карточке и отчётах">
         <Input value={form.position} onChange={(e) => set("position")(e.target.value)} />
+      </Field>
+      <Field label="Отдел" hint="Программисты сверху, лаборатория снизу; внутри отдела — по алфавиту">
+        <Select value={form.department} onChange={(event) => set("department")(event.target.value)}>
+          {Object.entries(DEPARTMENTS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </Select>
       </Field>
       <Field
         label="Фотография"

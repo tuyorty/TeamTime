@@ -101,10 +101,12 @@ test("ТВ: несколько интервалов и длинные подпи
 
 test("ТВ: две команды из 20 сотрудников помещаются в Full HD с одной линией сейчас", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await fixtures(page, 20);
+  const data = await fixtures(page, 20);
+  data.rows.forEach((row, index) => { row.employee.department = index < 10 ? "software" : "laboratory"; });
   await page.goto("/tv");
   await expect(page.getByRole("article")).toHaveCount(20);
   await expect(page.getByText("Все сотрудники на экране", { exact: true })).toBeVisible();
+  await expect(page.locator(".tv-department")).toHaveText(["Программисты", "Лаборатория"]);
   await expect(page.getByRole("heading", { name: /Завтра/ })).toHaveCount(0);
   const upcoming = page.getByRole("region", { name: "Дальше по расписанию", exact: true });
   await expect(upcoming.getByRole("listitem").first()).toBeVisible();
@@ -136,6 +138,19 @@ test("Сегодня: сотрудники по алфавиту и единая
   const labels = await names.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")!.replace("Задачи: ", "")));
   expect(labels).toEqual([...labels].sort(new Intl.Collator("ru").compare));
   await expect(page.getByTestId("team-now-line")).toHaveCount(1);
+});
+
+test("Сегодня: два отдела разделены и фильтруются", async ({ page }) => {
+  const data = await fixtures(page);
+  data.rows[0]!.employee.department = "laboratory";
+  await page.route("**/api/v1/today", (route) => route.fulfill({ json: data }));
+  await page.goto("/");
+  const list = page.getByRole("list", { name: "Расписание команды" });
+  await expect(list.locator("[data-department]")).toHaveText([`Программисты · ${data.rows.length - 1}`, "Лаборатория · 1"]);
+  await page.getByLabel("Отдел", { exact: true }).selectOption("laboratory");
+  await expect(list.locator("[data-department]")).toHaveText(["Лаборатория · 1"]);
+  await page.getByLabel("Отдел", { exact: true }).selectOption("software");
+  await expect(list.locator("[data-department]")).toHaveText([`Программисты · ${data.rows.length - 1}`]);
 });
 
 test("Сегодня: сообщение непривязанного участника не роняет страницу", async ({ page }) => {

@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
+import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
+import { useDepartmentFilter } from "@/lib/departments";
 
 import { useCalendar, useEmployees, useMeta } from "@/api/queries";
 import type { DayCell, Employee } from "@/api/types";
@@ -30,13 +32,14 @@ function presence(c: DayCell): { intervals: [number, number][]; planned: boolean
 }
 
 export default function CalendarPage() {
+  const department = useDepartmentFilter();
   const today = useMeta().data?.today;
   const t = today ? parseDate(today) : new Date();
   const [cursor, setCursor] = useState({ y: t.getFullYear(), m: t.getMonth() });
   const first = new Date(cursor.y, cursor.m, 1);
   const last = new Date(cursor.y, cursor.m + 1, 0);
   const { data, error, refetch } = useCalendar(isoDate(first), isoDate(last));
-  const employees = useEmployees().data ?? [];
+  const employees = (useEmployees().data ?? []).filter(department.matches);
   const [day, setDay] = useState<string | null>(null);
   const [selected, setSelected] = useState<DayRef | null>(null);
   const activeDay = day && data && Object.values(data)[0]?.some((c) => c.date === day) ? day : (today && today >= isoDate(first) && today <= isoDate(last) ? today : isoDate(first));
@@ -49,6 +52,7 @@ export default function CalendarPage() {
 
   return (
     <div className="grid gap-5">
+      <DepartmentFilter value={department.department} onChange={department.setDepartment} />
       <PageHeader
         title="Календарь команды"
         subtitle="Кто когда работает, кто на месте одновременно, отпуска и больничные"
@@ -106,7 +110,7 @@ function MonthGrid({
           <div key={`e${i}`} className="bg-bg" />
         ))}
         {days.map((d, i) => {
-          const cells = Object.entries(data).map(([id, cs]) => ({ e: byId.get(id), c: cs[i]! }));
+          const cells = Object.entries(data).filter(([id]) => byId.has(id)).map(([id, cs]) => ({ e: byId.get(id), c: cs[i]! }));
           const working = cells.filter((x) => presence(x.c).intervals.length).length;
           const absent = cells.filter((x) => x.c.status && x.c.status !== "remote" && x.c.status !== "off");
           const isPast = d < today;

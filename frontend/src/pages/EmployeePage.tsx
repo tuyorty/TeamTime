@@ -1,10 +1,11 @@
 import { ArrowLeft, Flame, ListChecks, NotebookPen, Target } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import { useAudit, useEmployee, useMeta } from "@/api/queries";
 import type { EmployeeDetail } from "@/api/types";
 import { DayDetailSheet, type DayRef } from "@/components/domain/DayDetail";
+import { MonthNavigation } from "@/components/domain/MonthNavigation";
 import { ErrorState, TruncationNote } from "@/components/domain/feedback";
 import { STATUS } from "@/components/domain/states";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,7 @@ import { EmployeeProfile } from "./employee/Profile";
 
 /** По умолчанию — текущий календарный месяц; вся статистика использует выбранные даты. */
 const PERIODS = [
-  { value: "1m", label: "1 месяц" },
+  { value: "1m", label: "Месяц" },
   { value: "8w", label: "8 недель" },
   { value: "3m", label: "3 месяца" },
   { value: "6m", label: "Полгода" },
@@ -50,6 +51,7 @@ function periodRange(
   today: string,
   from: string | null,
   to: string | null,
+  month?: string | null,
 ): [string, string] | null {
   const end = parseDate(today);
   const back = (months: number) => {
@@ -58,7 +60,13 @@ function periodRange(
     d.setMonth(d.getMonth() - months + 1);
     return isoDate(d);
   };
-  if (period === "1m" || !period) return [back(1), today];
+  if (period === "1m" || !period) {
+    if (month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month >= "2000-01" && month <= "2100-12") {
+      const [y, m] = month.split("-").map(Number);
+      return [`${month}-01`, month === today.slice(0, 7) ? today : isoDate(new Date(y!, m!, 0))];
+    }
+    return [back(1), today];
+  }
   if (period === "8w") {
     const start = new Date(end);
     start.setDate(end.getDate() - ((end.getDay() + 6) % 7) - 49);
@@ -77,7 +85,7 @@ export default function EmployeePage() {
   const [search, setSearch] = useSearchParams();
   const today = useMeta().data?.today;
   const period = search.get("period") || "1m";
-  const range = today ? periodRange(period, today, search.get("from"), search.get("to")) : null;
+  const range = today ? periodRange(period, today, search.get("from"), search.get("to"), search.get("month")) : null;
   const { data, error, refetch } = useEmployee(id, range?.[0], range?.[1]);
   const [selected, setSelected] = useState<DayRef | null>(null);
 
@@ -116,7 +124,9 @@ export default function EmployeePage() {
         />
       </div>
 
-      {data.start === `${today.slice(0, 7)}-01` && data.end === today ? (
+      {period === "1m" ? <MonthNavigation value={data.start.slice(0, 7)} current={today.slice(0, 7)} onChange={(month) => setSearch({ period: "1m", month })} /> : null}
+
+      {period === "1m" ? (
         <MonthStrip data={data} />
       ) : (
         <PeriodStrip data={data} />
@@ -165,12 +175,16 @@ function PeriodPicker({
   const tooLong = (a: string, b: string) =>
     (parseDate(b).getTime() - parseDate(a).getTime()) / 86_400_000 > MAX_DAYS;
   const [error, setError] = useState<string | null>(null);
-  const setDates = (a: string, b: string) => {
-    if (!a || !b) return;
-    if (a > b) return setError("Начало позже конца");
-    if (tooLong(a, b)) return setError("Не больше года");
+  const draft = useRef({ from, to });
+  useEffect(() => { draft.current = { from, to }; }, [from, to]);
+  const setDates = (a: string, b: string, changed: "from" | "to") => {
+    const next = { ...draft.current, [changed]: changed === "from" ? a : b };
+    if (!next.from || !next.to) return;
+    if (next.from > next.to) return setError("Начало позже конца");
+    if (tooLong(next.from, next.to)) return setError("Не больше года");
+    draft.current = next;
     setError(null);
-    onChange({ period: "custom", from: a, to: b });
+    onChange({ period: "custom", ...next });
   };
   return (
     <div className="grid gap-1.5 sm:ml-auto sm:justify-items-end">
@@ -198,7 +212,7 @@ function PeriodPicker({
               aria-label="Начало периода"
               className="w-36"
               value={from}
-              onChange={(e) => setDates(e.target.value, to)}
+              onChange={(e) => setDates(e.target.value, to, "from")}
             />
             <span className="text-ink-3">–</span>
             <Input
@@ -206,7 +220,7 @@ function PeriodPicker({
               aria-label="Конец периода"
               className="w-36"
               value={to}
-              onChange={(e) => setDates(from, e.target.value)}
+              onChange={(e) => setDates(from, e.target.value, "to")}
             />
           </>
         ) : null}
@@ -224,7 +238,7 @@ function MonthStrip({ data }: { data: EmployeeDetail }) {
   const s = data.month;
   return (
     <section
-      aria-label="Текущий месяц"
+      aria-label="Итоги месяца"
       className="grid gap-4 rounded-lg border border-line bg-surface p-4 md:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]"
     >
       <div className="grid content-start gap-2">

@@ -1,5 +1,8 @@
 import { Check, Link2, Plus, ShieldOff, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { DEPARTMENTS, type Department } from "@/lib/departments";
 
 import { api } from "@/api/client";
 import { keys, useAdminMutation, useChats, useEmployees, useIdentities, useMeta, useTopics } from "@/api/queries";
@@ -37,6 +40,9 @@ export function TelegramTab() {
 }
 
 function IdentityRow({ identity }: { identity: Identity }) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const remove = useAdminMutation(() => api.delete<{ detail: string }>(`/admin/identities/${identity.id}`), { success: (r) => r.detail });
+  const restore = useAdminMutation(() => api.post<{ detail: string }>(`/admin/identities/${identity.id}/restore`), { success: (r) => r.detail });
   const employees = useEmployees().data ?? [];
   const [value, setValue] = useState(
     String(identity.employee?.id ?? identity.suggested_employee?.id ?? ""),
@@ -58,7 +64,7 @@ function IdentityRow({ identity }: { identity: Identity }) {
         </div>
       </td>
       <td className="px-3 py-2">
-        <div className="flex items-center gap-2">
+        {identity.removed_at ? <Button size="sm" onClick={() => restore.mutate(undefined)} disabled={restore.isPending}>Восстановить аккаунт</Button> : <div className="flex items-center gap-2">
           <Select className="w-48" value={value} onChange={(e) => setValue(e.target.value)} aria-label="Сотрудник">
             <option value="">не привязан</option>
             {employees.map((e) => (
@@ -72,7 +78,17 @@ function IdentityRow({ identity }: { identity: Identity }) {
               <Link2 /> Сохранить
             </Button>
           ) : null}
-        </div>
+          {!identity.employee ? <Button size="icon-sm" variant="ghost" aria-label={`Удалить аккаунт ${identity.display_name}`} onClick={() => setConfirmRemove(true)}><Trash2 /></Button> : null}
+        </div>}
+        <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+          <DialogContent title={`Удалить аккаунт ${identity.display_name}?`}>
+            <p className="text-[13px] text-ink-2">Аккаунт исчезнет из списка, его новые сообщения будут игнорироваться. Повторный импорт не вернёт его обратно. Исходные сообщения сохранятся; восстановить аккаунт можно в списке удалённых.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button onClick={() => setConfirmRemove(false)}>Отмена</Button>
+              <Button variant="danger" disabled={remove.isPending} onClick={() => remove.mutate(undefined, { onSuccess: () => setConfirmRemove(false) })}>Удалить аккаунт</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         {!identity.employee && identity.suggested_employee ? (
           <p className="mt-1 text-[12px] text-deviation-ink">Бот предлагает: {identity.suggested_employee.short_name}</p>
         ) : null}
@@ -82,7 +98,10 @@ function IdentityRow({ identity }: { identity: Identity }) {
 }
 
 function Identities() {
-  const { data } = useIdentities();
+  const [showRemoved, setShowRemoved] = useState(false);
+  const active = useIdentities();
+  const removed = useQuery({ queryKey: ["identities", "removed"], queryFn: () => api.get<Identity[]>("/admin/identities/removed"), enabled: showRemoved });
+  const data = showRemoved ? removed.data : active.data;
   const unlinked = data?.filter((i) => !i.employee).length ?? 0;
   return (
     <Panel
@@ -91,13 +110,14 @@ function Identities() {
       actions={unlinked ? <Badge tone="deviation">не привязано: {unlinked}</Badge> : null}
       bodyClassName="px-0 pb-0"
     >
+      <div className="px-4 pb-3"><Button size="sm" onClick={() => setShowRemoved(!showRemoved)}>{showRemoved ? "Действующие аккаунты" : "Удалённые аккаунты"}</Button></div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-[13px]">
           <tbody>{data?.map((i) => <IdentityRow key={i.id} identity={i} />)}</tbody>
         </table>
       </div>
       {data && !data.length ? (
-        <p className="px-4 pb-4 text-[13px] text-ink-2">Аккаунты появятся, когда кто-то напишет в привязанную тему.</p>
+        <p className="px-4 pb-4 text-[13px] text-ink-2">{showRemoved ? "Удалённых аккаунтов нет." : "Аккаунты появятся, когда кто-то напишет в привязанную тему."}</p>
       ) : null}
     </Panel>
   );
@@ -105,6 +125,9 @@ function Identities() {
 
 function ChatRow({ chat }: { chat: Chat }) {
   const [confirm, setConfirm] = useState(false);
+  const [department, setDepartment] = useState<Department | "">(chat.department ?? "");
+  const [confirmDepartment, setConfirmDepartment] = useState(false);
+  const setChatDepartment = useAdminMutation(() => api.put<{ detail: string }>(`/admin/chats/${chat.chat_id}/department`, { department: department || null }), { success: (r) => r.detail });
   const invalidate = [[...keys.chats], [...keys.topics]];
   const approve = useAdminMutation((approved: boolean) => api.put<{ detail: string }>(`/admin/chats/${chat.chat_id}`, { approved }), {
     success: (r) => r.detail,
@@ -116,6 +139,19 @@ function ChatRow({ chat }: { chat: Chat }) {
   });
   return (
     <li className="grid gap-2 rounded-md border border-line p-2.5 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select aria-label={`Отдел чата ${chat.title}`} value={department} onChange={(event) => setDepartment(event.target.value as Department | "")}>
+          <option value="">Отдел не задан</option>
+          {Object.entries(DEPARTMENTS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </Select>
+        <Button size="sm" disabled={setChatDepartment.isPending} onClick={() => setConfirmDepartment(true)}>Применить отдел</Button>
+      </div>
+      <Dialog open={confirmDepartment} onOpenChange={setConfirmDepartment}>
+        <DialogContent title="Отдел сотрудников чата">
+          <p className="text-[13px] text-ink-2">{department ? `Назначить отдел «${DEPARTMENTS[department]}» сотрудникам, определённым по сообщениям беседы «${chat.title}»? Он также будет назначаться при первом распознавании новых сотрудников из этой беседы.` : "Убрать назначение отдела по этому чату? Отделы существующих сотрудников сохранятся."}</p>
+          <div className="mt-4 flex justify-end gap-2"><Button onClick={() => setConfirmDepartment(false)}>Отмена</Button><Button variant="primary" onClick={() => setChatDepartment.mutate(undefined, { onSuccess: () => setConfirmDepartment(false) })}>Применить</Button></div>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={chat.approved ? "accent" : "deviation"}>{chat.approved ? "разрешён" : "ждёт разрешения"}</Badge>
         <span className="min-w-0 truncate font-medium">{chat.title || "Без названия"}</span>
@@ -160,7 +196,7 @@ function Chats() {
   return (
     <Panel
       title="Чаты"
-      description="Бот принимает сообщения только из разрешённых групп. Разрешайте только рабочую группу команды."
+      description="Бот принимает сообщения только из разрешённых групп. Разрешайте рабочие беседы компании."
       actions={pending ? <Badge tone="deviation">{pending} ждут</Badge> : undefined}
     >
       <ul className="grid gap-2">

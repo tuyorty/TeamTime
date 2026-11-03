@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { MonthRow } from "@/api/types";
+import { inDepartment, type DepartmentFilter } from "@/lib/departments";
 
 export type Quick = "all" | "under" | "met" | "late" | "bonus";
 
@@ -13,12 +14,13 @@ export const QUICK: { value: Quick; label: string; title: string; test: (r: Mont
 ];
 
 export interface MonthFilter {
+  department: DepartmentFilter;
   query: string;
   position: string;
   quick: Quick;
 }
 
-const EMPTY: MonthFilter = { query: "", position: "", quick: "all" };
+const EMPTY: MonthFilter = { query: "", position: "", quick: "all", department: "all" };
 
 /** Фильтры таблиц месяца: общие для «Итога», «Опозданий» и «Премий». */
 export function useMonthFilter(rows: readonly MonthRow[]) {
@@ -32,11 +34,12 @@ export function useMonthFilter(rows: readonly MonthRow[]) {
     const quick = QUICK.find((x) => x.value === filter.quick)!;
     return rows.filter(
       (r) =>
+        inDepartment(r.employee, filter.department) &&
         (!q || `${r.employee.full_name} ${r.employee.short_name} ${r.employee.position}`.toLowerCase().includes(q)) &&
         (!filter.position || r.employee.position === filter.position) &&
         quick.test(r),
     );
   }, [rows, filter]);
-  const active = filter.query.trim() !== "" || filter.position !== "" || filter.quick !== "all";
+  const active = filter.query.trim() !== "" || filter.position !== "" || filter.quick !== "all" || filter.department !== "all";
   return { filter, setFilter, positions, visible, active, reset: () => setFilter(EMPTY) };
 }

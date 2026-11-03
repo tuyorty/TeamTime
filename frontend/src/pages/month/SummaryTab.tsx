@@ -1,4 +1,6 @@
 import type { Month, MonthRow } from "@/api/types";
+import { Fragment } from "react";
+import { DEPARTMENTS, departmentOf } from "@/lib/departments";
 import { cn } from "@/lib/cn";
 import { hm, percent } from "@/lib/format";
 
@@ -42,10 +44,12 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
           </thead>
           <tbody>
             {sorted.length ? null : <EmptyRows colSpan={7} />}
-            {sorted.map((r) => {
+            {sorted.map((r, index) => {
               const s = r.summary;
               return (
-                <tr key={r.employee.id} className="border-b border-line last:border-b-0">
+                <Fragment key={r.employee.id}>
+                {!sort && (index === 0 || departmentOf(sorted[index - 1]!.employee) !== departmentOf(r.employee)) ? <tr data-department={departmentOf(r.employee)}><th colSpan={7} className="bg-surface-2 px-3 py-2 text-left text-[12px] font-semibold text-ink-2">{DEPARTMENTS[departmentOf(r.employee)]}</th></tr> : null}
+                <tr className="border-b border-line last:border-b-0">
                   <th scope="row" className="px-3 py-2 text-left font-normal">
                     <PersonCell employee={r.employee} position={r.employee.position} />
                   </th>
@@ -68,6 +72,7 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
                     </div>
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>

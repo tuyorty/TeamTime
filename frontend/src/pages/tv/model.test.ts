@@ -3,7 +3,7 @@ import { groupCounts, groupFor, nextDate, sortTeam, tomorrowSummary, tvClock, up
 
 function row(presence: TodayRow["presence"], id = 1): TodayRow {
   return {
-    employee: { id, short_name: `Сотрудник ${id}`, full_name: `Сотрудник ${id}`, position: "", color: "", is_active: true, avatar_url: "" },
+    employee: { id, short_name: `Сотрудник ${id}`, full_name: `Сотрудник ${id}`, position: "", department: "software", color: "", is_active: true, avatar_url: "" },
     presence, daily_overdue: false, tasks: [],
     cell: {
       date: "2026-10-23", state: "pending", status: null, status_label: null, status_note: null,
