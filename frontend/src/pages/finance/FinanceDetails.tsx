@@ -29,7 +29,7 @@ export function FinanceDetails({ row, year, month, label, onClose }: { row: Fina
             <section>
               <h2 className="mb-3 font-semibold">Как получилась сумма</h2>
               <dl className="grid gap-4 text-[13px]">
-                <div><dt className="flex justify-between gap-3"><span className="font-medium">Оклад</span><span className="font-semibold tnum">{money(row.amounts.salary)}</span></dt><dd className="mt-1 text-ink-2">{hm(s.norm_sec)} ч нормы × {money(s.hourly_rate)} / ч. Выплачивается полностью при недоработке.</dd></div>
+                <div><dt className="flex justify-between gap-3"><span className="font-medium">Оклад</span><span className="font-semibold tnum">{money(row.amounts.salary)}</span></dt><dd className="mt-1 text-ink-2">{hm(s.contract_norm_sec)} ч договорной нормы × {money(s.hourly_rate)} / ч. Сохраняется при отпуске, командировке и недоработке.</dd></div>
                 <div><dt className="flex justify-between gap-3"><span className="font-medium">За переработку</span><span className="font-semibold tnum">{money(row.amounts.overtime_pay)}</span></dt><dd className="mt-1 text-ink-2">{hm(s.overtime_sec)} ч сверх нормы × {money(s.hourly_rate)} / ч.</dd></div>
                 <div><dt className="flex justify-between gap-3"><span className="font-medium">Проектные премии</span><span className="font-semibold tnum">{money(row.amounts.project_bonuses)}</span></dt><dd className="mt-1 text-ink-2">Сумма действующих премий за этот месяц.</dd></div>
               </dl>
@@ -41,8 +41,11 @@ export function FinanceDetails({ row, year, month, label, onClose }: { row: Fina
                 <dt className="text-ink-2">С учётом эффективности</dt><dd>{hm(s.result_sec)}</dd>
                 <dt className="text-ink-2">Штраф за опоздания</dt><dd>− {hm(s.penalty_sec)}</dd>
                 <dt className="font-medium">Зачтено</dt><dd className="font-semibold">{hm(s.total_sec)}</dd>
-                <dt className="text-ink-2">Месячная норма</dt><dd>{hm(s.norm_sec)}</dd>
+                <dt className="text-ink-2">Договорная норма</dt><dd>{hm(s.contract_norm_sec)}</dd>
+                <dt className="text-ink-2">Снижение нормы</dt><dd>− {hm(s.norm_reduction_sec)}</dd>
+                <dt className="text-ink-2">Норма для зачёта</dt><dd>{hm(s.norm_sec)}</dd>
               </dl>
+              {s.norm_excluded_days > 0 ? <p className="mt-3 text-[12px] text-ink-2">Отпуск и командировки: исключено {s.norm_excluded_days} из {s.norm_working_days} рабочих дней месяца. Норма: {hm(s.contract_norm_sec)} × ({s.norm_working_days} − {s.norm_excluded_days}) / {s.norm_working_days} = {hm(s.norm_sec)}. Часы командировок не засчитываются.</p> : null}
               <p className="mt-3 text-[12px] text-ink-3">Переработка появляется, когда зачтённые часы превышают норму. Оклад от этих часов не уменьшается.</p>
               {s.days_missing || s.days_without_efficiency || !s.days_worked ? <p className="mt-3 text-[12px] text-deviation-ink">{!s.days_worked ? "В этом месяце пока нет дейликов. " : ""}{s.days_missing ? `Дней без дейлика: ${s.days_missing}. ` : ""}{s.days_without_efficiency ? `Дейликов без эффективности: ${s.days_without_efficiency}. ` : ""}После уточнения данных переработка может измениться.</p> : null}
               {!Number(s.hourly_rate) ? <p className="mt-3 text-[12px] text-deviation-ink">Ставка не указана: оклад и переработка равны нулю. Укажите ставку в карточке сотрудника.</p> : null}

@@ -5,7 +5,7 @@ import { money } from "@/lib/format";
 export function FinanceSummary({ amounts, count }: { amounts: FinanceAmounts; count: number }) {
   const items = [
     { label: "Всего по расчёту", value: amounts.total, hint: `Сотрудников: ${count}`, main: true },
-    { label: "Оклады", value: amounts.salary, hint: "Полная норма × ставка" },
+    { label: "Оклады", value: amounts.salary, hint: "Договорная норма × ставка" },
     { label: "За переработку", value: amounts.overtime_pay, hint: "Сверх нормы по той же ставке" },
     { label: "Проектные премии", value: amounts.project_bonuses, hint: "Добавлены администратором" },
   ];

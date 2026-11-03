@@ -1,6 +1,6 @@
 import {
   AlarmClock, CircleDashed, Coffee, Hourglass, House, LogOut, MoonStar, Palmtree, Sparkles,
-  Thermometer, UserX, type LucideIcon,
+  BriefcaseBusiness, Thermometer, UserX, type LucideIcon,
 } from "lucide-react";
 
 import type { DayCell, StatusKind } from "@/api/types";
@@ -8,6 +8,7 @@ import { clock } from "@/lib/format";
 
 export const STATUS: Record<StatusKind, { label: string; icon: LucideIcon; tone: "absence" | "neutral" }> = {
   vacation: { label: "Отпуск", icon: Palmtree, tone: "absence" },
+  business_trip: { label: "Командировка", icon: BriefcaseBusiness, tone: "absence" },
   sick: { label: "Больничный", icon: Thermometer, tone: "absence" },
   dayoff: { label: "Отгул", icon: Coffee, tone: "absence" },
   absent: { label: "Не придёт", icon: UserX, tone: "absence" },
@@ -27,6 +28,7 @@ export const DEVIATION = {
 export function describeCell(c: DayCell): string {
   const parts: string[] = [];
   if (c.status) parts.push(STATUS[c.status].label);
+  if (c.status === "business_trip") parts.push("часы исключены из зачёта");
   if (c.plan?.kind === "work") parts.push(`план ${clock(c.plan.start)}–${clock(c.plan.end)}`);
   else if (c.plan?.kind === "off") parts.push("выходной по плану");
   else if (c.plan?.kind === "note") parts.push(`план: «${c.plan.note ?? ""}»`);

@@ -19,6 +19,7 @@ class StatusKind(StrEnum):
     """Статус дня, который задают вручную (админ или сотрудник через бота)."""
 
     VACATION = "vacation"
+    BUSINESS_TRIP = "business_trip"
     SICK = "sick"
     REMOTE = "remote"
     DAYOFF = "dayoff"
@@ -36,6 +37,7 @@ class StatusKind(StrEnum):
 
 STATUS_LABELS: dict[StatusKind, str] = {
     StatusKind.VACATION: "Отпуск",
+    StatusKind.BUSINESS_TRIP: "Командировка",
     StatusKind.SICK: "Больничный",
     StatusKind.REMOTE: "Удалёнка",
     StatusKind.DAYOFF: "Отгул",
@@ -130,7 +132,7 @@ class DayResult:
     status: StatusKind | None
 
     worked: int | None
-    """Часы дня (сумма интервалов), секунды. None — нет дейлика (это не 0)."""
+    """Зачтённые часы дня, секунды; в командировке — 0. None — нет дейлика."""
     result: Seconds | None
     """Итог = Часы × e%. None — нет дейлика или не указана эффективность."""
     late: int | None
@@ -156,18 +158,32 @@ def compute_day(
     today: date,
 ) -> DayResult:
     """Посчитать день. ``today`` нужен, чтобы отличить «ещё не прислал» от «не прислал»."""
+    # Явная отметка в расписании действует вместе с его версией; ручной статус приоритетнее.
+    if status is None and plan is not None and plan.kind is PlanDayKind.NOTE:
+        note = (plan.note or "").casefold().strip(" .!")
+        status = {
+            "отпуск": StatusKind.VACATION,
+            "больничный": StatusKind.SICK,
+            "отгул": StatusKind.DAYOFF,
+        }.get(note)
     cancels = status is not None and status.cancels_plan
     holiday = day in rules.holidays
     effective_plan = None if cancels else plan
     planned_work = effective_plan is not None and effective_plan.has_time and not holiday
 
-    worked = fact.worked_seconds if fact else None
+    excluded = status is StatusKind.BUSINESS_TRIP
+    worked = (0 if excluded else fact.worked_seconds) if fact else None
     result: Seconds | None = None
-    if fact is not None and fact.efficiency is not None:
-        result = Fraction(fact.worked_seconds) * fact.efficiency / 100
+    if fact is not None:
+        if excluded:
+            result = Fraction(0)
+        elif fact.efficiency is not None:
+            result = Fraction(fact.worked_seconds) * fact.efficiency / 100
 
     late = early = under = None
     flags: list[str] = []
+    if excluded:
+        flags.append("business_trip_excluded")
     if fact is not None and planned_work and effective_plan is not None:
         assert effective_plan.start is not None
         assert effective_plan.end_abs is not None
@@ -178,7 +194,7 @@ def compute_day(
         for name, value in (("late", late), ("early_leave", early), ("undertime", under)):
             if value:
                 flags.append(name)
-    if fact is not None and fact.efficiency is None:
+    if fact is not None and fact.efficiency is None and not excluded:
         flags.append("no_efficiency")
     if fact is not None and any(i.crosses_midnight for i in fact.intervals):
         flags.append("overnight")
@@ -189,7 +205,9 @@ def compute_day(
     if no_plan:
         flags.append("no_plan")
 
-    if fact is not None:
+    if excluded:
+        state = DayState.ABSENCE
+    elif fact is not None:
         state = DayState.WORKED
         if cancels:
             flags.append("worked_on_absence")

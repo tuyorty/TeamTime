@@ -29,7 +29,7 @@ class FinanceError(ValueError):
 
 def amounts(summary: MonthSummary, bonus: Decimal) -> FinanceAmounts:
     """Недоработка не уменьшает оклад; эффективность и опоздания влияют на переработку."""
-    salary = overtime_bonus(summary.norm, summary.hourly_rate)
+    salary = overtime_bonus(summary.contract_norm, summary.hourly_rate)
     return FinanceAmounts(
         salary=salary,
         overtime_pay=summary.bonus,

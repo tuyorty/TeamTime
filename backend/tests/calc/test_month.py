@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from fractions import Fraction
 
 import pytest
 
@@ -35,7 +36,8 @@ def golden_month():
     | 08   | 10:00-18:00 | 13:20-19:00             | 90  | 5:40 | 5:06 | 3:20      |
 
     Сумма опозданий 5:40 → штраф 5:45 (5:45:42,857…). Итого 26:15 − 5:45:42,857 = 20:29:17,1…
-    Норма 20:00 → переработка 0:29:17,1… × 500 ₽ = 244,05 ₽.
+    Договорная норма 20:00, отпуск 1 из 27 рабочих дней → норма 19:15:33,3…
+    Переработка 1:13:43,8… × 500 ₽ = 614,42 ₽. Оклад остаётся от 20 часов.
     """
     rules = DayRules()
     rows = [
@@ -58,13 +60,15 @@ def test_golden_month() -> None:
     assert m.late_count == 3
     assert format_hm(m.penalty) == "5:45"  # Опоздания(−)
     assert format_hm(m.total) == "20:29"  # Итого
-    assert format_hm(m.overtime) == "0:29"
-    assert m.bonus == Decimal("244.05")
+    assert m.contract_norm == 72000
+    assert m.norm == Fraction(72000 * 26, 27)
+    assert format_hm(m.overtime) == "1:13"
+    assert m.bonus == Decimal("614.42")
     assert m.days_worked == 5
     assert m.days_missing == 1
     assert m.days_no_plan == 1
     assert m.statuses == {StatusKind.VACATION: 1}
-    assert m.norm_progress == pytest.approx(73757.142857 / 72000)
+    assert m.norm_progress == pytest.approx(73757.142857 / (72000 * 26 / 27))
 
 
 def test_bonus_example_from_brief() -> None:

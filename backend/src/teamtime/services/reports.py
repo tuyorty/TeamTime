@@ -138,9 +138,13 @@ def cell_out(cell: DayCell) -> DayCellOut:
     return DayCellOut(
         date=cell.day,
         state=r.state,
-        status=cell.status.kind if cell.status else None,
-        status_label=STATUS_LABELS[cell.status.kind] if cell.status else None,
-        status_note=cell.status.note if cell.status else None,
+        status=r.status,
+        status_label=STATUS_LABELS[r.status] if r.status else None,
+        status_note=cell.status.note
+        if cell.status
+        else r.plan.note
+        if r.status and r.plan
+        else None,
         plan=plan_out(cell.plan_day) if cell.plan_day else None,
         fact=fact_out(daily, truncate_seconds(r.result) if r.result is not None else None)
         if daily
@@ -295,6 +299,10 @@ def summary_out(m: MonthSummary) -> MonthSummaryOut:
         penalty_sec=truncate_seconds(m.penalty),
         total_sec=truncate_seconds(m.total),
         norm_sec=truncate_seconds(m.norm),
+        contract_norm_sec=truncate_seconds(m.contract_norm),
+        norm_reduction_sec=truncate_seconds(m.norm_reduction),
+        norm_working_days=m.norm_working_days,
+        norm_excluded_days=m.norm_excluded_days,
         norm_progress=round(m.norm_progress, 4),
         overtime_sec=truncate_seconds(m.overtime),
         bonus=m.bonus,
@@ -318,6 +326,7 @@ def summarize(
         norm=(terms.monthly_norm_minutes if terms else employee.monthly_norm_minutes) * 60,
         hourly_rate=Decimal(terms.hourly_rate if terms else employee.hourly_rate),
         scale=settings.penalty.scale(),
+        rules=settings.day_rules(),
     )
 
 
@@ -501,7 +510,7 @@ async def month_report(
 
 
 def _presence(cell: DayCell, now_sec: int) -> str:
-    status = cell.status.kind if cell.status else None
+    status = cell.result.status
     if status is StatusKind.OFF:
         return "off"
     if status is not None and status.cancels_plan:
@@ -673,7 +682,13 @@ async def employee_report(
                 DayStatus.date <= today + timedelta(days=366),
                 DayStatus.retracted_at.is_(None),
                 DayStatus.kind.in_(
-                    [StatusKind.VACATION, StatusKind.SICK, StatusKind.DAYOFF, StatusKind.ABSENT]
+                    [
+                        StatusKind.VACATION,
+                        StatusKind.BUSINESS_TRIP,
+                        StatusKind.SICK,
+                        StatusKind.DAYOFF,
+                        StatusKind.ABSENT,
+                    ]
                 ),
             )
             .order_by(DayStatus.date)

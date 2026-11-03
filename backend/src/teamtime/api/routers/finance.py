@@ -111,6 +111,10 @@ async def download(
         "За переработку, ₽",
         "Проектные премии, ₽",
         "Итого, ₽",
+        "Договорная норма",
+        "Снижение нормы",
+        "Рабочих дней месяца",
+        "Исключено рабочих дней",
     ]
     rows = [
         [
@@ -123,6 +127,10 @@ async def download(
             r.amounts.overtime_pay,
             r.amounts.project_bonuses,
             r.amounts.total,
+            export.Duration(r.summary.contract_norm_sec),
+            export.Duration(r.summary.norm_reduction_sec),
+            r.summary.norm_working_days,
+            r.summary.norm_excluded_days,
         ]
         for r in data.rows
     ]
@@ -137,6 +145,10 @@ async def download(
             data.totals.overtime_pay,
             data.totals.project_bonuses,
             data.totals.total,
+            None,
+            None,
+            None,
+            None,
         ]
     )
     if fmt == "csv":
@@ -177,7 +189,21 @@ async def download(
                     [
                         ["Период", data.label],
                         ["Итоги", "Промежуточные" if not data.complete else "За завершённый месяц"],
-                        ["Оклад", "Норма × ставка. Недоработка не уменьшает оклад."],
+                        [
+                            "Оклад",
+                            "Договорная норма × ставка. Отпуск, командировки "
+                            "и недоработка не уменьшают оклад.",
+                        ],
+                        [
+                            "Норма",
+                            "Договорная норма × (рабочие дни − дни отпуска и командировки) "
+                            "/ рабочие дни месяца по календарю xTime.",
+                        ],
+                        [
+                            "Командировки",
+                            "Часы по дейликам сохраняются в источниках, "
+                            "но исключаются из зачёта и переработки.",
+                        ],
                         [
                             "Переработка",
                             "max(0, зачтённые часы − норма) × ставка. "

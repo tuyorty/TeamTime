@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+import calendar
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 
-from teamtime.calc.day import DayResult, DayState, StatusKind
+from teamtime.calc.day import DayResult, DayRules, DayState, StatusKind
 from teamtime.calc.duration import HOUR, Seconds
 from teamtime.calc.penalty import DEFAULT_SCALE, PenaltyScale
 
@@ -33,6 +35,12 @@ class MonthSummary:
     total: Seconds
     """Итого = Часы(e%) − Опоздания(−)."""
     norm: Seconds
+    """Норма после исключения рабочих дней отпуска и командировки."""
+    contract_norm: Seconds
+    """Полная договорная норма, от которой считается оклад."""
+    norm_reduction: Seconds
+    norm_working_days: int
+    norm_excluded_days: int
     overtime: Seconds
     """Переработка = max(0, Итого − норма)."""
     bonus: Decimal
@@ -47,7 +55,7 @@ class MonthSummary:
     @property
     def norm_progress(self) -> float:
         """Выполнение нормы, доля (1.0 — ровно норма). По Итого, как в таблице."""
-        return float(self.total / self.norm) if self.norm else 0.0
+        return float(self.total / self.norm) if self.norm else float(self.total >= 0)
 
 
 def overtime_bonus(overtime: Seconds, hourly_rate: Decimal) -> Decimal:
@@ -65,15 +73,37 @@ def summarize_month(
     norm: Seconds | int,
     hourly_rate: Decimal,
     scale: PenaltyScale = DEFAULT_SCALE,
+    rules: DayRules = DayRules(),
 ) -> MonthSummary:
     days = list(days)
+    contract_norm = Fraction(norm)
+    working_days: set[date] = set()
+    if days:
+        first = days[0].day.replace(day=1)
+        if any((d.day.year, d.day.month) != (first.year, first.month) for d in days):
+            raise ValueError("Для итога месяца нужны дни одного месяца")
+        working_days = {
+            date(first.year, first.month, n)
+            for n in range(1, calendar.monthrange(first.year, first.month)[1] + 1)
+            if date(first.year, first.month, n).weekday() not in rules.weekly_off
+            and date(first.year, first.month, n) not in rules.holidays
+        }
+    excluded_days = {
+        d.day
+        for d in days
+        if d.day in working_days and d.status in {StatusKind.VACATION, StatusKind.BUSINESS_TRIP}
+    }
+    reduction = (
+        contract_norm * len(excluded_days) / len(working_days) if working_days else Fraction(0)
+    )
+    effective_norm = contract_norm - reduction
     worked = sum((Fraction(d.worked) for d in days if d.worked is not None), Fraction(0))
     result = sum((d.result for d in days if d.result is not None), Fraction(0))
     late_total = sum((Fraction(d.late) for d in days if d.late), Fraction(0))
     late_count = sum(1 for d in days if d.late)
     penalty = scale.penalty(late_total)
     total = result - penalty
-    overtime = max(Fraction(0), total - Fraction(norm))
+    overtime = max(Fraction(0), total - effective_norm)
     statuses = Counter(d.status for d in days if d.status is not None)
     return MonthSummary(
         worked=worked,
@@ -82,7 +112,11 @@ def summarize_month(
         late_count=late_count,
         penalty=penalty,
         total=total,
-        norm=Fraction(norm),
+        norm=effective_norm,
+        contract_norm=contract_norm,
+        norm_reduction=reduction,
+        norm_working_days=len(working_days),
+        norm_excluded_days=len(excluded_days),
         overtime=overtime,
         bonus=overtime_bonus(overtime, hourly_rate),
         hourly_rate=hourly_rate,

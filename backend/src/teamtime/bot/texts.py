@@ -6,7 +6,7 @@ from datetime import date, datetime
 from html import escape
 from textwrap import wrap
 
-from teamtime.calc import DayState
+from teamtime.calc import DayState, StatusKind
 from teamtime.calc.duration import format_hm
 from teamtime.schemas import (
     DayCellOut,
@@ -71,6 +71,8 @@ def fact_text(cell: DayCellOut) -> str:
             DayState.OFF: "выходной",
         }.get(cell.state, "—")
     intervals = "; ".join(span(start, end) for start, end in fact.intervals)
+    if cell.status is StatusKind.BUSINESS_TRIP:
+        return f"{intervals} · командировка, часы исключены из зачёта"
     return f"{intervals} · <b>{format_hm(fact.worked_sec)}</b>"
 
 
@@ -171,7 +173,12 @@ def format_day_summary(report: TodayOut) -> str:
                 else " · эффективность не указана"
             )
             lines.append(
-                f"• <b>{_name(row.employee)}</b> — {format_hm(fact.worked_sec)}{efficiency}"
+                f"• <b>{_name(row.employee)}</b> — "
+                + (
+                    "командировка, часы исключены из зачёта"
+                    if row.cell.status is StatusKind.BUSINESS_TRIP
+                    else f"{format_hm(fact.worked_sec)}{efficiency}"
+                )
             )
     return "\n".join(lines)
 
@@ -320,6 +327,14 @@ def format_month(name: str, label: str, summary: MonthSummaryOut) -> str:
         f"Опозданий: {summary.late_count} · всего {format_hm(summary.late_total_sec)}",
         f"Штраф за месяц: <b>{format_hm(summary.penalty_sec)}</b>",
     ]
+    if summary.norm_excluded_days:
+        lines += [
+            "",
+            f"Норма: {format_hm(summary.contract_norm_sec)} − "
+            f"{format_hm(summary.norm_reduction_sec)} = {format_hm(summary.norm_sec)}",
+            f"Отпуск и командировки: {summary.norm_excluded_days} из "
+            f"{summary.norm_working_days} рабочих дней. Оклад сохраняется.",
+        ]
     if summary.overtime_sec:
         bonus = f"{summary.bonus:,.2f}".replace(",", " ").replace(".", ",")
         lines += [

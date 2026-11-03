@@ -113,12 +113,18 @@ export function DayDetail({ employee, cell }: { employee: EmployeeBrief; cell: D
               {clock(f.start)} / {clock(f.end)}
             </Row>
             <Row label="Итог">
-              <span className="font-medium">
-                {hm(f.worked_sec)} × {f.efficiency ?? "?"}% = {hm(f.result_sec)}
-              </span>
-              {f.efficiency === null || f.efficiency === undefined ? (
-                <span className="ml-2 text-deviation-ink">эффективность не указана</span>
-              ) : null}
+              {cell.status === "business_trip" ? (
+                <span className="text-ink-2">{hm(f.worked_sec)} в дейлике; в зачёт — 0:00. Командировка оплачивается отдельно.</span>
+              ) : (
+                <>
+                  <span className="font-medium">
+                    {hm(f.worked_sec)} × {f.efficiency ?? "?"}% = {hm(f.result_sec)}
+                  </span>
+                  {f.efficiency === null || f.efficiency === undefined ? (
+                    <span className="ml-2 text-deviation-ink">эффективность не указана</span>
+                  ) : null}
+                </>
+              )}
             </Row>
           </>
         ) : null}
@@ -368,9 +374,12 @@ function StatusForm({ employee, cell, onDone }: { employee: EmployeeBrief; cell:
           <option value="none">снять статус</option>
         </Select>
       </Field>
-      <Field label="По какое число" hint="Для периода отпуска или больничного">
+      <Field label="По какое число" hint="Можно отметить отпуск, больничный или командировку на весь период">
         <Input type="date" min={cell.date} value={end} onChange={(e) => setEnd(e.target.value)} />
       </Field>
+      {kind === "vacation" || kind === "business_trip" ? (
+        <p className="text-[12px] text-ink-2">Норма уменьшится пропорционально рабочим дням периода по календарю xTime. Оклад сохранится.{kind === "business_trip" ? " Часы командировки не входят в зачёт и переработку." : ""}</p>
+      ) : null}
       <Field label="Комментарий">
         <Input value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>

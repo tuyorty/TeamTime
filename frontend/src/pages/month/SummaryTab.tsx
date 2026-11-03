@@ -55,7 +55,10 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
                     {s.penalty_sec > 0 ? `−${hm(s.penalty_sec)}` : "—"}
                   </td>
                   <td className={cn(td, "text-right text-[14px] font-semibold")}>{hm(s.total_sec)}</td>
-                  <td className={cn(td, "text-right text-ink-2")}>{hm(s.norm_sec)}</td>
+                  <td className={cn(td, "text-right text-ink-2")}>
+                    {hm(s.norm_sec)}
+                    {s.norm_excluded_days > 0 ? <div className="text-[11px] text-ink-3" title={`Договорная норма ${hm(s.contract_norm_sec)}. Исключено ${s.norm_excluded_days} из ${s.norm_working_days} рабочих дней.`}>−{hm(s.norm_reduction_sec)}</div> : null}
+                  </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <NormBar total={s.total_sec} norm={s.norm_sec} max={max} />
@@ -87,7 +90,7 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
       </div>
       <p className="text-[12px] text-ink-3">
         Итого = Часы(e%) − Опоздания(−). Опоздания(−) — штраф по прогрессивной шкале от суммы опозданий за
-        месяц (вкладка «Опоздания»). Норма фиксированная и не уменьшается из-за отпусков и праздников. Риска на полосе —
+        месяц (вкладка «Опоздания»). Отпуск и командировки уменьшают норму пропорционально рабочим дням месяца по календарю xTime. Оклад сохраняется. Часы командировок исключены из зачёта. Риска на полосе —
         норма.
       </p>
     </div>

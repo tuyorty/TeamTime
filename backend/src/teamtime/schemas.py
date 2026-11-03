@@ -224,7 +224,11 @@ class MonthSummaryOut(BaseModel):
     late_count: int
     penalty_sec: int = Field(description="Опоздания(−): штраф по шкале")
     total_sec: int = Field(description="Итого = Часы(e%) − Опоздания(−)")
-    norm_sec: int
+    norm_sec: int = Field(description="Норма с учётом отпуска и командировок")
+    contract_norm_sec: int = Field(description="Полная договорная норма для оклада")
+    norm_reduction_sec: int
+    norm_working_days: int
+    norm_excluded_days: int
     norm_progress: float
     overtime_sec: int
     bonus: Decimal = Field(description="Премия за переработку, ₽")

@@ -20,5 +20,5 @@ def test_overtime_uses_exact_fraction_after_efficiency_and_penalty():
     summary = summarize_month(golden_month(), norm=20 * 3600, hourly_rate=Decimal(500))
     result = amounts(summary, Decimal("1000.05"))
     assert result.salary == Decimal("10000.00")
-    assert result.overtime_pay == Decimal("244.05")
-    assert result.total == Decimal("11244.10")
+    assert result.overtime_pay == Decimal("614.42")
+    assert result.total == Decimal("11614.47")

@@ -8,6 +8,41 @@ async function login(page: Page) {
   expect(r.ok()).toBeTruthy();
 }
 
+test("командировка: администратор меняет норму за период, оклад сохраняется", async ({ page }) => {
+  await login(page);
+  const before = await (await page.request.get("/api/v1/finances/2026/2")).json();
+  const original = before.rows.find((row: { summary: { contract_norm_sec: number } }) => row.summary.contract_norm_sec > 0);
+  const employee = original.employee;
+  const path = `/api/v1/admin/days/${employee.id}/2026-02-02/status`;
+  const headers = { "X-Requested-With": "teamtime" };
+  try {
+    await page.goto(`/week/2026/6?day=2026-02-02&e=${employee.id}`);
+    const detail = page.getByRole("dialog");
+    await detail.getByRole("button", { name: "Статус", exact: true }).click();
+    await detail.getByLabel("Статус", { exact: true }).selectOption("business_trip");
+    await detail.getByLabel("По какое число").fill("2026-02-15");
+    await expect(detail.getByText(/Оклад сохранится/)).toBeVisible();
+    await detail.getByRole("button", { name: "Сохранить статус", exact: true }).click();
+    await expect.poll(async () => {
+      const report = await (await page.request.get("/api/v1/finances/2026/2")).json();
+      return report.rows.find((row: { employee: { id: number } }) => row.employee.id === employee.id).summary.norm_excluded_days;
+    }).toBeGreaterThan(0);
+    const report = await (await page.request.get("/api/v1/finances/2026/2")).json();
+    const changed = report.rows.find((row: { employee: { id: number } }) => row.employee.id === employee.id);
+    expect(changed.summary.norm_sec).toBeLessThan(original.summary.norm_sec);
+    expect(changed.amounts.salary).toBe(original.amounts.salary);
+    await page.goto("/finances?month=2026-02");
+    await page.getByRole("button", { name: `Расчёт: ${employee.short_name}`, exact: true }).first().click();
+    await expect(page.getByRole("dialog").getByText(/Отпуск и командировки: исключено/)).toBeVisible();
+    await expect(page.getByRole("dialog").getByText(/договорной нормы/)).toBeVisible();
+  } finally {
+    const response = await page.request.put(path, { headers, data: { kind: null, end: "2026-02-15", reason: "Завершена проверка демо" } });
+    expect(response.ok()).toBeTruthy();
+  }
+  const after = await (await page.request.get("/api/v1/finances/2026/2")).json();
+  expect(after.rows.find((row: { employee: { id: number } }) => row.employee.id === employee.id).summary.norm_sec).toBe(original.summary.norm_sec);
+});
+
 test("финансы: расчёт, выбор месяца, премия и отмена с сохранением истории", async ({ page }) => {
   await page.goto("/finances");
   await expect(page.getByRole("heading", { name: "Финансы", exact: true })).toBeVisible();
@@ -19,7 +54,7 @@ test("финансы: расчёт, выбор месяца, премия и о�
   await page.getByRole("button", { name: `Расчёт: ${employee.short_name}`, exact: true }).first().click();
   const details = page.getByRole("dialog");
   await expect(details.getByRole("heading", { name: "Как получилась сумма" })).toBeVisible();
-  await expect(details.getByText(/Выплачивается полностью при недоработке/)).toBeVisible();
+  await expect(details.getByText(/Сохраняется при отпуске, командировке и недоработке/)).toBeVisible();
   await details.getByRole("button", { name: "Закрыть", exact: true }).click();
   await page.getByRole("button", { name: "Предыдущий месяц" }).click();
   await expect(page.getByLabel("Месяц расчёта")).not.toHaveValue(month);
@@ -102,9 +137,11 @@ test("финансы: сортировка начислений и поиск п
 });
 
 test("финансы: графики учитывают отбор, сортировку и показывают доплаты отдельно", async ({ page }) => {
-  const data: import("../src/api/types").Finance = await (await page.request.get("/api/v1/finances/2026/10")).json();
+  const meta = await (await page.request.get("/api/v1/meta")).json();
+  const [year, month] = meta.today.split("-").map(Number);
+  const data: import("../src/api/types").Finance = await (await page.request.get(`/api/v1/finances/${year}/${month}`)).json();
   const rub = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", minimumFractionDigits: 2 });
-  await page.goto("/finances/2026/10");
+  await page.goto(`/finances/${year}/${month}`);
   const charts = page.getByRole("region", { name: "Графики финансов", exact: true });
   const employees = charts.getByRole("list", { name: "Сотрудники на графике" }).getByRole("button");
   await page.getByLabel("Сортировка начислений").selectOption("total:desc");

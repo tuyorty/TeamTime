@@ -31,6 +31,10 @@ def test_month_text_mentions_bonus_and_truncation() -> None:
         penalty_sec=20742,
         total_sec=459300,
         norm_sec=80 * 3600,
+        contract_norm_sec=160 * 3600,
+        norm_reduction_sec=80 * 3600,
+        norm_working_days=20,
+        norm_excluded_days=10,
         norm_progress=1.59,
         overtime_sec=171300,
         bonus=Decimal("29739.58"),
@@ -46,6 +50,8 @@ def test_month_text_mentions_bonus_and_truncation() -> None:
     assert "премия 29 739,58 ₽" in text
     assert "Без дейлика: 1 день" in text
     assert "усечены до минут" in text
+    assert "Норма: 160:00 − 80:00 = 80:00" in text
+    assert "10 из 20 рабочих дней. Оклад сохраняется." in text
 
 
 def test_fix_link() -> None:

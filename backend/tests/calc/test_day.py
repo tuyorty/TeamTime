@@ -22,6 +22,32 @@ TODAY = date(2026, 10, 26)
 RULES = DayRules()
 
 
+@pytest.mark.parametrize(
+    ("text", "status"),
+    [
+        ("отпуск", StatusKind.VACATION),
+        ("Больничный", StatusKind.SICK),
+        ("отгул", StatusKind.DAYOFF),
+    ],
+)
+def test_explicit_schedule_absence_is_not_a_missing_daily(text, status):
+    result = compute_day(DAY, note(text), None, None, RULES, TODAY)
+    assert result.status is status
+    assert result.state is DayState.ABSENCE
+    assert result.planned is None
+    assert "missing_daily" not in result.flags
+
+
+def test_manual_status_overrides_schedule_note():
+    result = compute_day(DAY, note("отпуск"), None, StatusKind.REMOTE, RULES, TODAY)
+    assert result.status is StatusKind.REMOTE
+
+
+def test_free_text_mention_of_vacation_is_not_an_absence():
+    result = compute_day(DAY, note("возможно уйду в отпуск"), None, None, RULES, TODAY)
+    assert result.status is None
+
+
 def day(plan=None, f=None, status=None, rules=RULES, on=DAY, today=TODAY):
     return compute_day(on, plan, f, status, rules, today)
 

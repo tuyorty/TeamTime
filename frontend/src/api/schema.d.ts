@@ -1814,8 +1814,22 @@ export interface components {
              * @description Итого = Часы(e%) − Опоздания(−)
              */
             total_sec: number;
-            /** Norm Sec */
+            /**
+             * Norm Sec
+             * @description Норма с учётом отпуска и командировок
+             */
             norm_sec: number;
+            /**
+             * Contract Norm Sec
+             * @description Полная договорная норма для оклада
+             */
+            contract_norm_sec: number;
+            /** Norm Reduction Sec */
+            norm_reduction_sec: number;
+            /** Norm Working Days */
+            norm_working_days: number;
+            /** Norm Excluded Days */
+            norm_excluded_days: number;
             /** Norm Progress */
             norm_progress: number;
             /** Overtime Sec */
@@ -2362,7 +2376,7 @@ export interface components {
          * @description Статус дня, который задают вручную (админ или сотрудник через бота).
          * @enum {string}
          */
-        StatusKind: "vacation" | "sick" | "remote" | "dayoff" | "off" | "absent";
+        StatusKind: "vacation" | "business_trip" | "sick" | "remote" | "dayoff" | "off" | "absent";
         /** StatusRequestOut */
         StatusRequestOut: {
             /** Id */

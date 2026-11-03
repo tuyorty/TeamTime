@@ -16,7 +16,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from teamtime.calc import STATUS_LABELS
+from teamtime.calc import STATUS_LABELS, StatusKind
 from teamtime.calc.duration import format_hm
 from teamtime.schemas import DayCellOut, MonthOut, WeekOut
 
@@ -59,7 +59,7 @@ def day_rows(name: str, position: str, cells: Sequence[DayCellOut]) -> list[list
             TimeOfDay(f.start) if f else None,
             TimeOfDay(f.end) if f else None,
             "; ".join(f"{format_hm(a)}–{format_hm(b)}" for a, b in f.intervals) if f else "",
-            Duration(f.worked_sec) if f else None,
+            Duration(0 if c.status is StatusKind.BUSINESS_TRIP else f.worked_sec) if f else None,
             f.efficiency if f else None,
             Duration(f.result_sec) if f and f.result_sec is not None else None,
             Duration(c.late_sec) if c.late_sec else None,
@@ -87,7 +87,8 @@ def month_summary_rows(month: MonthOut) -> tuple[list[str], list[list[Any]]]:
     header = [
         "Сотрудник", "Должность", "Часы(+)", "Часы(e%)", "Опоздания(−)", "Итого", "Норма",
         "Выполнение нормы", "Опозданий, дней", "Сумма опозданий", "Переработка",
-        "Ставка, ₽/ч", "Премия, ₽",
+        "Ставка, ₽/ч", "Премия, ₽", "Договорная норма", "Снижение нормы",
+        "Рабочих дней месяца", "Исключено рабочих дней",
     ]  # fmt: skip
     rows = [
         [
@@ -104,6 +105,10 @@ def month_summary_rows(month: MonthOut) -> tuple[list[str], list[list[Any]]]:
             Duration(r.summary.overtime_sec),
             float(r.summary.hourly_rate),
             float(r.summary.bonus),
+            Duration(r.summary.contract_norm_sec),
+            Duration(r.summary.norm_reduction_sec),
+            r.summary.norm_working_days,
+            r.summary.norm_excluded_days,
         ]
         for r in month.rows
     ]

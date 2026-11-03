@@ -87,8 +87,10 @@ async def test_golden_month_from_messages(session: AsyncSession) -> None:
     assert s.late_count == 3
     assert format_hm(s.penalty_sec) == "5:45"
     assert format_hm(s.total_sec) == "20:29"
-    assert format_hm(s.overtime_sec) == "0:29"
-    assert s.bonus == Decimal("244.05")
+    assert format_hm(s.overtime_sec) == "1:13"
+    assert s.bonus == Decimal("614.42")
+    assert s.contract_norm_sec == 72000
+    assert (s.norm_excluded_days, s.norm_working_days) == (1, 27)
     assert s.days_missing == 1  # 07.10: план был, дейлика нет
     assert s.days_no_plan == 1  # 03.10: «по вайбу»
     assert s.statuses == {"vacation": 1}

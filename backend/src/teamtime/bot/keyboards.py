@@ -301,6 +301,7 @@ def status_menu() -> InlineKeyboardMarkup:
         ("remote", "Удалёнка сегодня"),
         ("sick", "Больничный сегодня"),
         ("dayoff", "Отгул сегодня"),
+        ("business_trip", "Командировка сегодня"),
         ("vacation", "Отпуск…"),
         ("clear", "Снять статус сегодня"),
     ):

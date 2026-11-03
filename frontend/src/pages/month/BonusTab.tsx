@@ -130,6 +130,7 @@ export function BonusTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
 function Breakdown({ row }: { row: MonthRow }) {
   const s = row.summary;
   const lines: [string, string][] = [
+    ["Норма", `${hm(s.contract_norm_sec)} − ${hm(s.norm_reduction_sec)} = ${hm(s.norm_sec)}; исключено ${s.norm_excluded_days} из ${s.norm_working_days} рабочих дней`],
     ["Итого", `Часы(e%) ${hm(s.result_sec)} − Опоздания(−) ${hm(s.penalty_sec)} = ${hm(s.total_sec)}`],
     ["Переработка", `max(0, ${hm(s.total_sec)} − норма ${hm(s.norm_sec)}) = ${hm(s.overtime_sec)}`],
     [

@@ -336,7 +336,7 @@ function EmployeeForm({
         <Textarea maxLength={500} value={form.about} onChange={(e) => set("about")(e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Норма в месяц, ч" error={normError} hint="Не уменьшается из-за отпусков">
+        <Field label="Норма в месяц, ч" error={normError} hint="Договорная норма для оклада. Отпуск и командировки уменьшают норму часов для зачёта.">
           <Input inputMode="decimal" value={form.norm} onChange={(e) => set("norm")(e.target.value)} />
         </Field>
         <Field label="Ставка, ₽/ч" error={rateError} hint="Для оклада и оплаты переработки">
