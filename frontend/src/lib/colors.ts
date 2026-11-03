@@ -15,7 +15,10 @@ const SLOTS: Record<string, { light: string; dark: string }> = {
 const ORDER = Object.keys(SLOTS);
 
 export function employeeColor(color: string, id: number, dark: boolean): string {
-  const slot = SLOTS[color] ?? SLOTS[ORDER[(id - 1) % ORDER.length]!]!;
+  // У ещё не привязанного автора ленты ID = 0; ему тоже нужен корректный цвет.
+  const index = Number.isSafeInteger(id) && id > 0 ? (id - 1) % ORDER.length : 0;
+  const key = Object.hasOwn(SLOTS, color) ? color : ORDER[index]!;
+  const slot = SLOTS[key]!;
   return dark ? slot.dark : slot.light;
 }
 
