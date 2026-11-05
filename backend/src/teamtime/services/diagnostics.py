@@ -17,6 +17,7 @@ from teamtime.db.models import (
     DailyReminder,
     Employee,
     NotificationPreference,
+    ShiftReminder,
     SystemStatus,
     TelegramIdentity,
 )
@@ -52,12 +53,14 @@ class DMOut(BaseModel):
     name: str
     ready: bool
     enabled: bool
+    arrival_enabled: bool
     delay_minutes: int
     quiet_start: int | None
     quiet_end: int | None
 
 
 class ReminderOut(BaseModel):
+    kind: str = "daily"
     employee_id: int
     work_date: str
     state: str
@@ -193,6 +196,13 @@ async def system_state(session: AsyncSession, settings: AppSettings) -> SystemOu
             select(TelegramIdentity).where(TelegramIdentity.dm_chat_id.is_not(None))
         )
     )
+    shift_reminders = list(
+        await session.scalars(
+            select(ShiftReminder)
+            .order_by(ShiftReminder.work_date.desc(), ShiftReminder.employee_id)
+            .limit(50)
+        )
+    )
     ready_ids = {row.employee_id for row in identities}
     preferences = {p.employee_id: p for p in await session.scalars(select(NotificationPreference))}
     employees = await session.scalars(
@@ -208,6 +218,8 @@ async def system_state(session: AsyncSession, settings: AppSettings) -> SystemOu
                 ready=employee.id in ready_ids,
                 enabled=settings.bot.reminders_enabled
                 and (preference.enabled if preference else True),
+                arrival_enabled=settings.bot.reminders_enabled
+                and (preference.enabled and preference.arrival_enabled if preference else True),
                 delay_minutes=(preference.delay_minutes if preference else None)
                 or settings.bot.reminder_delay_minutes,
                 quiet_start=preference.quiet_start if preference else None,
@@ -240,6 +252,27 @@ async def system_state(session: AsyncSession, settings: AppSettings) -> SystemOu
                 error_code=row.error_code,
             )
             for row in reminders
+        ]
+        + [
+            ReminderOut(
+                kind="arrival",
+                employee_id=row.employee_id,
+                work_date=row.work_date.isoformat(),
+                state="sent"
+                if row.sent_at
+                else "unknown"
+                if row.attempted_at
+                else "deferred"
+                if row.next_attempt_at
+                else "pending",
+                attempts=row.attempts,
+                sent_at=row.sent_at,
+                deferred_until=row.next_attempt_at,
+                snooze_until=None,
+                followup_sent_at=None,
+                error_code=row.error_code,
+            )
+            for row in shift_reminders
         ],
         personal_notifications=dm,
     )

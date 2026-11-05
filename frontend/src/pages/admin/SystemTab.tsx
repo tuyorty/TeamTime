@@ -104,7 +104,8 @@ export function SystemTab() {
               <Badge tone={person.ready ? "accent" : "deviation"}>
                 {person.ready ? "Личка доступна" : "Нет доступной лички"}
               </Badge>
-              <span>{person.enabled ? `Через ${person.delay_minutes} мин` : "Отключил напоминания"}</span>
+              <span>{person.enabled ? `Дейлик: через ${person.delay_minutes} мин` : "Отключил напоминания"}</span>
+              {person.arrival_enabled ? <span>Начало дня: за час</span> : null}
               {person.quiet_start != null && person.quiet_end != null ? (
                 <span className="text-ink-3">
                   Тихое время: {`${Math.floor(person.quiet_start / 60)}`.padStart(2, "0")}:
@@ -139,13 +140,14 @@ export function SystemTab() {
       </Panel>
       <Panel
         title="Последние напоминания"
-        description="Неопределённую отправку автоматически не повторяем. Один дополнительный повтор возможен по просьбе сотрудника."
+        description="Неопределённую отправку автоматически не повторяем. Повтор по просьбе сотрудника доступен только для дейлика."
       >
         <div className="max-h-80 divide-y divide-line overflow-y-auto">
           {data.reminders.map((item, index) => (
             <div key={index} className="flex flex-wrap gap-3 py-2 text-[12px]">
               <b>{names.get(item.employee_id) ?? `#${item.employee_id}`}</b>
               <span>{item.work_date}</span>
+              <span>{item.kind === "arrival" ? "Начало дня" : "Дейлик"}</span>
               <State value={item.state} />
               <span>Попыток: {item.attempts}</span>
               {item.deferred_until ? <span>Отложено до {when(item.deferred_until)}</span> : null}

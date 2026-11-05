@@ -151,6 +151,23 @@ class TelegramIdentity(Base):
     suggested_employee: Mapped[Employee | None] = relationship(foreign_keys=[suggested_employee_id])
 
 
+class ShiftReminder(Base):
+    """Одно напоминание о начале дня на сотрудника и дату, независимо от правок плана."""
+
+    __tablename__ = "shift_reminders"
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    work_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    shift_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+
+
 class DailyReminder(Base):
     """Личные напоминания: попытка фиксируется до обращения в Telegram."""
 
@@ -257,6 +274,7 @@ class NotificationPreference(Base):
         ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    arrival_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     delay_minutes: Mapped[int | None] = mapped_column(Integer)
     quiet_start: Mapped[int | None] = mapped_column(Integer)
     quiet_end: Mapped[int | None] = mapped_column(Integer)

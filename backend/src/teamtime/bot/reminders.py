@@ -32,6 +32,7 @@ from teamtime.services.notifications import next_allowed
 from teamtime.services.settings import AppSettings, load_settings
 
 from .keyboards import reminder_menu
+from .shift_reminders import send_shift_reminders
 from .texts import format_reminder
 
 log = get_logger(__name__)
@@ -355,10 +356,11 @@ async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) 
 
 async def reminder_loop(bot: Bot, maker: async_sessionmaker[AsyncSession]) -> None:
     while True:
-        try:
-            await send_due_reminders(bot, maker)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # ошибка одного прохода не останавливает напоминания
-            log.warning("bot.reminders_failed", error=type(exc).__name__)
+        for send in (send_shift_reminders, send_due_reminders):
+            try:
+                await send(bot, maker)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # ошибка одного вида не мешает другим напоминаниям
+                log.warning("bot.reminders_failed", kind=send.__name__, error=type(exc).__name__)
         await asyncio.sleep(CHECK_SECONDS)

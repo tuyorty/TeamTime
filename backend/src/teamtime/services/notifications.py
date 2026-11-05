@@ -36,7 +36,8 @@ async def save_preferences(
         row = NotificationPreference(employee_id=employee_id)
         session.add(row)
     before = {
-        key: getattr(row, key) for key in ("enabled", "delay_minutes", "quiet_start", "quiet_end")
+        key: getattr(row, key)
+        for key in ("enabled", "arrival_enabled", "delay_minutes", "quiet_start", "quiet_end")
     }
     for key in before:
         if key in values:

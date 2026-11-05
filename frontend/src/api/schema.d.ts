@@ -1159,6 +1159,8 @@ export interface components {
             ready: boolean;
             /** Enabled */
             enabled: boolean;
+            /** Arrival Enabled */
+            arrival_enabled: boolean;
             /** Delay Minutes */
             delay_minutes: number;
             /** Quiet Start */
@@ -2021,6 +2023,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Arrival Enabled
+             * @default true
+             */
+            arrival_enabled: boolean;
             /** Delay Minutes */
             delay_minutes?: number | null;
             /** Quiet Start */
@@ -2035,6 +2042,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Arrival Enabled
+             * @default true
+             */
+            arrival_enabled: boolean;
             /** Delay Minutes */
             delay_minutes?: number | null;
             /** Quiet Start */
@@ -2357,6 +2369,11 @@ export interface components {
         };
         /** ReminderOut */
         ReminderOut: {
+            /**
+             * Kind
+             * @default daily
+             */
+            kind: string;
             /** Employee Id */
             employee_id: number;
             /** Work Date */

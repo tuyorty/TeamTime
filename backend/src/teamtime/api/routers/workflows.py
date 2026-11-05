@@ -93,6 +93,7 @@ async def decide_status(
 
 class NotificationIn(BaseModel):
     enabled: bool = True
+    arrival_enabled: bool = True
     delay_minutes: int | None = Field(None, ge=1, le=240)
     quiet_start: int | None = Field(None, ge=0, le=1439)
     quiet_end: int | None = Field(None, ge=0, le=1439)

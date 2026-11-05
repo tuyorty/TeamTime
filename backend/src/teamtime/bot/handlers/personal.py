@@ -285,6 +285,7 @@ def preferences_text(
         preference.delay_minutes if preference else None
     ) or settings.bot.reminder_delay_minutes
     quiet = "выключено"
+    arrival = "за час" if not preference or preference.arrival_enabled else "выключено"
     if preference and preference.quiet_start is not None and preference.quiet_end is not None:
         quiet = (
             f"{preference.quiet_start // 60:02}:{preference.quiet_start % 60:02}–"
@@ -293,14 +294,15 @@ def preferences_text(
     text = (
         "🔔 <b>Личные уведомления</b>\n\n"
         f"Напоминания: <b>{'включены' if enabled else 'выключены'}</b>\n"
+        f"Перед началом дня: <b>{arrival}</b>\n"
         f"Задержка после смены: <b>{delay} мин</b>\nТихое время: <b>{quiet}</b>\n"
         f"Часовой пояс: {escape(settings.timezone)}"
     )
     if not settings.bot.reminders_enabled:
         text += "\n\nОбщие напоминания сейчас выключены администратором."
     text += (
-        "\n\nТихое время откладывает доставку. Кнопка в напоминании позволяет один раз "
-        "запросить повтор через 30 минут."
+        "\n\nНапоминание о начале дня приходит один раз, только до начала смены. "
+        "Тихое время учитывается. Для дейлика можно один раз запросить повтор через 30 минут."
     )
     kb = InlineKeyboardBuilder()
     kb.button(
@@ -311,9 +313,15 @@ def preferences_text(
         kb.button(
             text=f"{value} мин", callback_data=PersonalCb(action="notify_delay", value=str(value))
         )
+    kb.button(
+        text="Перед сменой: выкл."
+        if preference and not preference.arrival_enabled
+        else "Перед сменой: вкл.",
+        callback_data=PersonalCb(action="notify_arrival"),
+    )
     kb.button(text="Тихое время…", callback_data=PersonalCb(action="notify_quiet"))
     kb.button(text="Убрать тихое время", callback_data=PersonalCb(action="notify_quiet_off"))
-    kb.adjust(1, 3, 2)
+    kb.adjust(1, 3, 1, 2)
     return text, kb
 
 
@@ -475,6 +483,8 @@ async def personal_action(
         values = {"enabled": not (preference.enabled if preference else True)}
     elif action == "notify_delay" and value in {"15", "30", "60"}:
         values = {"delay_minutes": int(value)}
+    elif action == "notify_arrival":
+        values = {"arrival_enabled": not (preference.arrival_enabled if preference else True)}
     elif action == "notify_quiet_off":
         values = {"quiet_start": None, "quiet_end": None}
     elif action == "notify_quiet":
