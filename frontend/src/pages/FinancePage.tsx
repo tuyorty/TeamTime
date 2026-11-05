@@ -17,6 +17,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { MONTHS, shiftMonth } from "@/lib/format";
 
 import { BonusForm } from "./finance/BonusForm";
+import { sumAmounts } from "./finance/amounts";
 import { FinanceCharts } from "./finance/FinanceCharts";
 import { FinanceDetails } from "./finance/FinanceDetails";
 import { FinanceSummary } from "./finance/FinanceSummary";
@@ -96,7 +97,7 @@ function FinancePeriod({ year, month, current, department }: { year: number; mon
               {admin ? <Button variant="primary" onClick={() => setAdding(true)} disabled={isFetching}><Plus /> Добавить премию</Button> : null}
             </div>
           </div>
-          <FinanceSummary amounts={data.totals} count={data.rows.length} />
+          <FinanceSummary amounts={sumAmounts(rows)} count={rows.length} />
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-44 flex-1 sm:max-w-80"><Search className="pointer-events-none absolute left-2.5 top-2 size-4 text-ink-3" /><Input className="pl-8" aria-label="Найти сотрудника" placeholder="Имя или должность" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
             <DepartmentFilter value={department.department} onChange={department.setDepartment} />

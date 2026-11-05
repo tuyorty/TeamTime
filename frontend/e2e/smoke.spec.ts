@@ -8,6 +8,25 @@ async function login(page: Page) {
   expect(r.ok()).toBeTruthy();
 }
 
+test("финансы: шапка и количество сотрудников следуют отделу и поиску", async ({ page }) => {
+  const data = await (await page.request.get("/api/v1/finances/2026/10")).json();
+  await page.goto("/finances/2026/10");
+  const summary = page.getByRole("region", { name: "Итоги финансов по отбору" });
+  const section = summary.locator("section").filter({ has: page.getByRole("heading", { name: "Всего по отбору", exact: true }) });
+  const money = (value: number) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", minimumFractionDigits: 2 }).format(value);
+  for (const department of ["laboratory", "software", "all"]) {
+    await page.getByLabel("Отдел", { exact: true }).selectOption(department);
+    const rows = data.rows.filter((r: { employee: { department: string } }) => department === "all" || r.employee.department === department);
+    expect(rows.length).toBeGreaterThan(0);
+    const total = rows.reduce((sum: number, r: { amounts: { total: string } }) => sum + Math.round(Number(r.amounts.total) * 100), 0) / 100;
+    await expect(section).toContainText(money(total));
+    await expect(section).toContainText(`Сотрудников: ${rows.length}`);
+  }
+  await page.getByLabel("Найти сотрудника").fill("такого сотрудника нет");
+  await expect(section).toContainText("Сотрудников: 0");
+  await expect(section).toContainText(money(0));
+});
+
 test("командировка: администратор меняет норму за период, оклад сохраняется", async ({ page }) => {
   await login(page);
   const before = await (await page.request.get("/api/v1/finances/2026/2")).json();
@@ -171,7 +190,11 @@ test("месяц: явная сортировка премий синхрони�
   await page.goto("/month/2026/9?tab=bonus");
   const table = page.getByRole("table", { name: "Премии за переработку" });
   const names = table.locator("tbody > tr > th").getByRole("link");
-  const sorted = (dir: number) => [...data.rows].sort((a, b) => dir * (Number(a.summary.bonus) - Number(b.summary.bonus))).map((row) => row.employee.short_name);
+  await expect(names).toHaveCount(data.rows.length);
+  const initialNames = await names.allTextContents();
+  const bonuses = new Map(data.rows.map((row) => [row.employee.short_name, Number(row.summary.bonus)]));
+  // Равные премии сохраняют исходный порядок отделов и фамилий на экране.
+  const sorted = (dir: number) => [...initialNames].sort((a, b) => dir * (bonuses.get(a)! - bonuses.get(b)!));
   await page.getByLabel("Сортировка премий за переработку").selectOption("bonus:desc");
   await expect(names).toHaveText(sorted(-1));
   await table.getByRole("button", { name: "Премия", exact: true }).click();
