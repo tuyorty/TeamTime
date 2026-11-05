@@ -209,6 +209,7 @@ async def test_today_report(session: AsyncSession) -> None:
         session,
         f.message(
             f.schedule_text("Петров П.П.", Пн="14:00 - 20:00"),
+            author=502,
             thread=f.SCHEDULE_THREAD,
             sent_at=sent(25),
         ),

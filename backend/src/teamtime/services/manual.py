@@ -533,6 +533,14 @@ async def resolve_parse(
     )
     if row is None:
         raise EditError("Запись инбокса не найдена")
+    if resolution in {Resolution.ACCEPTED, Resolution.FIXED} and any(
+        issue["code"] in {"posted_for_other", "schedule_person_mismatch"}
+        or (row.kind is MessageKind.SCHEDULE and issue["code"] == "identity_not_linked")
+        for issue in row.issues
+    ):
+        raise EditError(
+            "Сначала проверьте привязку отправителя и ФИО, затем переразберите сообщение"
+        )
     if resolution is Resolution.IGNORED:
         raw = await session.get(RawMessage, row.version.raw_message_id)
         assert raw is not None

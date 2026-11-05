@@ -32,24 +32,24 @@ async def count(session: AsyncSession, model: type) -> int:
     return await session.scalar(select(func.count()).select_from(model)) or 0
 
 
-async def test_schedule_matched_by_name_line_not_by_sender(session: AsyncSession) -> None:
+async def test_schedule_requires_sender_link_even_when_name_matches(session: AsyncSession) -> None:
     await f.forum(session)
     ivanov = await f.employee(session, "Иванов И.И.")
     out = await ingest(session, f.message(f.schedule_text(), thread=f.SCHEDULE_THREAD, name="😎"))
     assert out.kind is MessageKind.SCHEDULE
-    assert out.status is ParseStatus.OK
-    assert out.employee_id == ivanov.id
-    assert not out.needs_attention
+    assert out.status is ParseStatus.PARTIAL
+    assert out.employee_id is None
+    assert out.needs_attention
     plans = await current_plans(session, date(2026, 10, 26), date(2026, 11, 1))
-    assert len(plans) == 1
-    assert (plans[0].iso_week, plans[0].version) == (44, 1)
-    assert [d.date for d in plans[0].days] == [date(2026, 10, 26), date(2026, 10, 27)]
-    assert [t.text for t in plans[0].tasks] == ["задача один", "задача два"]
+    assert plans == []
     # Отправитель не был привязан — бот предложил кандидата, но не привязал сам.
     identity = await session.scalar(select(TelegramIdentity))
     assert identity is not None
     assert identity.employee_id is None
     assert identity.suggested_employee_id == ivanov.id
+    await link_identity(session, identity.id, ivanov.id, SETTINGS, actor="admin")
+    plans = await current_plans(session, date(2026, 10, 26), date(2026, 11, 1))
+    assert len(plans) == 1 and plans[0].employee_id == ivanov.id
 
 
 async def test_daily_requires_linked_identity_then_reprocesses(session: AsyncSession) -> None:
@@ -141,7 +141,7 @@ async def test_second_daily_same_date_replaces(session: AsyncSession) -> None:
 
 async def test_new_schedule_same_week_is_new_plan_version(session: AsyncSession) -> None:
     await f.forum(session)
-    await f.employee(session)
+    await f.employee(session, tg_id=501)
     await ingest(session, f.message(f.schedule_text(), thread=f.SCHEDULE_THREAD))
     await ingest(session, f.message(f.schedule_text(Пн="12:00 - 18:00"), thread=f.SCHEDULE_THREAD))
     plans = list(await session.scalars(select(SchedulePlan).order_by(SchedulePlan.version)))

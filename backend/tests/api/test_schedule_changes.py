@@ -25,7 +25,7 @@ async def test_suspicious_schedule_inbox_and_resolution(
     sent = datetime(2026, 10, 31, 8, 0, tzinfo=UTC)
     async with maker() as session:
         await f.forum(session)
-        await f.employee(session)
+        await f.employee(session, tg_id=501)
         original = f.message(
             f.schedule_text(sprint="02.10 - 08.10"),
             thread=f.SCHEDULE_THREAD,
@@ -77,7 +77,7 @@ async def test_reparse_uses_original_send_date(admin: httpx.AsyncClient, maker) 
     """Историческое расписание сверяется с датой сообщения, а не датой переразбора."""
     async with maker() as session:
         await f.forum(session)
-        await f.employee(session)
+        await f.employee(session, tg_id=501)
         outcome = await ingest(
             session,
             f.message(

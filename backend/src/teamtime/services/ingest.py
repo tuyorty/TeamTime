@@ -454,30 +454,42 @@ async def _resolve_employee(
     issues: list[Issue] = []
     linked = (
         await session.get(Employee, identity.employee_id)
-        if identity and identity.employee_id
+        if identity and identity.employee_id and identity.removed_at is None
         else None
     )
+    if linked is not None and not linked.is_active:
+        linked = None
 
     if result.schedule is not None and result.schedule.person is not None:
         person = result.schedule.person
         employee = await employee_by_person(session, person)
         if employee is not None:
-            if identity is not None and identity.employee_id is None:
-                identity.suggested_employee_id = employee.id
-            elif linked is not None and linked.id != employee.id:
+            if linked is None:
+                if identity is not None:
+                    identity.suggested_employee_id = employee.id
                 issues.append(
-                    Issue("posted_for_other", Severity.INFO,
-                          f"Расписание {employee.short_name} прислал {linked.short_name}")
+                    Issue("identity_not_linked", Severity.WARNING,
+                          "Аккаунт отправителя не привязан к активному сотруднику. "
+                          "Расписание не применено: администратор должен проверить привязку")
                 )  # fmt: skip
+                return None, issues, [employee]
+            if linked.id != employee.id:
+                issues.append(
+                    Issue("posted_for_other", Severity.ERROR,
+                          f"В расписании указан {employee.short_name}, "
+                          f"но аккаунт отправителя привязан к {linked.short_name}. "
+                          "Чужое расписание не записано")
+                )  # fmt: skip
+                return None, issues, []
             return employee, issues, []
         candidates = await candidates_by_surname(session, person.surname)
         if linked is not None:
             issues.append(
-                Issue("person_not_found_used_sender", Severity.WARNING,
-                      f"Сотрудник «{person.raw}» не найден, взят привязанный аккаунт "
-                      f"{linked.short_name}")
+                    Issue("schedule_person_mismatch", Severity.ERROR,
+                      f"ФИО «{person.raw}» не совпадает с привязкой отправителя "
+                      f"{linked.short_name}. Расписание не записано")
             )  # fmt: skip
-            return linked, issues, candidates
+            return None, issues, candidates
         hint = f": возможно, {', '.join(c.short_name for c in candidates)}" if candidates else ""
         issues.append(
             Issue("employee_not_found", Severity.WARNING,

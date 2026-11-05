@@ -80,12 +80,20 @@ def reactions(tg: Telegram) -> list[str]:
 
 
 async def test_schedule_gets_ok_reaction_and_no_reply(tg: Telegram, maker) -> None:
-    await tg.group(777, f.schedule_text("Петров П.П."), thread=f.SCHEDULE_THREAD)
+    await tg.group(501, f.schedule_text(), thread=f.SCHEDULE_THREAD)
     assert reactions(tg) == ["👌"]
     assert tg.session.of(SendMessage) == []
     async with maker() as s:
         plans = await current_plans(s, date(2026, 10, 26), date(2026, 11, 1))
     assert len(plans) == 1
+
+
+async def test_schedule_for_another_person_warns_without_creating_plan(tg: Telegram, maker) -> None:
+    await tg.group(501, f.schedule_text("Петров П.П."), thread=f.SCHEDULE_THREAD)
+    assert reactions(tg) == ["🤔"]
+    assert "не записано" in tg.session.of(SendMessage)[0].text
+    async with maker() as s:
+        assert await current_plans(s, date(2026, 10, 26), date(2026, 11, 1)) == []
 
 
 async def test_problem_reply_says_what_and_how_to_fix(tg: Telegram) -> None:

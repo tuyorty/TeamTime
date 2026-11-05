@@ -18,27 +18,47 @@ async def test_shift_arrival_matches_lateness_profile_and_both_export_sheets(cli
         employee = await f.employee(session, "Рябинин Р.Р.", tg_id=501)
         other = await f.employee(session, "Тихонов Т.Т.", tg_id=502)
         for who in (employee, other):
-            await ingest(session, f.message(
-                f.schedule_text(who.short_name, "28.09 - 03.10", Чт="11:00 - 18:00"),
-                author=501 if who is employee else 502, thread=f.SCHEDULE_THREAD,
-                sent_at=datetime(2026, 9, 27, 15, tzinfo=UTC),
-            ))
-        await ingest(session, f.message(
-            f.schedule_text(employee.short_name, "05.10 - 10.10", Пн="14:00 - 17:00"),
-            thread=f.SCHEDULE_THREAD, sent_at=datetime(2026, 10, 4, 15, tzinfo=UTC),
-        ))
-        await ingest(session, f.message(
-            f.daily_text("01.10.2026", "22:00 - 00:00\n11:40 - 16:40", 60), author=501,
-            sent_at=datetime(2026, 10, 2, 15, tzinfo=UTC),
-        ))
-        await ingest(session, f.message(
-            f.daily_text("05.10.2026", "03:00 - 05:30\n14:05 - 18:00", 60), author=501,
-            sent_at=datetime(2026, 10, 6, 15, tzinfo=UTC),
-        ))
-        await ingest(session, f.message(
-            f.daily_text("01.10.2026", "10:00 - 18:00", 100), author=502,
-            sent_at=datetime(2026, 10, 2, 15, tzinfo=UTC),
-        ))
+            await ingest(
+                session,
+                f.message(
+                    f.schedule_text(who.short_name, "28.09 - 03.10", Чт="11:00 - 18:00"),
+                    author=501 if who is employee else 502,
+                    thread=f.SCHEDULE_THREAD,
+                    sent_at=datetime(2026, 9, 27, 15, tzinfo=UTC),
+                ),
+            )
+        await ingest(
+            session,
+            f.message(
+                f.schedule_text(employee.short_name, "05.10 - 10.10", Пн="14:00 - 17:00"),
+                thread=f.SCHEDULE_THREAD,
+                sent_at=datetime(2026, 10, 4, 15, tzinfo=UTC),
+            ),
+        )
+        await ingest(
+            session,
+            f.message(
+                f.daily_text("01.10.2026", "22:00 - 00:00\n11:40 - 16:40", 60),
+                author=501,
+                sent_at=datetime(2026, 10, 2, 15, tzinfo=UTC),
+            ),
+        )
+        await ingest(
+            session,
+            f.message(
+                f.daily_text("05.10.2026", "03:00 - 05:30\n14:05 - 18:00", 60),
+                author=501,
+                sent_at=datetime(2026, 10, 6, 15, tzinfo=UTC),
+            ),
+        )
+        await ingest(
+            session,
+            f.message(
+                f.daily_text("01.10.2026", "10:00 - 18:00", 100),
+                author=502,
+                sent_at=datetime(2026, 10, 2, 15, tzinfo=UTC),
+            ),
+        )
         await session.commit()
 
     month = (await client.get("/months/2026/10")).json()
@@ -58,7 +78,8 @@ async def test_shift_arrival_matches_lateness_profile_and_both_export_sheets(cli
     first = next(d for d in profile["days"] if d["date"] == "2026-10-01")
     assert first["fact"]["start"] == 11 * 3600 + 40 * 60
     assert first["fact"]["intervals"] == [
-        [22 * 3600, 86400], [11 * 3600 + 40 * 60, 16 * 3600 + 40 * 60]
+        [22 * 3600, 86400],
+        [11 * 3600 + 40 * 60, 16 * 3600 + 40 * 60],
     ]
 
     response = await client.get(f"/export/months/2026/10.xlsx?employee_id={employee.id}")
