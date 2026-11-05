@@ -166,7 +166,7 @@ function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
       <span>{pages > 1 ? `Страница ${currentPage + 1} из ${pages}` : count(rows.length, ["сотрудник", "сотрудника", "сотрудников"])}</span>
     </div>
     {rows.length ? <>
-      <div className="tv-columns"><span>Сотрудник</span><AxisTicks axis={axis} className="tv-axis" /></div>
+      <div className="tv-columns"><span>Сотрудник</span><AxisTicks axis={axis} now={now} className="tv-axis" /></div>
       <TeamTimeline axis={axis} now={now} className="tv-timeline">
         <div ref={people} className="tv-people" data-testid="tv-people" style={{ gridTemplateRows: shownGroups.flatMap((group) => ["20px", `repeat(${group.rows.length}, minmax(0, 1fr))`]).join(" ") }}>
           {shownGroups.map((group) => <Fragment key={group.department}>

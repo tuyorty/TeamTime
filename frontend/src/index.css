@@ -171,25 +171,42 @@
 .team-now-line {
   position: absolute;
   inset-block: 0;
-  width: 3px;
+  width: 1px;
   transform: translateX(-50%);
-  background: var(--late);
-  box-shadow: 0 0 0 1px var(--surface), 0 0 8px color-mix(in srgb, var(--late) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
   pointer-events: none;
   z-index: 5;
 }
-.team-now-line::before, .team-now-line::after {
+.team-now-line::before {
   content: "";
   position: absolute;
   left: 50%;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--late);
+  top: -6px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
   transform: translateX(-50%);
 }
-.team-now-line::before { top: 0; }
-.team-now-line::after { bottom: 0; }
+.team-now-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 3px #0000000a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  white-space: nowrap;
+}
+@media (max-width: 639px) {
+  .team-now-label { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

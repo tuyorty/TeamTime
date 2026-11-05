@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 import type { DayCell } from "@/api/types";
 import { DAY, type Axis } from "@/lib/axis";
 import { cn } from "@/lib/cn";
@@ -87,18 +89,32 @@ export function DayStrip({
 }
 
 /** Подписи часов над колонкой полос. */
-export function AxisTicks({ axis, className }: { axis: Axis; className?: string }) {
+export function AxisTicks({ axis, now, className }: { axis: Axis; now?: number | null; className?: string }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  const showNow = now != null && now >= axis.start && now <= axis.end;
+  useEffect(() => {
+    const element = host.current;
+    if (!element || !showNow) return;
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [showNow]);
   const hours = (axis.end - axis.start) / 3600;
   const step = hours > 12 ? 4 : hours > 6 ? 2 : 1;
   const ticks: number[] = [];
   for (let h = Math.ceil(axis.start / 3600); h * 3600 <= axis.end; h += step) ticks.push(h);
   return (
-    <div className={cn("relative h-3 text-[10px] leading-3 text-ink-3 tnum", className)} aria-hidden>
+    <div ref={host} className={cn("relative h-3 text-[10px] leading-3 text-ink-3 tnum", className)} aria-hidden>
       {ticks.map((h) => (
         <span
           key={h}
           className="absolute -translate-x-1/2"
-          style={{ left: `${((h * 3600 - axis.start) / (axis.end - axis.start)) * 100}%` }}
+          style={{
+            left: `${((h * 3600 - axis.start) / (axis.end - axis.start)) * 100}%`,
+            // Не оставляем половину цифры выглядывать из-под метки текущего времени.
+            visibility: showNow && width > 0 && Math.abs(h * 3600 - now) * width / (axis.end - axis.start) < 42 ? "hidden" : undefined,
+          }}
         >
           {h % 24}
         </span>

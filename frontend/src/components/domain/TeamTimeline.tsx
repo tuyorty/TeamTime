@@ -38,6 +38,6 @@ export function TeamTimeline({ children, axis, now, className }: {
       role="img"
       aria-label={`Текущее время: ${clock(now)}`}
       style={{ left: track.left + track.width * position }}
-    /> : null}
+    ><span className="team-now-label tnum" aria-hidden>{clock(now)}</span></div> : null}
   </div>;
 }

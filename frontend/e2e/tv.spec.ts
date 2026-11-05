@@ -120,7 +120,8 @@ test("ТВ: две команды из 20 сотрудников помещаю�
   const line = (await marker.boundingBox())!;
   const people = (await page.getByTestId("tv-people").boundingBox())!;
   const strip = (await page.locator("[data-timeline-track]").first().boundingBox())!;
-  expect(line.width).toBeGreaterThanOrEqual(3);
+  expect(line.width).toBe(1);
+  await expect(marker.locator(".team-now-label")).toHaveText("14:30");
   expect(line.height).toBeCloseTo(people.height, 0);
   expect(line.x + line.width / 2).toBeCloseTo(strip.x + strip.width / 2, 0);
   expect(await page.locator(".tv-person").evaluateAll((elements) => elements.every((element) => element.scrollHeight <= element.clientHeight + 2))).toBe(true);

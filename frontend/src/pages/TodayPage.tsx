@@ -223,9 +223,9 @@ export default function TodayPage() {
               >
                 {visible.length ? (
                   <>
-                    <div className="grid grid-cols-[minmax(10rem,13rem)_1fr_5.5rem] gap-3 px-4 pb-2 max-sm:hidden">
+                    <div className="grid min-h-10 grid-cols-[minmax(10rem,13rem)_1fr_5.5rem] items-center gap-3 px-4 pb-3 max-sm:hidden">
                       <span className="text-[11px] text-ink-3">Сотрудник</span>
-                      <AxisTicks axis={axis} />
+                      <AxisTicks axis={axis} now={tomorrow ? null : data.now_sec} />
                       <span />
                     </div>
                     <TeamTimeline axis={axis} now={tomorrow ? null : data.now_sec}>
