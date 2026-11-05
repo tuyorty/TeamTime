@@ -104,11 +104,15 @@ test("отделы: фильтр недели, месяца и финансов"
     for (const url of ["/week", "/month", "/finances", "/plans", "/people", "/calendar"]) {
       await page.goto(url);
       await page.getByLabel("Отдел", { exact: true }).selectOption("laboratory");
-      const scope = await page.getByRole("table").count() ? page.getByRole("table").first() : page.locator("main");
+      const scope = ["/week", "/month", "/finances", "/plans"].includes(url)
+        ? page.getByRole("table").first() : page.locator("main");
+      await expect(scope).toBeVisible();
       const nameKey = url === "/people" ? "full_name" : "short_name";
       await expect(scope.getByText(person[nameKey], { exact: true }).first()).toBeVisible();
       for (const other of people.filter((employee: { id: number }) => employee.id !== person.id)) {
-        await expect(scope.getByText(other[nameKey], { exact: true })).toHaveCount(0);
+        const name = scope.getByText(other[nameKey], { exact: true });
+        if (other.department === "laboratory") await expect(name.first()).toBeVisible();
+        else await expect(name).toHaveCount(0);
       }
     }
   } finally {

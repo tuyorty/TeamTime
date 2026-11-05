@@ -156,6 +156,7 @@ class Seeder:
                     "full_name": f"{last} {first} {middle}",
                     "short_name": short,
                     "position": profile.position,
+                    "department": "laboratory" if n in (4, 6, 7) else "software",
                     "expertise": profile.position + ": разработка и поддержка проектов",
                     "help_with": "Ревью решений, поиск ошибок и настройка рабочего окружения",
                     "monthly_norm_minutes": profile.norm_hours * 60,

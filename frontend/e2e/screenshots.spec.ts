@@ -58,6 +58,14 @@ test("ТВ: экран команды в Full HD и HD", async ({ browser }) => 
       await page.goto("/tv");
       await expect(page.getByRole("article").first()).toBeVisible();
       await page.evaluate("document.fonts.ready");
+      // Дожидаемся измерения шкалы после загрузки шрифтов: метка не перекрывает часы.
+      await expect.poll(() => page.evaluate(`(() => {
+        const badge = document.querySelector(".team-now-label").getBoundingClientRect();
+        return [...document.querySelectorAll(".tv-axis span")].every((tick) => {
+          const bounds = tick.getBoundingClientRect();
+          return getComputedStyle(tick).visibility === "hidden" || bounds.right <= badge.left || bounds.left >= badge.right;
+        });
+      })()`)).toBe(true);
       await page.screenshot({ path: path.join(OUT, `${name}${theme === "dark" ? "-dark" : ""}.png`) });
       await context.close();
     }
@@ -102,6 +110,9 @@ for (const theme of ["light", "dark"] as const) {
     });
     await shot(browser, "/finances/2026/10", "finances", theme, false, async (p) => {
       await p.getByLabel("Сортировка начислений").selectOption("total:desc");
+    });
+    await shot(browser, "/finances/2026/10", "finance-laboratory", theme, false, async (p) => {
+      await p.getByLabel("Отдел", { exact: true }).selectOption("laboratory");
     });
     await shot(browser, "/finances/2026/10", "finance-extras", theme, false, async (p) => {
       await p.getByLabel("Сортировка начислений").selectOption("project_bonuses:desc");

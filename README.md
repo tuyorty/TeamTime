@@ -96,25 +96,30 @@ xTime не строит рейтингов и не оценивает людей
 Нужен Docker с Compose v2.
 
 ```bash
-git clone https://github.com/OWNER/teamtime.git && cd teamtime
-echo "DEMO=1" > .env          # вымышленная команда и эмулятор чата
-docker compose up -d --build
-open http://localhost:8080
+git clone https://github.com/tuyorty/TeamTime.git
+cd TeamTime
+docker compose -p xtime-demo -f docker-compose.yml -f compose.demo.yml up -d --build db api web
 ```
 
-`docker compose up` поднимает PostgreSQL, API, бота и сайт. Миграции применяются автоматически, а в демо-режиме пустая база заполняется девятью неделями вымышленных сообщений. Пароль админа в демо — `demo`.
+Локальное демо открывается на **<http://127.0.0.1:6769>**. Команда поднимает PostgreSQL, API и сайт **без бота**, с отдельной базой `xtime-demo`. Токен Telegram отключён в демо-настройках, рабочий `.env` переписывать не нужно. Миграции применяются автоматически, пустая база заполняется девятью неделями вымышленных сообщений и сотрудниками двух отделов. Пароль админа — `demo`, версия внизу меню — `local-demo`.
 
-Чтобы демо выглядело одинаково на любую дату (так сделаны скриншоты), «сейчас» можно заморозить: `DEMO_NOW=2026-10-23T14:30:00+05:00`. Перезагрузить демо-данные: `make demo`.
+В `compose.demo.yml` время зафиксировано: `DEMO_NOW=2026-10-23T14:30:00+05:00`. Поэтому демо и скриншоты выглядят одинаково на любую дату; это не текущая дата рабочего сервера.
 
 Без Telegram можно попробовать всё через **«Эмулятор чата»**: пишете сообщение от имени вымышленного сотрудника и видите, какую реакцию поставил бы бот и как обновился таблица.
 
 Для отдельного локального демо без бота есть один файл [compose.demo.yml](compose.demo.yml):
 
 ```bash
-docker compose -p teamtime-workflows-shots -f docker-compose.yml -f compose.demo.yml up -d --build db api web
+docker compose -p xtime-demo -f docker-compose.yml -f compose.demo.yml up -d --build db api web
 ```
 
-Сайт — <http://localhost:6769>, пароль администратора — `demo`, дата зафиксирована для скриншотов. Этот вариант сохраняет базу уже созданного демо-стенда. Рабочий `.env` остаётся отдельным; временные скрипты и результаты проверок в нём не хранятся.
+После изменений в коде повторите эту команду: она пересоберёт образы и обновит контейнеры, сохранив демо-базу. Просто обновить страницу недостаточно. Дата зафиксирована для скриншотов. Для остановки без удаления данных:
+
+```bash
+docker compose -p xtime-demo -f docker-compose.yml -f compose.demo.yml stop
+```
+
+Если порт занят старым стендом, `docker ps --format "{{.Names}} {{.Ports}}"` покажет владельца. Старый стенд скриншотов назывался `teamtime-workflows-shots`; перед запуском нового можно остановить его через `docker compose -p teamtime-workflows-shots -f docker-compose.yml -f compose.demo.yml stop`. Базы и контейнеры при этом не удаляются.
 
 ### Рабочий запуск
 
