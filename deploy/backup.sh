@@ -3,6 +3,7 @@
 # Для ежедневного бэкапа в 03:00 — строка в crontab (crontab -e):
 #   0 3 * * * /opt/xtime/backup.sh >> /opt/xtime/backups/backup.log 2>&1
 set -euo pipefail
+umask 077
 
 cd "$(dirname "$0")"
 # Метаданные не влияют на сохранность копии: API может быть остановлен во время обновления.

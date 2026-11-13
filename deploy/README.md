@@ -41,6 +41,14 @@ sudo /opt/xtime/install.sh /opt/xtime
 Тот же `make deploy HOST=…` или `install.sh` из нового архива. `.env`, база и бэкапы
 остаются на месте, миграции применяются при старте.
 
+Установщик запускает точный тег из пакета, даже если в `.env` закреплён предыдущий
+`XTIME_TAG`. После успешной проверки API он обновляет `XTIME_TAG` и `VERSION`.
+`RELEASE_VERSION` хранит версию подготовленного пакета: первый запуск и повтор после
+заполнения `.env` работают и из `/opt/xtime`. Если запуск или миграция не завершились,
+`VERSION` и прежний `XTIME_TAG` не изменяются; это не означает автоматического отката
+контейнеров или БД. Проверьте логи API и устраните ошибку перед повторным запуском.
+Старые образы сохраняются, установщик не выполняет глобальную очистку Docker.
+
 Перед установкой сохраните базу командой `sudo /opt/xtime/backup.sh`.
 Рядом с архивом есть файл `.sha256`: скопируйте оба файла на сервер и проверьте
 архив командой `sha256sum -c xtime-<версия>.tar.gz.sha256` перед распаковкой.
@@ -59,13 +67,22 @@ py -3 deploy/release.py --platform linux/amd64
 Архив включает готовые образы и скрипты с LF и правами запуска Linux; рабочий `.env`
 в него не входит. На Linux и macOS тот же сборщик вызывается через `make release`.
 
+Проверка установщика без Docker, Telegram и рабочей БД из корня репозитория:
+
+```bash
+python -m unittest discover -s deploy/tests -v
+```
+
+Нужен Bash (на Windows — Git Bash); тесты используют временные каталоги и подставную
+команду `docker`.
+
 ## Если Telegram недоступен
 
 `install.sh` проверяет связь командой `teamtime bot check`. Если в сети закрыт
 `api.telegram.org`, укажите прокси в `.env` и перезапустите `install.sh`:
 
 ```
-TELEGRAM_PROXY=socks5://user:pass@10.0.0.5:1080   # или http://host:port
+TELEGRAM_PROXY=socks5://user:pass@proxy.example.org:1080   # или http://host:port
 ```
 
 Проверить вручную: `docker compose run --rm --no-deps api bot check`.

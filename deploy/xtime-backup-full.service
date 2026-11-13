@@ -1,0 +1,11 @@
+[Unit]
+Description=xTime encrypted full backup and off-server delivery
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/xtime
+ExecStart=/opt/xtime/backup-full.sh
+UMask=0077
+TimeoutStartSec=1800

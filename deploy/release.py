@@ -89,6 +89,9 @@ def main() -> None:
         ".env.example",
         "install.sh",
         "backup.sh",
+        "backup-full.sh",
+        "xtime-backup-full.service",
+        "xtime-backup-full.timer",
         "README.md",
         "xtime-tg-tunnel.service",
     ):
@@ -103,6 +106,8 @@ def main() -> None:
     for source, target in (
         ("multiple-chats.md", "MULTIPLE_CHATS.md"),
         ("finance.md", "FINANCE.md"),
+        ("fund.md", "FUND.md"),
+        ("fund-backup.md", "FUND_BACKUP.md"),
         ("legacy-import.md", "LEGACY_IMPORT.md"),
     ):
         (release / target).write_text(

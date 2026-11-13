@@ -110,6 +110,18 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
 
+  deploy:
+    name: Установщик · обновление и повтор после сбоя
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          for script in deploy/*.sh; do bash -n "$script"; done
+          python -m unittest discover -s deploy/tests -v
+
   secrets:
     name: Утечки секретов · gitleaks
     runs-on: ubuntu-latest

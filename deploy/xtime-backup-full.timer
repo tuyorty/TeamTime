@@ -1,0 +1,11 @@
+[Unit]
+Description=xTime weekly full backup
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 Asia/Yekaterinburg
+Persistent=true
+RandomizedDelaySec=600
+Unit=xtime-backup-full.service
+
+[Install]
+WantedBy=timers.target
