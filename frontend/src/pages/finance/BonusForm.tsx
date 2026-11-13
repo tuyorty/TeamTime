@@ -1,3 +1,4 @@
+import { requestId } from "@/lib/request-id";
 import { useState } from "react";
 
 import { api } from "@/api/client";
@@ -6,15 +7,6 @@ import type { ProjectBonus } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
-
-/** getRandomValues работает и по HTTP в локальной сети, где randomUUID недоступен. */
-function requestId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 15) | 64;
-  bytes[8] = (bytes[8]! & 63) | 128;
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export function BonusForm({ month, label, employeeId, bonus, onClose }: {
   month: string; label: string; employeeId?: number; bonus?: ProjectBonus; onClose: () => void;

@@ -142,7 +142,7 @@ export default function MonthPage() {
             <TabsList className="no-print">
               {TABS.map((t) => (
                 <TabsTrigger key={t.value} value={t.value}>
-                  {t.label}
+                  {t.value === "bonus" && data.rows.some(r => r.summary.fund_model) ? "Начисления фонда" : t.label}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -156,7 +156,7 @@ export default function MonthPage() {
               <LatenessTab data={data} rows={filter.visible} />
             </TabsContent>
             <TabsContent value="bonus" className="pt-3">
-              <BonusTab data={data} rows={filter.visible} />
+              {data.rows.some(r => r.summary.fund_model) ? <div className="rounded-lg border border-line bg-surface p-5"><p className="mb-3 text-sm text-ink-2">Целевые суммы, доплаты, переплаты и компенсации находятся в едином расчёте фонда.</p><Button onClick={() => navigate(`/finances/${year}/${month}`)}>Открыть финансы за месяц</Button></div> : <BonusTab data={data} rows={filter.visible} />}
             </TabsContent>
           </Tabs>
           <TruncationNote />

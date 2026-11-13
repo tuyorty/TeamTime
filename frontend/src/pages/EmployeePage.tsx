@@ -244,7 +244,7 @@ function MonthStrip({ data }: { data: EmployeeDetail }) {
       <div className="grid content-start gap-2">
         <span className="text-[12px] text-ink-2">Итого за месяц и норма</span>
         <span className="font-display text-[30px] font-semibold leading-none tnum">
-          {hm(s.total_sec)} <span className="text-[16px] font-medium text-ink-3">из {hm(s.norm_sec)}</span>
+          {s.calculation_ready === false ? "Нужны данные" : hm(s.total_sec)} <span className="text-[16px] font-medium text-ink-3">из {s.calculation_ready === false ? "—" : hm(s.norm_sec)}</span>
         </span>
         <NormBar total={s.total_sec} norm={s.norm_sec} max={Math.max(s.total_sec, s.norm_sec) * 1.1 || 1} />
         <span
@@ -276,9 +276,9 @@ function MonthStrip({ data }: { data: EmployeeDetail }) {
           tone: s.penalty_sec ? "text-late-ink" : "",
         },
         {
-          label: "Премия",
-          value: Number(s.bonus) > 0 ? money(s.bonus) : "—",
-          hint: s.overtime_sec
+          label: s.fund_model ? "Начислено за время" : "Премия",
+          value: s.fund_model ? (s.fund_salary != null ? money(s.fund_salary) : "—") : Number(s.bonus) > 0 ? money(s.bonus) : "—",
+          hint: s.fund_model ? "Подробный расчёт — в финансах" : s.overtime_sec
             ? `переработка ${hm(s.overtime_sec)}`
             : `ставка ${Number(s.hourly_rate).toLocaleString("ru-RU")} ₽/ч`,
         },

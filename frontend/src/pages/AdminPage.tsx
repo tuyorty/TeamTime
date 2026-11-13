@@ -2,6 +2,7 @@ import { Lock } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
 
 import { EmptyState } from "@/components/domain/feedback";
+import { FinanceModePanel } from "@/components/domain/FinanceMode";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -53,7 +54,7 @@ export default function AdminPage() {
             ) : t.value === "telegram" ? (
               <TelegramTab />
             ) : t.value === "settings" ? (
-              <SettingsTab />
+              <div className="grid gap-5"><FinanceModePanel /><SettingsTab /></div>
             ) : t.value === "system" ? (
               <SystemTab />
             ) : t.value === "import" ? (

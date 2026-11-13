@@ -58,6 +58,7 @@ function flash(event: RealtimeEvent) {
 }
 
 const INVALIDATE: Record<string, string[]> = {
+  "finance.module.changed": [],
   "message.ingested": ["today", "day-summary", "week", "month", "finances", "plans", "employee", "calendar", "inbox", "search"],
   "daily.changed": ["today", "day-summary", "week", "month", "finances", "employee", "calendar", "inbox", "audit"],
   "plan.changed": ["today", "day-summary", "week", "month", "finances", "plans", "employee", "calendar", "audit"],
@@ -81,7 +82,7 @@ function describe(event: RealtimeEvent): string | null {
 }
 
 export function handleEvent(qc: QueryClient, event: RealtimeEvent, notifications = true) {
-  if (event.type === "resync") {
+  if (event.type === "resync" || event.type === "finance.module.changed") {
     void qc.invalidateQueries();
     return;
   }

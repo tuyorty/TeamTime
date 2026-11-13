@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { dateTime } from "@/lib/format";
 
 const ACTIONS: Record<string, string> = {
+  "finance.module.changed": "Режим финансов изменён",
   "bonus.created": "Проектная премия добавлена",
   "bonus.updated": "Проектная премия изменена",
   "bonus.cancelled": "Проектная премия отменена",
@@ -15,6 +16,8 @@ const ACTIONS: Record<string, string> = {
   "plan_day.set": "План дня изменён",
   "status.set": "Статус дня",
   "status.clear": "Статус снят",
+  "no_show.confirmed": "Невыход подтверждён",
+  "no_show.cancelled": "Невыход отменён",
   "employee.create": "Сотрудник добавлен",
   "employee.update": "Сотрудник изменён",
   "identity.link": "Привязка Telegram",

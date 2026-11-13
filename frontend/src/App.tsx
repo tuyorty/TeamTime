@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { TeamGate } from "@/components/layout/TeamGate";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import NotFound from "./pages/NotFound";
@@ -34,7 +35,7 @@ const page = (el: React.ReactNode) => <Suspense fallback={<PageFallback />}>{el}
 const router = createBrowserRouter([
   { path: "tv", element: <Suspense fallback={<div className="min-h-dvh bg-bg" />}><TvPage /></Suspense> },
   {
-    element: <AppShell />,
+    element: <TeamGate><AppShell /></TeamGate>,
     children: [
       { index: true, element: page(<TodayPage />) },
       { path: "day", element: page(<DaySummaryPage />) },

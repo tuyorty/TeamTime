@@ -4,14 +4,12 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { employeeGroups } from "@/lib/departments";
 
 import { api } from "@/api/client";
-import { useMeta } from "@/api/queries";
 import type { Meta, Today, TodayRow } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
 import { TeamTimeline } from "@/components/domain/TeamTimeline";
 import { STATUS } from "@/components/domain/states";
 import { clock, count, dayMonth, timezoneLabel, WEEKDAYS_LONG, weekday } from "@/lib/format";
-import { useRealtime } from "@/lib/realtime";
 import { useTheme } from "@/lib/theme";
 import { axisFor, type Axis } from "@/lib/axis";
 import { scheduleCell } from "@/lib/schedule";
@@ -21,12 +19,22 @@ import "./tv/tv.css";
 
 /** Экран офиса: только расписание, автоматическое обновление и смена страниц. */
 export default function TvPage() {
-  useRealtime(false);
   useTheme();
-  const meta = useMeta();
+  const [accessReady, setAccessReady] = useState(() => !window.location.hash.startsWith("#access="));
+  const [accessError, setAccessError] = useState("");
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.hash.slice(1)).get("access");
+    if (!token) return;
+    void api.post("/team/display-login", { token }).then(() => {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setAccessReady(true);
+    }).catch((e: Error) => setAccessError(e.message));
+  }, []);
+  const meta = useQuery({ queryKey: ["display", "meta"], queryFn: () => api.get<Meta>("/display/meta"), enabled: accessReady, refetchInterval: 30_000 });
   const today = useQuery({
     queryKey: ["today", "tv"],
-    queryFn: () => api.get<Today>("/today"),
+    queryFn: () => api.get<Today>("/display/today"),
+    enabled: accessReady,
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: "always",
@@ -58,6 +66,7 @@ export default function TvPage() {
 
   return (
     <main className="tv-screen" aria-label="Экран команды для телевизора">
+      {accessError && <p role="alert">{accessError}</p>}
       <header className="tv-header">
         <div>
           <div className="tv-eyebrow"><span className="tv-brand">

@@ -28,6 +28,7 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
   const col = { sort, onSort: toggle };
   return (
     <div className="grid gap-3">
+      {rows.some(r => r.summary.calculation_issues?.length) && <p className="rounded-lg bg-deviation-soft p-3 text-sm text-deviation-ink">Есть неподтверждённые данные. Причины по каждому сотруднику доступны в разделе «Финансы».</p>}
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="w-full min-w-[820px] border-collapse">
           <caption className="sr-only">Итог за месяц по сотрудникам</caption>
@@ -58,9 +59,9 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
                   <td className={cn(td, "text-right", s.penalty_sec > 0 && "text-late-ink")}>
                     {s.penalty_sec > 0 ? `−${hm(s.penalty_sec)}` : "—"}
                   </td>
-                  <td className={cn(td, "text-right text-[14px] font-semibold")}>{hm(s.total_sec)}</td>
+                  <td className={cn(td, "text-right text-[14px] font-semibold")}>{s.calculation_ready === false ? "Нужны данные" : hm(s.total_sec)}</td>
                   <td className={cn(td, "text-right text-ink-2")}>
-                    {hm(s.norm_sec)}
+                    {s.calculation_ready === false ? "—" : hm(s.norm_sec)}
                     {s.norm_excluded_days > 0 ? <div className="text-[11px] text-ink-3" title={`Договорная норма ${hm(s.contract_norm_sec)}. Исключено ${s.norm_excluded_days} из ${s.norm_working_days} рабочих дней.`}>−{hm(s.norm_reduction_sec)}</div> : null}
                   </td>
                   <td className="px-3 py-2.5">
@@ -94,9 +95,10 @@ export function SummaryTab({ data, rows }: { data: Month; rows: MonthRow[] }) {
         </table>
       </div>
       <p className="text-[12px] text-ink-3">
+        {data.rows.some(r => r.summary.fund_model) ? <>Итого — эффективные часы за вычетом месячного штрафа. Отпуск и больничный уменьшают норму по подтверждённому календарю. Согласованный день командировки добавляет 8 часов. Неподтверждённый пропуск не штрафуется автоматически.</> : <>
         Итого = Часы(e%) − Опоздания(−). Опоздания(−) — штраф по прогрессивной шкале от суммы опозданий за
         месяц (вкладка «Опоздания»). Отпуск и командировки уменьшают норму пропорционально рабочим дням месяца по календарю xTime. Оклад сохраняется. Часы командировок исключены из зачёта. Риска на полосе —
-        норма.
+        норма.</>}
       </p>
     </div>
   );

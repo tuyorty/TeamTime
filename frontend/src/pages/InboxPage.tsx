@@ -22,6 +22,8 @@ import { cn } from "@/lib/cn";
 import { dayMonth, hm, isoWeek, parseDate, relative } from "@/lib/format";
 import { StatusRequestsPanel } from "./StatusRequests";
 import { BulkDaily } from "./inbox/BulkDaily";
+import { useTeamSession } from "@/api/fund";
+import { FundInbox } from "./fund/FundInbox";
 
 const VIEWS = [
   { value: "pending", label: "Ждут решения" },
@@ -53,14 +55,16 @@ const RESOLUTION = {
 };
 
 export default function InboxPage() {
+  const teamSession = useTeamSession();
   const [search, setSearch] = useSearchParams();
-  const view = search.get("view") ?? "pending";
+  const requestedView = search.get("view") ?? "pending";
+  const view = requestedView === "fund" && !teamSession.data?.module_enabled ? "pending" : requestedView;
   const offset = Math.max(0, Number(search.get("offset")) || 0);
   const filter = new URLSearchParams(
     FILTER_KEYS.flatMap((k) => (search.get(k) ? [[k, search.get(k)!]] : [])),
   ).toString();
   const { data, error, refetch } = useInbox(
-    view === "requests" ? "pending" : view,
+    view === "requests" || view === "fund" ? "pending" : view,
     `${filter}&limit=25&offset=${offset}`,
   );
   const counts = useInbox("pending", "limit=1").data?.counts;
@@ -88,6 +92,7 @@ export default function InboxPage() {
       <Tabs value={view} onValueChange={(v) => setParam("view", v)}>
         {admin && view === "pending" ? <div className="mb-3"><BulkDaily /></div> : null}
         <TabsList>
+          {teamSession.data?.module_enabled && teamSession.data.actor?.leader && <TabsTrigger value="fund">Фонд и исключения</TabsTrigger>}
           {VIEWS.map((v) => (
             <TabsTrigger key={v.value} value={v.value}>
               {v.label}
@@ -101,7 +106,7 @@ export default function InboxPage() {
           ) : null}
         </TabsList>
       </Tabs>
-      {view === "requests" && admin ? (
+      {view === "fund" ? <FundInbox /> : view === "requests" && admin ? (
         <StatusRequestsPanel />
       ) : (
         <>

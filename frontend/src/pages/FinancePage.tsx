@@ -6,6 +6,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import { exportUrl } from "@/api/client";
 import { useFinance, useMeta } from "@/api/queries";
+import { useTeamSession } from "@/api/fund";
+import { FinanceModeButton } from "@/components/domain/FinanceMode";
 import { ErrorState } from "@/components/domain/feedback";
 import { SortSelect } from "@/components/domain/SortSelect";
 import { Badge } from "@/components/ui/badge";
@@ -26,16 +28,21 @@ import { ProjectBonuses } from "./finance/ProjectBonuses";
 import { FINANCE_SORT_OPTIONS, FINANCE_VALUES, type FinanceSortKey } from "./finance/sorting";
 import { sortRows, useSort } from "./month/sorting";
 import NotFound from "./NotFound";
+import FundPage from "./fund/FundPage";
 
 export default function FinancePage() {
   const department = useDepartmentFilter();
+  const [routeSearch] = useSearchParams();
   const params = useParams();
   const meta = useMeta();
+  const session = useTeamSession();
+  if (!session.data) return session.error ? <ErrorState error={session.error} onRetry={() => void session.refetch()} /> : <Skeleton className="h-80" />;
   if (!meta.data?.today) return meta.error ? <ErrorState error={meta.error} onRetry={() => void meta.refetch()} /> : <Skeleton className="h-80" />;
   const current = meta.data.today.slice(0, 7);
   const year = Number(params.year ?? current.slice(0, 4));
   const month = Number(params.month ?? current.slice(5, 7));
   if (!Number.isInteger(year) || !Number.isInteger(month) || year < 2000 || year > 2100 || month < 1 || month > 12) return <NotFound />;
+  if (session.data.module_enabled && (year * 100 + month >= 202611 || routeSearch.get("fund") === "1")) return <FundPage year={year} month={month} />;
   return <FinancePeriod key={`${year}-${month}`} year={year} month={month} current={current} department={department} />;
 }
 
@@ -43,6 +50,7 @@ function FinancePeriod({ year, month, current, department }: { year: number; mon
   const { data, error, refetch, isFetching } = useFinance(year, month);
   const navigate = useNavigate();
   const admin = useIsAdmin();
+  const moduleEnabled = useTeamSession().data?.module_enabled;
   const [search, setSearch] = useSearchParams();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -82,6 +90,8 @@ function FinancePeriod({ year, month, current, department }: { year: number; mon
             <Button size="icon" variant="ghost" aria-label="Следующий месяц" onClick={() => go(1)} disabled={year === 2100 && month === 12}><ChevronRight /></Button>
           </div>
           <Button onClick={() => navigate("/finances")} disabled={current === monthValue}>Текущий</Button>
+          {moduleEnabled && <Button onClick={() => navigate("/finances/2026/11")}>Открыть фонд</Button>}
+          <FinanceModeButton />
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void refetch()} /> : !data ? <Skeleton className="h-96" /> : (
