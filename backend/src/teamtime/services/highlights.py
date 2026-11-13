@@ -89,10 +89,16 @@ def period_highlights(
         starts.append((fact.start, occurrence))
         finishes.append((fact.end_abs, occurrence))
         durations.append((cell.result.worked or 0, occurrence))
-        if cell.result.late:
-            lateness.append((cell.result.late, occurrence))
         daily_work[cell.day] += cell.result.worked or 0
         participants[cell.day] += 1
+    for cell in cells:
+        if cell.result.late:
+            lateness.append(
+                (
+                    cell.result.late,
+                    HighlightOccurrence(date=cell.day, employee=employees[cell.employee_id]),
+                )
+            )
     return PeriodHighlights(
         calendar_off_sec=calendar_off_work,
         evening_night_sec=evening_night,

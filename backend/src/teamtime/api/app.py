@@ -22,6 +22,7 @@ from teamtime.api.routers import (
     export,
     finance,
     fund,
+    no_shows,
     read,
     team,
     workflows,
@@ -141,6 +142,7 @@ def create_app(settings: Settings | None = None, *, realtime: bool = True) -> Fa
         workflows.router,
         finance.router,
         fund.router,
+        no_shows.router,
         team.router,
         display.router,
     ):

@@ -8,7 +8,7 @@ from __future__ import annotations
 import calendar
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select, true
@@ -29,6 +29,7 @@ from teamtime.db.models import (
     RawMessageVersion,
     Resolution,
     SchedulePlan,
+    Source,
     TelegramIdentity,
 )
 from teamtime.parsing import MessageKind, PlanDayKind
@@ -48,6 +49,7 @@ from teamtime.schemas import (
     MonthOut,
     MonthRow,
     MonthSummaryOut,
+    NoShowInfo,
     NoteItem,
     PenaltyScaleOut,
     PlanOut,
@@ -157,6 +159,8 @@ def cell_out(cell: DayCell) -> DayCellOut:
         undertime_sec=r.undertime,
         no_plan=r.no_plan,
         flags=[*r.flags, *(["plan_late_edit"] if cell.late_edit else [])],
+        no_show=NoShowInfo.model_validate(cell.no_show) if cell.no_show else None,
+        can_confirm_no_show=cell.can_confirm_no_show,
         source=SourceRef(
             plan_id=plan.id if plan and cell.plan_day else None,
             plan_version=plan.version if plan and cell.plan_day else None,
@@ -251,7 +255,7 @@ async def week_report(
     rows: list[WeekRow] = []
     for e in employees:
         ecells = [cells[(e.id, d)] for d in days]
-        plan = next((c.plan for c in ecells if c.plan is not None), None)
+        plan = next((c.latest_plan for c in ecells if c.latest_plan is not None), None)
         rows.append(
             WeekRow(
                 employee=brief(e),
@@ -396,8 +400,15 @@ async def month_report(
             LateDay(
                 date=c.day,
                 late_sec=c.result.late,
-                plan_start=c.result.plan.start or 0 if c.result.plan else 0,
-                fact_start=c.result.arrival_start or 0,
+                plan_start=(
+                    c.no_show.intervals[0][0]
+                    if c.no_show and "no_show_confirmed" in c.result.flags
+                    else c.result.plan.start or 0
+                    if c.result.plan
+                    else 0
+                ),
+                fact_start=c.result.arrival_start,
+                no_show="no_show_confirmed" in c.result.flags,
             )
             for c in ecells
             if c.result.late
@@ -518,6 +529,8 @@ async def month_report(
 
 
 def _presence(cell: DayCell, now_sec: int) -> str:
+    if "no_show_confirmed" in cell.result.flags:
+        return "absent"
     status = cell.result.status
     if status is StatusKind.OFF:
         return "off"
@@ -609,8 +622,13 @@ async def today_report(
     for e in employees:
         cell = cells[(e.id, day)]
         presence = _presence(cell, now_sec)
-        overdue = (presence == "left" and cell.daily is None) or (
-            cell.result.state is DayState.PENDING and day < now_local.date()
+        awaiting_daily = bool(
+            cell.result.planned
+            and cell.daily is None
+            and "no_show_confirmed" not in cell.result.flags
+        )
+        overdue = awaiting_daily and (
+            presence == "left" or (cell.result.state is DayState.PENDING and day < now_local.date())
         )
         rows.append(
             TodayRow(
@@ -618,14 +636,14 @@ async def today_report(
                 cell=cell_out(cell),
                 presence=presence,
                 daily_overdue=overdue,
-                tasks=[t.text for t in cell.plan.tasks] if cell.plan else [],
+                tasks=[t.text for t in cell.latest_plan.tasks] if cell.latest_plan else [],
             )
         )
         counts[presence] += 1
         counts["planned"] += 1 if cell.result.planned else 0
         counts["dailies"] += 1 if cell.daily else 0
         counts["late"] += 1 if cell.result.late else 0
-        counts["awaiting_daily"] += 1 if cell.result.planned and cell.daily is None else 0
+        counts["awaiting_daily"] += int(awaiting_daily)
     counts["total"] = len(employees)
     worked = sum(cells[(e.id, day)].result.worked or 0 for e in employees)
     pulse = [
@@ -649,6 +667,9 @@ async def today_report(
 def _streaks(cells: Sequence[DayCell]) -> Streaks:
     on_time = best = 0
     for c in cells:
+        if "no_show_confirmed" in c.result.flags:
+            on_time = 0
+            continue
         if c.result.state is not DayState.WORKED:
             continue
         on_time = 0 if c.result.late else on_time + 1
@@ -657,7 +678,7 @@ def _streaks(cells: Sequence[DayCell]) -> Streaks:
     for c in reversed(cells):
         if c.result.state is DayState.WORKED:
             dailies += 1
-        elif c.result.state is DayState.MISSING:
+        elif c.result.state is DayState.MISSING or "no_show_confirmed" in c.result.flags:
             break
     return Streaks(current_on_time=on_time, best_on_time=best, current_dailies=dailies)
 
@@ -740,12 +761,12 @@ async def employee_report(
                 iso_year=iso.year,
                 iso_week=iso.week,
                 label=week_label(iso.week),
-                planned=[t.text for t in c.plan.tasks] if c.plan else [],
+                planned=[t.text for t in c.latest_plan.tasks] if c.latest_plan else [],
                 done=[],
             ),
         )
-        if not wt.planned and c.plan:
-            wt.planned = [t.text for t in c.plan.tasks]
+        if not wt.planned and c.latest_plan:
+            wt.planned = [t.text for t in c.latest_plan.tasks]
         if c.daily and c.daily.tasks:
             wt.done.append((c.day, [t.text for t in c.daily.tasks]))
 
@@ -800,11 +821,13 @@ async def employee_report(
 # --- планы ---------------------------------------------------------------------------------
 
 
-def plan_version_out(plan: SchedulePlan) -> PlanVersionOut:
+def plan_version_out(plan: SchedulePlan, stated: datetime | None = None) -> PlanVersionOut:
     return PlanVersionOut(
         id=plan.id,
         version=plan.version,
         created_at=plan.created_at,
+        stated_at=plan.created_at if plan.source is Source.MANUAL else stated,
+        source_message_version=plan.source_version.version if plan.source_version else None,
         source=plan.source,
         created_by=plan.created_by,
         edited=plan.edited,
@@ -835,6 +858,9 @@ async def plans_report(
     by_emp: dict[int, list[SchedulePlan]] = defaultdict(list)
     for p in plans:
         by_emp[p.employee_id].append(p)
+    from teamtime.services.facts import message_times
+
+    times = await message_times(session, [p for versions in by_emp.values() for p in versions])
     cells = await load_cells(session, settings, days[0], days[-1], [e.id for e in employees])
     from teamtime.services.history import calculation_versions, settings_on
 
@@ -854,8 +880,18 @@ async def plans_report(
         rows.append(
             PlanRow(
                 employee=brief(e),
-                current=plan_version_out(current) if current else None,
-                versions=[plan_version_out(p) for p in versions],
+                current=plan_version_out(
+                    current,
+                    times.get(current.source_version_id) if current.source_version_id else None,
+                )
+                if current
+                else None,
+                versions=[
+                    plan_version_out(
+                        p, times.get(p.source_version_id) if p.source_version_id else None
+                    )
+                    for p in versions
+                ],
                 done_tasks=[t.text for c in ecells if c.daily for t in c.daily.tasks],
                 days_with_daily=sum(1 for c in ecells if c.daily),
                 days_planned=sum(1 for c in ecells if c.result.planned),

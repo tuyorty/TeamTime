@@ -36,7 +36,7 @@ from teamtime.db.models import (
 )
 from teamtime.parsing.text import TimeFormatError, parse_interval_list
 from teamtime.services import manual, notifications
-from teamtime.services.facts import today_local
+from teamtime.services.facts import load_cells, today_local
 from teamtime.services.manual import current_daily
 from teamtime.services.settings import AppSettings
 
@@ -263,7 +263,9 @@ async def send_check(
     )
     if pending:
         text += "\n\n⚠️ Есть сообщения с вопросами. Откройте /fix, чтобы проверить их."
-    text += "\n\nЗаполнить дейлик: /daily"
+    cell = (await load_cells(session, settings, today, today, [employee.id]))[employee.id, today]
+    if "no_show_confirmed" not in cell.result.flags:
+        text += "\n\nЗаполнить дейлик: /daily"
     await display_report(message, text, settings, "day", today, employee.id)
 
 

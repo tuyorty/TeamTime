@@ -37,6 +37,8 @@ class TimeOfDay(int):
 
 
 def _plan_text(c: DayCellOut) -> str:
+    if c.no_show and "no_show_confirmed" in c.flags:
+        return "; ".join(f"{format_hm(a)}–{format_hm(b)}" for a, b in c.no_show.intervals)
     if c.plan is None:
         return ""
     if c.plan.kind.value == "off":
@@ -63,7 +65,8 @@ def day_rows(name: str, position: str, cells: Sequence[DayCellOut]) -> list[list
             f.efficiency if f else None,
             Duration(f.result_sec) if f and f.result_sec is not None else None,
             Duration(c.late_sec) if c.late_sec else None,
-            STATUS_LABELS[c.status] if c.status else "",
+            "Подтверждённый невыход" if "no_show_confirmed" in c.flags
+            else STATUS_LABELS[c.status] if c.status else "",
             " · ".join(f.tasks) if f else "",
         ])  # fmt: skip
     return rows
@@ -122,7 +125,11 @@ def month_late_rows(month: MonthOut) -> tuple[list[str], list[list[Any]]]:
             r.employee.short_name,
             d.date,
             TimeOfDay(d.plan_start),
-            TimeOfDay(d.fact_start),
+            "Подтверждённый невыход"
+            if d.no_show
+            else TimeOfDay(d.fact_start)
+            if d.fact_start is not None
+            else None,
             Duration(d.late_sec),
         ]
         for r in month.rows
@@ -229,7 +236,7 @@ def week_grid_rows(week: WeekOut) -> tuple[list[str], list[list[Any]]]:
             f = c.fact
             row += [
                 STATUS_LABELS[c.status] if c.status and not f else _plan_text(c),
-                TimeOfDay(f.start) if f else None,
+                "Невыход" if "no_show_confirmed" in c.flags else TimeOfDay(f.start) if f else None,
                 TimeOfDay(f.end) if f else None,
                 Duration(f.worked_sec) if f else None,
                 f.efficiency if f else None,

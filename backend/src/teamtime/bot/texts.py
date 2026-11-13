@@ -48,6 +48,9 @@ def span(start: int | None, end: int | None) -> str:
 
 
 def plan_text(cell: DayCellOut) -> str:
+    if "no_show_confirmed" in cell.flags and cell.no_show:
+        intervals = "; ".join(span(start, end) for start, end in cell.no_show.intervals)
+        return f"{short_text(intervals, 240)} (план при подтверждении невыхода)"
     if cell.status_label and cell.status != "remote":
         return short_text(cell.status_label)
     plan = cell.plan
@@ -63,6 +66,8 @@ def plan_text(cell: DayCellOut) -> str:
 def fact_text(cell: DayCellOut) -> str:
     fact = cell.fact
     if fact is None:
+        if "no_show_confirmed" in cell.flags:
+            return "невыход подтверждён администратором"
         if cell.status_label:
             return short_text(cell.status_label.lower())
         return {
@@ -106,6 +111,8 @@ def format_today(report: TodayOut) -> str:
     }
     for row in report.rows:
         detail = plan_text(row.cell)
+        if "no_show_confirmed" in row.cell.flags:
+            detail = f"Невыход подтверждён · {detail}"
         if row.presence == "absent" and row.cell.status_note:
             detail += f" · {short_text(row.cell.status_note, 120)}"
         groups[row.presence].append(f"• <b>{_name(row.employee)}</b> — {detail}")
@@ -137,10 +144,12 @@ def format_day_summary(report: TodayOut) -> str:
         if row.cell.plan
         and row.cell.plan.kind.value == "work"
         and not row.cell.fact
+        and "no_show_confirmed" not in row.cell.flags
         and row.presence not in {"absent", "off"}
     ]
     received = [row for row in report.rows if row.cell.fact]
     late = [row for row in received if row.cell.late_sec]
+    no_shows = [row for row in report.rows if "no_show_confirmed" in row.cell.flags]
     lines = [
         f"📋 <b>Итоги дня · {human_date(report.date)} {report.date.year}</b>",
         "",
@@ -161,6 +170,16 @@ def format_day_summary(report: TodayOut) -> str:
             "",
             "<b>⚠️ Опоздания</b>",
             *(f"• {_name(row.employee)} — {format_hm(row.cell.late_sec)}" for row in late),
+        ]
+    if no_shows:
+        lines += [
+            "",
+            f"<b>Невыходы подтверждены · {len(no_shows)}</b>",
+            *(
+                f"• {_name(row.employee)} — {format_hm(row.cell.late_sec)} в опоздания"
+                for row in no_shows
+            ),
+            "<i>Штрафное время рассчитывается по месячной шкале.</i>",
         ]
     if received:
         lines += ["", "<b>✅ Присланные дейлики</b>"]
@@ -224,12 +243,21 @@ def format_employee_day(row: TodayRow, today: date) -> str:
             else "Эффективность не указана."
         )
     for value, label in (
-        (cell.late_sec, "Опоздание"),
+        (
+            cell.late_sec,
+            "Время невыхода, в опоздания" if "no_show_confirmed" in cell.flags else "Опоздание",
+        ),
         (cell.early_leave_sec, "Ранний уход"),
         (cell.undertime_sec, "Недоработка"),
     ):
         if value:
             lines.append(f"⚠️ {label}: <b>{format_hm(value)}</b>")
+    if "no_show_conflict" in cell.flags:
+        lines += [
+            "",
+            "⚠️ Подтверждение невыхода требует пересмотра: появился дейлик, "
+            "согласованный статус или праздник. Время невыхода в опоздания не добавлено.",
+        ]
     if cell.status_note:
         lines += ["", f"Статус: {short_text(cell.status_note, 500)}"]
     if cell.plan and cell.plan.note:
@@ -261,13 +289,19 @@ def format_my_week(week: WeekOut, row: WeekRow) -> str:
             )
         marks = []
         if cell.late_sec:
-            marks.append(f"опоздание {format_hm(cell.late_sec)}")
+            label = "невыход, в опоздания" if "no_show_confirmed" in cell.flags else "опоздание"
+            marks.append(f"{label} {format_hm(cell.late_sec)}")
         if cell.early_leave_sec:
             marks.append(f"ранний уход {format_hm(cell.early_leave_sec)}")
         if cell.undertime_sec:
             marks.append(f"недоработка {format_hm(cell.undertime_sec)}")
         if marks:
             lines.append(f"⚠️ {', '.join(marks)}")
+        if "no_show_conflict" in cell.flags:
+            lines.append(
+                "⚠️ Подтверждение невыхода требует пересмотра: появился дейлик, "
+                "согласованный статус или праздник. Время невыхода в опоздания не добавлено."
+            )
     totals = row.totals
     lines += [
         "",

@@ -96,3 +96,19 @@ def test_equal_records_keep_total_and_only_three_examples() -> None:
     assert [item.date.day for item in result.earliest_start.occurrences] == [25, 24, 23]
     assert result.largest_lateness is None
     assert result.comparable_days == result.on_time_days == 6
+
+
+def test_no_show_counts_as_lateness_without_inventing_arrival_or_daily() -> None:
+    missed = cell(1, 26, plan=(10, 18))
+    missed.result = compute_day(
+        missed.day,
+        missed.result.plan,
+        None,
+        None,
+        DayRules(),
+        TODAY,
+        confirmed_no_show_seconds=8 * 3600,
+    )
+    result = period_highlights([missed], PEOPLE, TODAY)
+    assert result.largest_lateness and result.largest_lateness.value_sec == 8 * 3600
+    assert result.earliest_start is None and result.reported_days == 0

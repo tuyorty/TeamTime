@@ -450,3 +450,38 @@ async def test_delay_is_configurable_and_hour_setting_is_not_used(maker) -> None
     at("2026-10-26T18:30:00+05:00")
     async with maker() as session:
         assert len(await due_reminders(session)) == 1
+
+
+@pytest.mark.parametrize("snoozed", [False, True])
+async def test_confirmed_no_show_stops_initial_and_snoozed_reminders(maker, snoozed):
+    from teamtime.services import facts, no_shows
+
+    employee_id = await setup_reminder(maker)
+    fake = FakeSession()
+    bot = Bot("123456:TEST-TOKEN", session=fake)
+    at()
+    if snoozed:
+        assert await send_due_reminders(bot, maker) == 1
+    async with maker() as session:
+        if snoozed:
+            await notifications.snooze(session, employee_id, WORK_DATE, 501)
+        settings = await load_settings(session)
+        cell = (await facts.load_cells(session, settings, WORK_DATE, WORK_DATE, [employee_id]))[
+            employee_id, WORK_DATE
+        ]
+        await no_shows.confirm(
+            session,
+            settings,
+            employee_id=employee_id,
+            day=WORK_DATE,
+            expected_plan_id=cell.plan.id,
+            expected_seconds=8 * 3600,
+            reason="Невыход проверен администратором",
+            actor="admin",
+        )
+        await session.commit()
+    at("2026-10-26T18:45:00+05:00")
+    async with maker() as session:
+        assert await due_reminders(session) == []
+    assert await send_due_reminders(bot, maker) == 0
+    assert len(fake.of(SendMessage)) == int(snoozed)

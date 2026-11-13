@@ -57,7 +57,13 @@ class Reminder:
 def _deadline(cell: DayCell, settings: AppSettings, delay: int | None = None) -> datetime | None:
     """Ожидаем последний рабочий интервал, учитывая переход смены через полночь."""
     plan = cell.result.plan
-    if cell.daily or not cell.result.planned or not plan or plan.end_abs is None:
+    if (
+        cell.daily
+        or "no_show_confirmed" in cell.result.flags
+        or not cell.result.planned
+        or not plan
+        or plan.end_abs is None
+    ):
         return None
     midnight = datetime.combine(cell.day, time.min, settings.tz)
     return midnight + timedelta(

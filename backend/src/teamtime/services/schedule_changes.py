@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from teamtime.db.models import ParseResultRow, SchedulePlan
+from teamtime.db.models import ParseResultRow, SchedulePlan, Source
 from teamtime.schemas import PlanOut, ScheduleChangePreview, ScheduleDayChange
 from teamtime.services.facts import date_range, load_cells
 from teamtime.services.reports import cell_out, plan_out
@@ -33,6 +33,7 @@ async def schedule_change_preview(
         select(SchedulePlan)
         .where(
             SchedulePlan.parse_result_id == row.id,
+            SchedulePlan.source != Source.MANUAL,
         )
         .order_by(SchedulePlan.version.desc())
         .limit(1)
@@ -65,17 +66,38 @@ async def schedule_change_preview(
     start, end = plan.week_start, plan.week_start + timedelta(days=6)
     current = await load_cells(session, settings, start, end, [plan.employee_id])
     accepted = await load_cells(
-        session, settings, start, end, [plan.employee_id], extra_approved=[plan.id]
+        session,
+        settings,
+        start,
+        end,
+        [plan.employee_id],
+        extra_approved=[plan.id],
+        extra_restored=[plan.id],
     )
     old_days = {day.date: plan_out(day) for day in previous.days} if previous else {}
     new_days = {day.date: plan_out(day) for day in plan.days}
     days = []
     for day in date_range(start, end):
+        current_cell = current[(plan.employee_id, day)]
+        accepted_cell = accepted[(plan.employee_id, day)]
         before, after = (
-            cell_out(current[(plan.employee_id, day)]),
-            cell_out(accepted[(plan.employee_id, day)]),
+            cell_out(current_cell),
+            cell_out(accepted_cell),
         )
         affects = not _same_plan(before.plan, after.plan) or before.late_sec != after.late_sec
+        approval_note = None
+        if (
+            not affects
+            and current_cell.plan is not None
+            and current_cell.plan.source is Source.MANUAL
+            and accepted_cell.plan is not None
+            and accepted_cell.plan.id == current_cell.plan.id
+            and not _same_plan(before.plan, new_days.get(day))
+        ):
+            approval_note = (
+                "После этой версии расписание исправлено вручную. Одобрение сообщения "
+                "не заменит ручной план; при необходимости измените день в таблице."
+            )
         if not _same_plan(old_days.get(day), new_days.get(day)) or affects:
             days.append(
                 ScheduleDayChange(
@@ -85,6 +107,7 @@ async def schedule_change_preview(
                     current=before,
                     if_accepted=after,
                     affects_calculation=affects,
+                    approval_note=approval_note,
                 )
             )
     old_tasks = [task.text for task in previous.tasks] if previous else []

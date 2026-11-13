@@ -630,6 +630,33 @@ class DayStatus(Timestamped, Base):
 # --- служебное ---------------------------------------------------------------------------------
 
 
+class DayNoShow(Timestamped, Base):
+    """Подтверждённый администратором невыход: снимок плана не меняется вместе с расписанием."""
+
+    __tablename__ = "day_no_shows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
+    date: Mapped[date] = mapped_column(Date)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("schedule_plans.id"))
+    seconds: Mapped[int] = mapped_column(Integer)
+    intervals: Mapped[list[list[int]]] = mapped_column(JSONB)
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(100))
+    retracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("seconds > 0", name="seconds_positive"),
+        Index(
+            "uq_day_no_shows_active",
+            "employee_id",
+            "date",
+            unique=True,
+            postgresql_where=text("retracted_at IS NULL"),
+        ),
+    )
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

@@ -52,7 +52,7 @@ class DayState(StrEnum):
     WORKED = "worked"
     """Есть дейлик."""
     ABSENCE = "absence"
-    """Отпуск, больничный, отгул, «не приду»."""
+    """Отпуск, больничный, отгул, «не приду» или подтверждённый невыход."""
     OFF = "off"
     """Выходной по плану, по календарю или праздник."""
     MISSING = "missing"
@@ -174,11 +174,11 @@ class DayResult:
     status: StatusKind | None
 
     worked: int | None
-    """Зачтённые часы дня, секунды; в командировке — 0. None — нет дейлика."""
+    """Зачтённые часы, секунды; в командировке и при невыходе — 0. None — нет факта."""
     result: Seconds | None
     """Итог = Часы × e%. None — нет дейлика или не указана эффективность."""
     late: int | None
-    """Опоздание, секунды. None — не применимо (нет плана со временем, нет факта, статус)."""
+    """Опоздание либо часы подтверждённого невыхода, секунды. None — не применимо."""
     early_leave: int | None
     undertime: int | None
     planned: int | None
@@ -207,6 +207,8 @@ def compute_day(
     status: StatusKind | None,
     rules: DayRules,
     today: date,
+    *,
+    confirmed_no_show_seconds: int | None = None,
 ) -> DayResult:
     """Посчитать день. ``today`` нужен, чтобы отличить «ещё не прислал» от «не прислал»."""
     # Явная отметка в расписании действует вместе с его версией; ручной статус приоритетнее.
@@ -278,6 +280,22 @@ def compute_day(
     else:
         state = DayState.UNPLANNED
 
+    planned = effective_plan.planned_seconds if planned_work and effective_plan else None
+    if confirmed_no_show_seconds is not None:
+        if confirmed_no_show_seconds <= 0:
+            raise ValueError("Подтверждённый невыход должен содержать положительное время")
+        if fact is not None or cancels or holiday:
+            # Факт, уважительная причина или праздник требуют пересмотра решения, а не штрафа.
+            flags.append("no_show_conflict")
+        else:
+            # Это отдельное решение админа, отсутствие дейлика само его не создаёт.
+            state = DayState.ABSENCE
+            worked, result = 0, Fraction(0)
+            late = planned = confirmed_no_show_seconds
+            early = under = None
+            flags = [f for f in flags if f != "missing_daily"]
+            flags.append("no_show_confirmed")
+
     return DayResult(
         day=day,
         state=state,
@@ -289,7 +307,7 @@ def compute_day(
         late=late,
         early_leave=early,
         undertime=under,
-        planned=effective_plan.planned_seconds if planned_work and effective_plan else None,
+        planned=planned,
         no_plan=no_plan,
         flags=tuple(flags),
     )

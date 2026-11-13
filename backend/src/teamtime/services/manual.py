@@ -199,10 +199,20 @@ async def set_plan_day(
     reason: str = "",
 ) -> SchedulePlan:
     """Новая ручная версия плана недели, где изменён один день. ``kind=None`` убирает день."""
+    from teamtime.services.facts import load_cells
+    from teamtime.services.settings import load_settings
+
     week_start = day - timedelta(days=day.weekday())
     iso = week_start.isocalendar()
     plans = await current_plans(session, week_start, week_start + timedelta(days=6), [employee_id])
     previous = next((p for p in plans if p.week_start == week_start), None)
+    cells = await load_cells(
+        session,
+        await load_settings(session),
+        week_start,
+        week_start + timedelta(days=6),
+        [employee_id],
+    )
 
     checked: list[Interval] = []
     if kind is PlanDayKind.WORK:
@@ -215,7 +225,12 @@ async def set_plan_day(
             note_has_time=d.note_has_time, raw_line=d.raw_line,
         )  # fmt: skip
 
-    days = [copy_day(d) for d in (previous.days if previous else []) if d.date != day]
+    # Ручная правка одного дня не одобряет поздние изменения остальных дней недели.
+    days = [
+        copy_day(cell.plan_day)
+        for cell in cells.values()
+        if cell.day != day and cell.plan_day is not None
+    ]
     if kind is not None:
         days.append(
             PlanDay(
@@ -257,7 +272,7 @@ async def set_plan_day(
     )
     session.add(plan)
     await session.flush()
-    before_day = next((d for d in (previous.days if previous else []) if d.date == day), None)
+    before_day = cells[(employee_id, day)].plan_day
     await audit.record(
         session,
         actor=actor,
@@ -547,6 +562,8 @@ async def resolve_parse(
     )
     if row is None:
         raise EditError("Запись инбокса не найдена")
+    if not row.is_latest:
+        raise EditError("У сообщения уже есть новый разбор или правка. Обновите инбокс")
     if resolution in {Resolution.ACCEPTED, Resolution.FIXED} and any(
         issue["code"] in {"posted_for_other", "schedule_person_mismatch"}
         or (row.kind is MessageKind.SCHEDULE and issue["code"] == "identity_not_linked")
@@ -555,7 +572,9 @@ async def resolve_parse(
         raise EditError(
             "Сначала проверьте привязку отправителя и ФИО, затем переразберите сообщение"
         )
-    if resolution is Resolution.IGNORED:
+    if row.kind is MessageKind.SCHEDULE:
+        await _resolve_schedule(session, row, resolution)
+    elif resolution is Resolution.IGNORED:
         raw = await session.get(RawMessage, row.version.raw_message_id)
         assert raw is not None
         await retract_derived(session, raw)
@@ -569,6 +588,45 @@ async def resolve_parse(
     )  # fmt: skip
     await events.notify(session, "inbox.changed", parse_result_id=row.id)
     return row
+
+
+async def _resolve_schedule(
+    session: AsyncSession, row: ParseResultRow, resolution: Resolution
+) -> None:
+    """Решение касается выбранной правки, а не всех расписаний исходного сообщения."""
+    plans = list(
+        await session.scalars(
+            select(SchedulePlan).where(
+                SchedulePlan.parse_result_id == row.id, SchedulePlan.source != Source.MANUAL
+            )
+        )
+    )
+    if resolution in {Resolution.ACCEPTED, Resolution.PENDING}:
+        if not plans and resolution is Resolution.ACCEPTED:
+            raise EditError("Расписание не разобрано. Исправьте сообщение и переразберите его")
+        for plan in plans:
+            plan.retracted_at = None
+    elif resolution is Resolution.IGNORED:
+        for plan in plans:
+            plan.retracted_at = clock.now()
+            previous = await session.scalar(
+                select(SchedulePlan)
+                .join(RawMessageVersion, SchedulePlan.source_version_id == RawMessageVersion.id)
+                .join(ParseResultRow, SchedulePlan.parse_result_id == ParseResultRow.id)
+                .where(
+                    RawMessageVersion.raw_message_id == row.version.raw_message_id,
+                    SchedulePlan.employee_id == plan.employee_id,
+                    SchedulePlan.week_start == plan.week_start,
+                    SchedulePlan.version < plan.version,
+                    SchedulePlan.source_version_id != plan.source_version_id,
+                    ParseResultRow.resolution != Resolution.IGNORED,
+                    SchedulePlan.source != Source.MANUAL,
+                )
+                .order_by(SchedulePlan.version.desc())
+                .limit(1)
+            )
+            if previous is not None:
+                previous.retracted_at = None
 
 
 async def resolve_daily_inbox(

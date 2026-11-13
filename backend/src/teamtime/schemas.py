@@ -148,6 +148,17 @@ class SourceRef(BaseModel):
     daily_raw_message_id: int | None = None
 
 
+class NoShowInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    plan_id: int
+    seconds: int
+    intervals: list[list[int]]
+    reason: str
+    created_by: str
+    created_at: datetime
+
+
 class DayCellOut(BaseModel):
     date: date
     state: DayState
@@ -156,12 +167,16 @@ class DayCellOut(BaseModel):
     status_note: str | None
     plan: PlanOut | None
     fact: FactOut | None
-    late_sec: int | None = Field(description="Опоздание; None — не применимо (нет плана/факта)")
+    late_sec: int | None = Field(
+        description="Опоздание или часы подтверждённого невыхода; None — не применимо"
+    )
     early_leave_sec: int | None
     undertime_sec: int | None
     no_plan: bool
     flags: list[str]
     source: SourceRef
+    no_show: NoShowInfo | None = None
+    can_confirm_no_show: bool = False
 
 
 # --- неделя --------------------------------------------------------------------------------
@@ -254,7 +269,8 @@ class LateDay(BaseModel):
     date: date
     late_sec: int
     plan_start: int
-    fact_start: int
+    fact_start: int | None
+    no_show: bool = False
 
 
 class WeekPoint(BaseModel):
@@ -473,6 +489,8 @@ class PlanVersionOut(BaseModel):
     id: int
     version: int
     created_at: datetime
+    stated_at: datetime | None = None
+    source_message_version: int | None = None
     source: Source
     created_by: str
     edited: bool
@@ -565,6 +583,7 @@ class ScheduleDayChange(BaseModel):
     current: DayCellOut
     if_accepted: DayCellOut
     affects_calculation: bool
+    approval_note: str | None = None
 
 
 class ScheduleChangePreview(BaseModel):

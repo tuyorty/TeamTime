@@ -47,7 +47,13 @@ from teamtime.parsing import (
 from teamtime.parsing.schedule import WEEKDAY_SHORT
 from teamtime.parsing.types import ScheduleData
 from teamtime.services import events
-from teamtime.services.facts import change_deadline
+from teamtime.services.facts import (
+    approved_plans,
+    change_deadline,
+    message_times,
+    plan_history,
+    plan_in_force,
+)
 from teamtime.services.matching import (
     candidates_by_surname,
     employee_by_person,
@@ -144,7 +150,7 @@ async def ingest(
             RawMessage.chat_id == msg.chat_id, RawMessage.message_id == msg.message_id
         )
     )
-    is_edit = False
+    is_edit = msg.edited_at is not None
     if raw is None:
         if hint is None and detect_kind(msg.text) is MessageKind.UNKNOWN:
             return IngestOutcome(skipped="not_relevant")
@@ -161,7 +167,9 @@ async def ingest(
         )
         session.add(raw)
         await session.flush()
-        version = RawMessageVersion(raw_message_id=raw.id, version=1, text=msg.text, edited_at=None)
+        version = RawMessageVersion(
+            raw_message_id=raw.id, version=1, text=msg.text, edited_at=msg.edited_at
+        )
         session.add(version)
     else:
         latest = await session.scalar(
@@ -271,7 +279,14 @@ async def interpret(
         hint = TOPIC_TO_KIND.get(binding.kind) if binding else None
 
     result = parse_message(version.text, raw.sent_at, settings.tz, topic_hint=hint)
-    dates = await retract_derived(session, raw)
+    # Ошибка в новой правке не должна стирать последнее пригодное расписание.
+    # Дейлики сохраняют прежнюю семантику отзыва, планы заменяем после успешного разбора.
+    dates = await retract_derived(session, raw, plans=False)
+    previous_parse = await session.scalar(
+        select(ParseResultRow).where(
+            ParseResultRow.message_version_id == version.id, ParseResultRow.is_latest
+        )
+    )
     await session.execute(
         update(ParseResultRow)
         .where(
@@ -284,11 +299,14 @@ async def interpret(
 
     outcome = IngestOutcome(kind=result.kind, raw_message_id=raw.id, issues=list(result.issues))
     if result.kind is MessageKind.UNKNOWN:
+        dates.extend(await retract_derived(session, raw))
         row = _parse_row(version, result, None, unresolved=False, resolution=Resolution.IGNORED)
         session.add(row)
         await session.flush()
         outcome.parse_result_id = row.id
         outcome.status = result.status
+        if dates:
+            await events.notify(session, "inbox.changed", dates=[d.isoformat() for d in dates])
         return outcome
 
     employee, extra, candidates = await _resolve_employee(session, result, identity)
@@ -308,6 +326,15 @@ async def interpret(
     resolution = (
         Resolution.AUTO if status is ParseStatus.OK and not unresolved else Resolution.PENDING
     )
+    if (
+        previous_parse is not None
+        and previous_parse.resolution in {Resolution.ACCEPTED, Resolution.FIXED}
+        and employee is not None
+        and previous_parse.employee_id == employee.id
+        and status is not ParseStatus.FAILED
+        and previous_parse.data == result_to_json(result)
+    ):
+        resolution = previous_parse.resolution
     row = _parse_row(
         version,
         result,
@@ -330,8 +357,9 @@ async def interpret(
         await assign_from_chat(session, employee, raw.chat_id, row.id)
 
     if employee is not None and status is not ParseStatus.FAILED:
-        is_edit = version.version > 1
+        is_edit = version.version > 1 or version.edited_at is not None
         if result.schedule is not None:
+            dates.extend(await retract_derived(session, raw))
             plan = await create_plan_version(
                 session, employee.id, result, version, row.id, raw.source, actor, edited=is_edit
             )
@@ -373,10 +401,16 @@ async def late_change(
     """
     previous = await session.scalar(
         select(SchedulePlan)
+        .outerjoin(ParseResultRow, SchedulePlan.parse_result_id == ParseResultRow.id)
         .where(
             SchedulePlan.employee_id == employee_id,
             SchedulePlan.iso_year == schedule.iso_year,
             SchedulePlan.iso_week == schedule.iso_week,
+            or_(
+                SchedulePlan.source == Source.MANUAL,
+                ParseResultRow.id.is_(None),
+                ParseResultRow.resolution != Resolution.IGNORED,
+            ),
             or_(
                 SchedulePlan.source_version_id.is_(None),
                 SchedulePlan.source_version_id != version_id,
@@ -388,17 +422,26 @@ async def late_change(
     )
     if previous is None:
         return None  # первый план недели действует всегда
-    old = {d.date: d for d in previous.days}
+    older = [
+        p
+        for p in (await plan_history(session, [previous]))[previous.id]
+        if p.source_version_id != version_id
+    ]
+    versions = [*older, previous]
+    sent = await message_times(session, versions)
+    approved = await approved_plans(session, versions)
+    old_dates = {d.date for p in versions for d in p.days}
     new = {d.date: d for d in schedule.days}
     late: list[date] = []
-    for day in sorted(old.keys() | new.keys()):
-        before, after = old.get(day), new.get(day)
+    for day in sorted(old_dates | new.keys()):
+        _, before, _ = plan_in_force(day, previous, older, settings, sent, approved)
+        after = new.get(day)
         same = (
             before is not None
             and after is not None
             and before.kind is after.kind
             and [list(i) for i in before.intervals] == [[i.start, i.end] for i in after.intervals]
-            and (before.note or None) == (after.note or None)
+            and (before.kind.value == "work" or (before.note or None) == (after.note or None))
         )
         start = before.start_sec if before else None
         deadline = change_deadline(day, start, settings.plan_notice_hours, settings.tz)
@@ -513,17 +556,27 @@ async def _resolve_employee(
     return None, issues, [suggestion] if suggestion else []
 
 
-async def retract_derived(session: AsyncSession, raw: RawMessage) -> list[date]:
+async def retract_derived(
+    session: AsyncSession, raw: RawMessage, *, plans: bool = True
+) -> list[date]:
     """Отозвать версии планов и дейликов, полученные из прошлых версий этого сообщения."""
     now = clock.now()
     version_ids = select(RawMessageVersion.id).where(RawMessageVersion.raw_message_id == raw.id)
     dates: list[date] = []
-    plans = await session.scalars(
-        select(SchedulePlan).where(
-            SchedulePlan.source_version_id.in_(version_ids), SchedulePlan.retracted_at.is_(None)
+    plan_rows = (
+        list(
+            await session.scalars(
+                select(SchedulePlan).where(
+                    SchedulePlan.source_version_id.in_(version_ids),
+                    SchedulePlan.retracted_at.is_(None),
+                    SchedulePlan.source != Source.MANUAL,
+                )
+            )
         )
+        if plans
+        else []
     )
-    for plan in plans:
+    for plan in plan_rows:
         plan.retracted_at = now
         dates.extend(d.date for d in await plan.awaitable_attrs.days)
     dailies = await session.scalars(

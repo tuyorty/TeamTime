@@ -11,15 +11,17 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from teamtime.calc import DayResult, FactInput, PlanInput, compute_day
+from teamtime.calc.no_show import confirmed_shift_end
 from teamtime.core import clock
 from teamtime.db.models import (
     Daily,
+    DayNoShow,
     DayStatus,
     Employee,
     ParseResultRow,
@@ -45,6 +47,10 @@ class DayCell:
     status: DayStatus | None
     late_edit: SchedulePlan | None = None
     """Свежая версия плана, которая пришла после начала дня и для этого дня не учтена."""
+    latest_plan: SchedulePlan | None = None
+    """Последняя версия недели для задач; запрет поздней правки времени на задачи не влияет."""
+    no_show: DayNoShow | None = None
+    can_confirm_no_show: bool = False
 
 
 def date_range(start: date, end: date) -> Iterator[date]:
@@ -58,13 +64,18 @@ def today_local(settings: AppSettings) -> date:
 
 
 async def current_plans(
-    session: AsyncSession, start: date, end: date, employee_ids: Iterable[int] | None = None
+    session: AsyncSession,
+    start: date,
+    end: date,
+    employee_ids: Iterable[int] | None = None,
+    *,
+    restored: Iterable[int] = (),
 ) -> list[SchedulePlan]:
     """Актуальная версия плана на каждую неделю, которая пересекается с диапазоном."""
     q = (
         select(SchedulePlan)
         .where(
-            SchedulePlan.retracted_at.is_(None),
+            or_(SchedulePlan.retracted_at.is_(None), SchedulePlan.id.in_(list(restored))),
             SchedulePlan.week_start <= end,
             SchedulePlan.week_start >= start - timedelta(days=6),
         )
@@ -133,9 +144,15 @@ async def plan_history(
         return {}
     rows = await session.scalars(
         select(SchedulePlan)
+        .outerjoin(ParseResultRow, SchedulePlan.parse_result_id == ParseResultRow.id)
         .where(
             SchedulePlan.employee_id.in_({p.employee_id for p in plans}),
             SchedulePlan.week_start.in_({p.week_start for p in plans}),
+            or_(
+                SchedulePlan.source == Source.MANUAL,
+                ParseResultRow.id.is_(None),
+                ParseResultRow.resolution != Resolution.IGNORED,
+            ),
         )
         .options(
             selectinload(SchedulePlan.days),
@@ -190,7 +207,7 @@ def plan_in_force(
     in_force: tuple[SchedulePlan, PlanDay | None] | None = None
     for p in sorted([*older, current], key=order):
         candidate = day_of(p)
-        if p is not current and candidate is None:
+        if p is not current and candidate is None and p.source is not Source.MANUAL:
             continue  # версия без этого дня (другой спринт) — не про него
         when = stated_at(p, sent)
         start = in_force[1].start_sec if in_force and in_force[1] else None
@@ -198,6 +215,14 @@ def plan_in_force(
             in_force is None
             or when is None
             or p.id in approved
+            or (
+                candidate is not None
+                and in_force is not None
+                and in_force[1] is not None
+                and candidate.kind == in_force[1].kind
+                and candidate.intervals == in_force[1].intervals
+                and (candidate.kind.value == "work" or candidate.note == in_force[1].note)
+            )
             or when <= change_deadline(day, start, settings.plan_notice_hours, settings.tz)
             or (
                 p.source_version_id is not None
@@ -299,10 +324,19 @@ async def employees_for_period(session: AsyncSession, start: date, end: date) ->
         )
         .exists()
     )
+    has_no_show = (
+        select(DayNoShow.id)
+        .where(
+            DayNoShow.employee_id == Employee.id,
+            DayNoShow.date.between(start, end),
+            DayNoShow.retracted_at.is_(None),
+        )
+        .exists()
+    )
     return list(
         await session.scalars(
             select(Employee)
-            .where(or_(Employee.is_active, has_daily, has_plan, has_status))
+            .where(or_(Employee.is_active, has_daily, has_plan, has_status, has_no_show))
             .order_by(Employee.short_name)
         )
     )
@@ -317,6 +351,7 @@ async def load_cells(
     *,
     today: date | None = None,
     extra_approved: Iterable[int] = (),
+    extra_restored: Iterable[int] = (),
 ) -> dict[tuple[int, date], DayCell]:
     """Все ячейки «сотрудник × день» за диапазон, включая пустые."""
     ids = list(employee_ids)
@@ -327,7 +362,7 @@ async def load_cells(
 
     plan_days: dict[tuple[int, date], tuple[SchedulePlan, PlanDay]] = {}
     late_edits: dict[tuple[int, date], SchedulePlan] = {}
-    plans = await current_plans(session, start, end, ids)
+    plans = await current_plans(session, start, end, ids, restored=extra_restored)
     history = await plan_history(session, plans)
     every = [*plans, *(o for h in history.values() for o in h)]
     sent = await message_times(session, every)
@@ -356,6 +391,16 @@ async def load_cells(
     statuses = {
         (s.employee_id, s.date): s for s in await current_statuses(session, start, end, ids)
     }
+    no_shows = {
+        (row.employee_id, row.date): row
+        for row in await session.scalars(
+            select(DayNoShow).where(
+                DayNoShow.employee_id.in_(ids),
+                DayNoShow.date.between(start, end),
+                DayNoShow.retracted_at.is_(None),
+            )
+        )
+    }
 
     cells: dict[tuple[int, date], DayCell] = {}
     for emp in ids:
@@ -368,6 +413,7 @@ async def load_cells(
                 plan = plans_by_week.get((emp, day - timedelta(days=day.weekday())))
             daily = dailies.get(key)
             status = statuses.get(key)
+            no_show = no_shows.get(key)
             result = compute_day(
                 day,
                 plan_input(pday) if pday else None,
@@ -375,6 +421,31 @@ async def load_cells(
                 status.kind if status else None,
                 settings_on(settings, versions, day).day_rules(),
                 today,
+                confirmed_no_show_seconds=no_show.seconds if no_show else None,
             )
-            cells[key] = DayCell(emp, day, result, plan, pday, daily, status, late_edits.get(key))
+            no_show_end = confirmed_shift_end(result.plan)
+            eligible = (
+                no_show is None
+                and daily is None
+                and day not in settings_on(settings, versions, day).holidays
+                and result.plan is not None
+                and result.plan.has_time
+                and no_show_end is not None
+                and not (result.status and result.status.cancels_plan)
+                and clock.now()
+                >= datetime.combine(day, time(), settings.tz) + timedelta(seconds=no_show_end)
+            )
+            cells[key] = DayCell(
+                emp,
+                day,
+                result,
+                plan,
+                pday,
+                daily,
+                status,
+                late_edits.get(key),
+                latest_plan=plans_by_week.get((emp, day - timedelta(days=day.weekday()))),
+                no_show=no_show,
+                can_confirm_no_show=bool(eligible),
+            )
     return cells
