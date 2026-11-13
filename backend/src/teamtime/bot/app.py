@@ -18,8 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from teamtime.core.config import Settings
 from teamtime.core.logging import configure_logging, get_logger
 from teamtime.db.session import get_sessionmaker
+from teamtime.services import fund_config
 
-from .handlers import browse, commands, group, personal, private
+from .handlers import browse, commands, fund, group, personal, private
 from .middleware import DbSessionMiddleware
 from .reminders import reminder_loop
 from .telemetry import TelemetryMiddleware
@@ -42,6 +43,15 @@ COMMANDS = [
 ]
 
 
+def menu_commands(*, fund_enabled: bool = False) -> list[BotCommand]:
+    if fund_enabled and fund_config.FUND_AVAILABLE:
+        return [
+            BotCommand(command="fund", description="Финансы: расчёт, выплаты и фонд"),
+            *COMMANDS,
+        ]
+    return COMMANDS.copy()
+
+
 def build_dispatcher(maker: async_sessionmaker[AsyncSession], config: Settings) -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage(), config=config)
     middleware = DbSessionMiddleware(maker)
@@ -51,7 +61,7 @@ def build_dispatcher(maker: async_sessionmaker[AsyncSession], config: Settings) 
     # Порядок важен: в группе «любой текст» не ловит команды, а в личке запасной обработчик
     # стоит последним, после команд.
     dp.include_routers(
-        group.router, commands.router, personal.router, browse.router, private.router
+        group.router, fund.router, commands.router, personal.router, browse.router, private.router
     )
     return dp
 
@@ -103,7 +113,11 @@ async def run(config: Settings) -> None:
         log.info("bot.started", username=me.username)
         if config.bot_username is None:
             config.bot_username = me.username
-        await bot.set_my_commands(COMMANDS, scope=BotCommandScopeAllPrivateChats())
+        async with maker() as session:
+            fund_enabled = (await fund_config.load(session)).module_active
+        await bot.set_my_commands(
+            menu_commands(fund_enabled=fund_enabled), scope=BotCommandScopeAllPrivateChats()
+        )
         reminders = asyncio.create_task(reminder_loop(bot, maker), name="reminders")
         await dp.start_polling(
             bot,

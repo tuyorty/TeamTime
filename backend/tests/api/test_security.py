@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from unittest.mock import AsyncMock
 
 import httpx
 from itsdangerous import URLSafeTimedSerializer
@@ -10,7 +11,7 @@ from openpyxl import load_workbook
 from pydantic import SecretStr
 
 from teamtime.api.app import create_app
-from teamtime.api.deps import SESSION_COOKIE
+from teamtime.api.deps import SESSION_COOKIE, get_session
 from teamtime.core.config import Settings
 from teamtime.services.export import Duration, to_csv, to_xlsx
 
@@ -20,6 +21,14 @@ NO_DB = "postgresql+asyncpg://x:x@127.0.0.1:1/x"  # эти запросы баз
 def client(**overrides: object) -> httpx.AsyncClient:
     settings = Settings(database_url=NO_DB, log_level="WARNING", **overrides)  # type: ignore[arg-type]
     app = create_app(settings, realtime=False)
+
+    # Только ветка прежнего парольного входа; именные роли проверяются с PostgreSQL.
+    async def session_without_fund():
+        session = AsyncMock()
+        session.get.return_value = None
+        yield session
+
+    app.dependency_overrides[get_session] = session_without_fund
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t/api/v1")
 
 

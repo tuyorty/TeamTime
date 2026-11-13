@@ -38,7 +38,12 @@ def not_linked_text(user: User) -> str:
 async def team_access(session: AsyncSession, chat: Chat, user: User | None) -> bool:
     """Сводку по всей команде видят только свои: привязанный активный сотрудник в личке
     или участники разрешённого админом чата. Бота может найти любой человек в Telegram."""
+    from teamtime.services import fund, fund_config, team_auth
+
+    protected = (await fund_config.load(session)).enabled
     if chat.type != "private":
+        if protected:
+            return False
         bot_chat = await session.get(BotChat, chat.id)
         return bool(bot_chat and bot_chat.approved)
     if user is None:
@@ -48,5 +53,12 @@ async def team_access(session: AsyncSession, chat: Chat, user: User | None) -> b
     )
     if identity is None or identity.employee_id is None:
         return False
+    if protected:
+        try:
+            # Именная защита остаётся действующей и при недоступном финансовом модуле.
+            await team_auth.account(session, identity.employee_id, identity.id)
+        except fund.FundError:
+            return False
+        return True
     employee = await session.get(Employee, identity.employee_id)
     return bool(employee and employee.is_active)

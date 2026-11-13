@@ -16,6 +16,35 @@ app.add_typer(bot_app, name="bot")
 app.add_typer(demo_app, name="demo")
 system_app = typer.Typer(help="Состояние служебных процессов.", no_args_is_help=True)
 app.add_typer(system_app, name="system")
+backup_app = typer.Typer(help="Полная зашифрованная копия и восстановление.", no_args_is_help=True)
+app.add_typer(backup_app, name="backup")
+
+
+@backup_app.command("pack")
+def backup_pack(source: Path, destination: Path, key_file: Path) -> None:
+    """Упаковать подготовленный каталог. Секреты и ключ не выводятся."""
+    from teamtime.services.fund_backup import pack
+
+    typer.echo(str(pack(source, destination, key_file)))
+
+
+@backup_app.command("unpack")
+def backup_unpack(source: Path, destination: Path, key_file: Path) -> None:
+    """Проверить и расшифровать в новый каталог, не изменяя рабочую БД."""
+    from teamtime.services.fund_backup import unpack
+
+    unpack(source, destination, key_file)
+    typer.echo("Копия проверена и расшифрована. База данных не изменялась.")
+
+
+@backup_app.command("deliver")
+def backup_deliver(source: Path, cycle: str) -> None:
+    """Доставить зашифрованную копию назначенным ответственным, не запуская polling."""
+    import asyncio
+
+    from teamtime.services.fund_backup import deliver
+
+    typer.echo(f"Копия доставлена. Получателей: {asyncio.run(deliver(source, cycle))}")
 
 
 @system_app.command("backup")
@@ -40,6 +69,16 @@ def record_backup(state: str = typer.Option("ok", help="ok или error")) -> No
             )
 
     asyncio.run(go())
+
+
+@backup_app.command("alert")
+def backup_alert(cycle: str) -> None:
+    """Однократное сообщение ответственным о сбое подготовки или доставки копии."""
+    import asyncio
+
+    from teamtime.services.fund_backup import alert_failure
+
+    asyncio.run(alert_failure(cycle))
 
 
 def _alembic_ini() -> Path:
@@ -70,6 +109,32 @@ def version() -> None:
 
 import_app = typer.Typer(help="Импорт истории.", no_args_is_help=True)
 app.add_typer(import_app, name="import")
+
+
+@import_app.command("fund")
+def import_fund(
+    path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    actor: int = typer.Option(..., help="Внутренний ID руководителя, подтвердившего пакет"),
+    expected_digest: str = typer.Option(
+        "", help="Хеш проверенного пакета; без него только проверка"
+    ),
+) -> None:
+    """Проверить пакет исторических финансов; применить только с хешем проверенной версии."""
+    import asyncio
+    import json
+
+    from teamtime.db.session import session_scope
+    from teamtime.importer import fund
+
+    package = fund.Package.model_validate_json(path.read_text(encoding="utf-8-sig"))
+
+    async def run() -> dict[str, object]:
+        async with session_scope() as session:
+            if expected_digest:
+                return await fund.apply(session, actor, package, expected_digest)
+            return await fund.inspect(session, actor, package)
+
+    typer.echo(json.dumps(asyncio.run(run()), ensure_ascii=False, indent=2))
 
 
 @import_app.command("telegram")

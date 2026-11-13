@@ -252,6 +252,9 @@ def fact_input(daily: Daily) -> FactInput:
     return FactInput(
         intervals=tuple(Interval(i.start_sec, i.end_sec) for i in daily.intervals),
         efficiency=daily.efficiency,
+        interval_efficiencies=tuple(
+            i.efficiency if i.efficiency is not None else daily.efficiency for i in daily.intervals
+        ),
     )
 
 

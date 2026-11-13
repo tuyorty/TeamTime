@@ -31,6 +31,7 @@ from teamtime.services.facts import DayCell, active_employees, load_cells
 from teamtime.services.notifications import next_allowed
 from teamtime.services.settings import AppSettings, load_settings
 
+from .fund_notifications import send_fund_notifications
 from .keyboards import reminder_menu
 from .shift_reminders import send_shift_reminders
 from .texts import format_reminder
@@ -356,7 +357,7 @@ async def send_due_reminders(bot: Bot, maker: async_sessionmaker[AsyncSession]) 
 
 async def reminder_loop(bot: Bot, maker: async_sessionmaker[AsyncSession]) -> None:
     while True:
-        for send in (send_shift_reminders, send_due_reminders):
+        for send in (send_shift_reminders, send_due_reminders, send_fund_notifications):
             try:
                 await send(bot, maker)
             except asyncio.CancelledError:

@@ -74,7 +74,12 @@ TABLES = (
     "schedule_plans, parse_results, raw_message_versions, raw_messages, day_statuses, "
     "topic_bindings, bot_chats, telegram_identities, daily_reminders, employees, employee_terms, "
     "calculation_versions, status_requests, notification_preferences, bot_drafts, "
-    "system_status, bot_deliveries, project_bonuses, shift_reminders"
+    "system_status, bot_deliveries, project_bonuses, shift_reminders, "
+    "fund_audit, fund_source_states, fund_receipts, fund_periods, fund_terms, "
+    "fund_calendars, fund_members, fund_baskets, fund_operations, fund_postings, "
+    "fund_obligations, fund_claims, fund_attachments, fund_loans, fund_reconciliations, "
+    "fund_time_requests, fund_vacation_years, fund_adjustments, fund_openings, "
+    "fund_notifications, fund_imports, team_logins, team_sessions"
 )
 
 

@@ -10,7 +10,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from teamtime.core.config import get_settings
-from teamtime.db import models  # noqa: F401  — регистрирует таблицы в metadata
+from teamtime.db import fund, fund_operations, models  # noqa: F401 — таблицы в metadata
 from teamtime.db.base import Base
 
 config = context.config

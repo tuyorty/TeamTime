@@ -29,6 +29,7 @@ from aiogram.types import (
     Chat,
     ChatMemberAdministrator,
     ChatMemberMember,
+    Document,
     Message,
     RichMessage,
     Update,
@@ -130,15 +131,20 @@ class Telegram:
         chat: Chat = GROUP,
         name: str = "Вымышленный",
         rich: dict[str, Any] | None = None,
+        document: bool = False,
     ) -> int:
-        """``rich`` — «богатое» сообщение (rich_message) вместо обычного текста."""
+        """``rich`` — форматированные блоки; ``document`` — файл с подписью из ``text``."""
         mid = message_id or next(self._message_ids)
         msg = Message(
             message_id=mid,
             date=datetime(2026, 10, 26, 6, 0, tzinfo=UTC),
             chat=chat,
             from_user=self.user(uid, name),
-            text=None if rich else text,
+            text=None if rich or document else text,
+            caption=text if document else None,
+            document=Document(file_id="test-document", file_unique_id="test-document-id")
+            if document
+            else None,
             rich_message=RichMessage.model_validate(rich) if rich else None,
             message_thread_id=thread,
             is_topic_message=thread is not None,

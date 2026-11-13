@@ -17,6 +17,9 @@ MAX_PAYLOAD = 7900  # предел PostgreSQL — 8000 байт
 
 
 async def notify(session: AsyncSession, event_type: str, **payload: Any) -> None:
+    from teamtime.services.fund_changes import changed
+
+    await changed(session, event_type, payload)
     body = json.dumps({"type": event_type, **payload}, ensure_ascii=False, default=str)
     if len(body.encode()) > MAX_PAYLOAD:
         body = json.dumps({"type": event_type}, ensure_ascii=False)

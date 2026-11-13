@@ -327,7 +327,7 @@ def format_month(name: str, label: str, summary: MonthSummaryOut) -> str:
         f"Опозданий: {summary.late_count} · всего {format_hm(summary.late_total_sec)}",
         f"Штраф за месяц: <b>{format_hm(summary.penalty_sec)}</b>",
     ]
-    if summary.norm_excluded_days:
+    if summary.norm_excluded_days and not summary.fund_model:
         lines += [
             "",
             f"Норма: {format_hm(summary.contract_norm_sec)} − "
@@ -335,7 +335,16 @@ def format_month(name: str, label: str, summary: MonthSummaryOut) -> str:
             f"Отпуск и командировки: {summary.norm_excluded_days} из "
             f"{summary.norm_working_days} рабочих дней. Оклад сохраняется.",
         ]
-    if summary.overtime_sec:
+    if summary.fund_model:
+        if summary.calculation_ready and summary.fund_salary is not None:
+            lines += [
+                "",
+                f"Начислено за время: <b>{summary.fund_salary:,.2f} ₽</b>",
+                "/fund — источники, переплата и доплата фонда",
+            ]
+        if summary.calculation_issues:
+            lines += ["", "⚠️ Расчёт требует уточнения. Подробности — /fund."]
+    elif summary.overtime_sec:
         bonus = f"{summary.bonus:,.2f}".replace(",", " ").replace(".", ",")
         lines += [
             "",

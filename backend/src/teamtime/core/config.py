@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     )
 
     log_level: str = "INFO"
+    fund_ollama_url: str | None = Field(
+        default=None,
+        description="Локальный Ollama для черновиков финансов; пусто — только пошаговый ввод.",
+    )
+    fund_ollama_model: str = "qwen3:4b"
     log_format: Literal["json", "console"] = "console"
 
     @property

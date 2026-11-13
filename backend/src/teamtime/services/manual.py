@@ -58,6 +58,7 @@ def _daily_snapshot(d: Daily | None) -> dict[str, Any] | None:
         "version": d.version,
         "intervals": [[i.start_sec, i.end_sec] for i in d.intervals],
         "efficiency": d.efficiency,
+        "interval_efficiencies": [i.efficiency for i in d.intervals],
         "tasks": [t.text for t in d.tasks],
     }
 
@@ -91,14 +92,22 @@ async def set_daily(
     actor: str,
     reason: str = "",
     parse_result_id: int | None = None,
+    interval_efficiencies: list[int | None] | None = None,
 ) -> Daily:
     """Новая ручная версия дейлика. Не переданные поля берутся из текущей версии."""
     previous = await current_daily(session, employee_id, work_date)
+    if intervals is None and isinstance(efficiency, _Keep) and previous is not None:
+        interval_efficiencies = [i.efficiency for i in previous.intervals]
     if intervals is None:
         if previous is None:
             raise EditError("Дейлика за этот день нет: укажите интервалы")
         intervals = [(i.start_sec, i.end_sec) for i in previous.intervals]
     checked = _check_intervals(intervals)
+    if interval_efficiencies is not None and (
+        len(interval_efficiencies) != len(checked)
+        or any(e is not None and not 0 <= e <= 100 for e in interval_efficiencies)
+    ):
+        raise EditError("Укажите эффективность 0–100% для каждого интервала")
     if isinstance(efficiency, _Keep):
         efficiency = previous.efficiency if previous else None
     if efficiency is not None and not 0 <= efficiency <= 100:
@@ -119,7 +128,12 @@ async def set_daily(
         created_by=actor,
         sent_at=previous.sent_at if previous else None,
         intervals=[
-            DailyInterval(position=n, start_sec=i.start, end_sec=i.end)
+            DailyInterval(
+                position=n,
+                start_sec=i.start,
+                end_sec=i.end,
+                efficiency=interval_efficiencies[n] if interval_efficiencies else None,
+            )
             for n, i in enumerate(checked)
         ],
         tasks=[DailyTask(position=n, text=t) for n, t in enumerate(tasks)],

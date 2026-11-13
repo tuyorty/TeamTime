@@ -11,8 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from teamtime.api.deps import AdminDep, AppSettingsDep, SessionDep
 from teamtime.api.routers.export import Fmt, _file
+from teamtime.db.models import ProjectBonus
 from teamtime.schemas import FinanceOut, ProjectBonusOut
-from teamtime.services import export, finance
+from teamtime.services import export, finance, fund_config
+
+
+async def legacy_period(session: SessionDep, year: int, month: int) -> None:
+    if (year, month) >= (2026, 11) and (await fund_config.load(session)).module_active:
+        raise HTTPException(409, "Для этого месяца действует расчёт фонда: /fund/months/ГГГГ-ММ-01")
+
 
 router = APIRouter(tags=["финансы"])
 Year = Annotated[int, Path(ge=2000, le=2100)]
@@ -53,11 +60,13 @@ class BonusCancel(BaseModel):
 async def report(
     session: SessionDep, settings: AppSettingsDep, year: Year, month: Month
 ) -> FinanceOut:
+    await legacy_period(session, year, month)
     return await finance.report(session, settings, year, month)
 
 
 @router.post("/admin/bonuses", summary="Добавить премию за проект")
 async def create_bonus(body: BonusCreate, session: SessionDep, actor: AdminDep) -> ProjectBonusOut:
+    await legacy_period(session, body.month.year, body.month.month)
     try:
         row = await finance.add_bonus(
             session, actor, **{**body.model_dump(), "request_id": str(body.request_id)}
@@ -71,6 +80,9 @@ async def create_bonus(body: BonusCreate, session: SessionDep, actor: AdminDep) 
 async def edit_bonus(
     bonus_id: int, body: BonusEdit, session: SessionDep, actor: AdminDep
 ) -> ProjectBonusOut:
+    existing = await session.get(ProjectBonus, bonus_id)
+    if existing is not None:
+        await legacy_period(session, existing.month.year, existing.month.month)
     try:
         row = await finance.edit_bonus(session, bonus_id, actor=actor, **body.model_dump())
     except finance.FinanceError as exc:
@@ -82,6 +94,9 @@ async def edit_bonus(
 async def cancel_bonus(
     bonus_id: int, body: BonusCancel, session: SessionDep, actor: AdminDep
 ) -> ProjectBonusOut:
+    existing = await session.get(ProjectBonus, bonus_id)
+    if existing is not None:
+        await legacy_period(session, existing.month.year, existing.month.month)
     try:
         row = await finance.edit_bonus(
             session, bonus_id, body.version, actor, cancel_reason=body.reason
@@ -100,6 +115,7 @@ async def download(
     fmt: Fmt,
     employee_id: Annotated[list[int] | None, Query()] = None,
 ) -> Response:
+    await legacy_period(session, year, month)
     data = await finance.report(session, settings, year, month, employee_id)
     header = [
         "Сотрудник",

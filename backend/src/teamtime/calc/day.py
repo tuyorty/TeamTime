@@ -91,6 +91,22 @@ class FactInput:
     intervals: tuple[Interval, ...]
     efficiency: int | None
     """Процент 0–100 или None, если не указан."""
+    interval_efficiencies: tuple[int | None, ...] = ()
+
+    @property
+    def effective_seconds(self) -> Fraction | None:
+        """Разная эффективность отрезков суммируется без промежуточного округления."""
+        values = self.interval_efficiencies or (self.efficiency,) * len(self.intervals)
+        if len(values) != len(self.intervals) or any(e is None for e in values):
+            return None
+        return sum(
+            (
+                Fraction(i.duration * e, 100)
+                for i, e in zip(self.intervals, values, strict=True)
+                if e is not None
+            ),
+            Fraction(0),
+        )
 
     @property
     def start(self) -> int:
@@ -212,8 +228,8 @@ def compute_day(
     if fact is not None:
         if excluded:
             result = Fraction(0)
-        elif fact.efficiency is not None:
-            result = Fraction(fact.worked_seconds) * fact.efficiency / 100
+        elif fact.effective_seconds is not None:
+            result = fact.effective_seconds
 
     late = early = under = None
     flags: list[str] = []
@@ -229,7 +245,7 @@ def compute_day(
         for name, value in (("late", late), ("early_leave", early), ("undertime", under)):
             if value:
                 flags.append(name)
-    if fact is not None and fact.efficiency is None and not excluded:
+    if fact is not None and fact.effective_seconds is None and not excluded:
         flags.append("no_efficiency")
     if fact is not None and any(i.crosses_midnight for i in fact.intervals):
         flags.append("overnight")

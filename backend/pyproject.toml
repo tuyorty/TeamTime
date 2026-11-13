@@ -23,6 +23,7 @@ dependencies = [
     "faker>=40",
     "typer>=0.27",
     "python-multipart>=0.0.32",
+    "cryptography>=43,<52",
 ]
 
 [project.optional-dependencies]

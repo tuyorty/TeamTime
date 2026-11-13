@@ -46,7 +46,7 @@ from teamtime.db.models import (
 )
 from teamtime.parsing import Issue, MessageKind, PlanDayKind, Severity, parse_daily
 from teamtime.parsing.text import DATE_RE, closest_year, format_seconds, parse_interval_list
-from teamtime.services import manual, status_requests
+from teamtime.services import fund_config, manual, status_requests
 from teamtime.services.facts import today_local
 from teamtime.services.settings import AppSettings
 
@@ -94,7 +94,10 @@ async def start(message: Message, session: AsyncSession, state: FSMContext) -> N
     if employee is None:
         await message.answer(f"{hello}\n\n{not_linked_text(message.from_user)}\n\n{texts.HELP}")
         return
-    await message.answer(f"{hello}\n\n{texts.HELP}", reply_markup=reply_menu())
+    await message.answer(
+        f"{hello}\n\n{texts.HELP}",
+        reply_markup=reply_menu(fund_enabled=(await fund_config.load(session)).module_active),
+    )
 
 
 async def run_menu(
@@ -600,5 +603,8 @@ async def fix_plan_day(message: Message, session: AsyncSession, state: FSMContex
 
 
 @router.message(F.text)
-async def fallback(message: Message) -> None:
-    await message.answer("Не понял. Вот что я умею:\n\n" + texts.HELP, reply_markup=reply_menu())
+async def fallback(message: Message, session: AsyncSession) -> None:
+    await message.answer(
+        "Не понял. Вот что я умею:\n\n" + texts.HELP,
+        reply_markup=reply_menu(fund_enabled=(await fund_config.load(session)).module_active),
+    )

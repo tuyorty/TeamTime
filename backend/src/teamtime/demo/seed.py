@@ -524,6 +524,9 @@ async def seed_demo(
     """Загрузить демо. Возвращает False, если пропущено (``if_empty`` и данные уже есть)."""
     existing = await session.scalar(select(func.count()).select_from(Employee)) or 0
     if existing and if_empty:
+        from teamtime.demo.fund import seed_fund_examples
+
+        await seed_fund_examples(session)
         return False
     if existing and not force:
         raise RuntimeError(
@@ -537,6 +540,9 @@ async def seed_demo(
         await save_settings(session, settings)
     await Seeder(session, settings, seed).run(weeks)
     await seed_finance_examples(session, settings)
+    from teamtime.demo.fund import seed_fund_examples
+
+    await seed_fund_examples(session)
     log.info("demo.seeded", weeks=weeks, seed=seed)
     return True
 

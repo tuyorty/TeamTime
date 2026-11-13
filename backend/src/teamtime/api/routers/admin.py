@@ -29,6 +29,41 @@ class OkOut(BaseModel):
     detail: str = ""
 
 
+class FinanceModuleInput(BaseModel):
+    module_enabled: bool
+    expected_enabled: bool
+
+
+@router.put("/finance-module", summary="Выбрать обычные финансы или модуль фонда")
+async def finance_module(
+    body: FinanceModuleInput, session: SessionDep, actor: AdminDep
+) -> dict[str, bool]:
+    from teamtime.services import fund, fund_config
+
+    await fund.lock(session)
+    config = await fund_config.load(session)
+    if body.module_enabled and not fund_config.FUND_AVAILABLE:
+        raise HTTPException(409, "Модуль фонда находится в разработке и пока недоступен")
+    if config.module_active != body.expected_enabled:
+        raise HTTPException(409, "Режим финансов уже изменён; обновите страницу")
+    if config.module_enabled != body.module_enabled:
+        before = config.module_enabled
+        config.module_enabled = body.module_enabled
+        await fund_config.save(session, config)
+        await audit.record(
+            session,
+            actor=actor,
+            action="finance.module.changed",
+            entity_type="settings",
+            entity_id="finance-module",
+            before={"module_enabled": before},
+            after={"module_enabled": config.module_enabled},
+            reason="Выбор режима финансов администратором",
+        )
+        await events.notify(session, "finance.module.changed")
+    return {"module_enabled": config.module_active}
+
+
 # --- сотрудники ----------------------------------------------------------------------------
 
 

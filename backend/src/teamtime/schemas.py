@@ -224,6 +224,10 @@ class WeekOut(BaseModel):
 
 
 class MonthSummaryOut(BaseModel):
+    fund_model: bool = False
+    calculation_ready: bool = True
+    calculation_issues: list[str] = Field(default_factory=list)
+    fund_salary: Decimal | None = None
     worked_sec: int = Field(description="Часы(+)")
     result_sec: int = Field(description="Часы(e%)")
     late_total_sec: int = Field(description="Сумма опозданий")

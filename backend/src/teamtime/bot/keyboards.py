@@ -18,6 +18,7 @@ from teamtime.bot.dates import date_key, shift_period
 from teamtime.services.reports import MONTHS
 
 MENU = {
+    "💼 Финансы": "fund",
     "✍️ Дейлик": "daily",
     "🗓 Моя неделя": "week",
     "📊 Месяц": "month",
@@ -91,9 +92,9 @@ def status_request_menu(request_id: int, pending: bool = True) -> InlineKeyboard
     return kb.as_markup()
 
 
-def reply_menu() -> ReplyKeyboardMarkup:
+def reply_menu(*, fund_enabled: bool = False) -> ReplyKeyboardMarkup:
     """Постоянная панель под полем ввода в личке: всегда под рукой, ничего не нужно набирать."""
-    labels = list(MENU)
+    labels = [label for label, action in MENU.items() if fund_enabled or action != "fund"]
     rows = [labels[index : index + 2] for index in range(0, len(labels), 2)]
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=t) for t in row] for row in rows],

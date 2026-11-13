@@ -14,15 +14,19 @@ from teamtime.bot.dates import date_key, read_date
 from teamtime.bot.handlers.browse import send_people, send_report
 from teamtime.bot.identity import employee_for, not_linked_text
 from teamtime.bot.keyboards import reply_menu
+from teamtime.services import fund_config
 from teamtime.services.settings import AppSettings
 
 router = Router(name="commands")
 
 
 @router.message(Command("help"))
-async def help_(message: Message) -> None:
+async def help_(message: Message, session: AsyncSession) -> None:
     await message.answer(
-        texts.HELP, reply_markup=reply_menu() if message.chat.type == "private" else None
+        texts.HELP,
+        reply_markup=reply_menu(fund_enabled=(await fund_config.load(session)).module_active)
+        if message.chat.type == "private"
+        else None,
     )
 
 

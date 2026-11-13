@@ -13,7 +13,19 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from teamtime import __version__
 from teamtime.api.realtime import Broadcaster
-from teamtime.api.routers import admin, admin_tools, auth, events, export, finance, read, workflows
+from teamtime.api.routers import (
+    admin,
+    admin_tools,
+    auth,
+    display,
+    events,
+    export,
+    finance,
+    fund,
+    read,
+    team,
+    workflows,
+)
 from teamtime.core import clock
 from teamtime.core.config import Settings, get_settings
 from teamtime.core.logging import configure_logging, get_logger
@@ -78,6 +90,20 @@ def create_app(settings: Settings | None = None, *, realtime: bool = True) -> Fa
         lifespan=lifespan,
     )
     app.state.settings = settings
+    from teamtime.api.team_guard import guard
+    from teamtime.calc.fund import FundCalculationError
+    from teamtime.services.fund import FundError
+
+    app.middleware("http")(guard)
+
+    @app.exception_handler(FundError)
+    async def fund_error(request: Request, exc: FundError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
+    @app.exception_handler(FundCalculationError)
+    async def calculation_error(request: Request, exc: FundCalculationError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc), "code": exc.code}, status_code=422)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -114,6 +140,9 @@ def create_app(settings: Settings | None = None, *, realtime: bool = True) -> Fa
         events.router,
         workflows.router,
         finance.router,
+        fund.router,
+        team.router,
+        display.router,
     ):
         app.include_router(router, prefix="/api/v1")
     if settings.demo:

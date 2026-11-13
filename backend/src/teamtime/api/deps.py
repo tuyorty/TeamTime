@@ -51,7 +51,18 @@ def serializer(config: Settings) -> URLSafeTimedSerializer:
     )
 
 
-def is_admin(request: Request, config: ConfigDep) -> bool:
+async def is_admin(request: Request, config: ConfigDep, session: SessionDep) -> bool:
+    from teamtime.services import fund_config, team_auth
+    from teamtime.services.fund import FundError
+
+    if (await fund_config.load(session)).enabled:
+        try:
+            actor = await team_auth.authenticate(
+                session, request.cookies.get(team_auth.COOKIE), demo=config.demo
+            )
+            return actor.leader or actor.technical
+        except FundError:
+            return False
     if not config.admin_enabled:
         return False
     token = request.cookies.get(SESSION_COOKIE)
@@ -67,8 +78,11 @@ def is_admin(request: Request, config: ConfigDep) -> bool:
 IsAdminDep = Annotated[bool, Depends(is_admin)]
 
 
-def require_admin(
+async def require_admin(
     admin: IsAdminDep,
+    request: Request,
+    session: SessionDep,
+    config: ConfigDep,
     x_requested_with: Annotated[str | None, Header()] = None,
 ) -> str:
     """Изменяющие запросы: нужна сессия админа и заголовок X-Requested-With (защита от CSRF)."""
@@ -76,6 +90,13 @@ def require_admin(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен режим админа")
     if x_requested_with != "teamtime":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет заголовка X-Requested-With")
+    from teamtime.services import fund_config, team_auth
+
+    if (await fund_config.load(session)).enabled:
+        actor = await team_auth.authenticate(
+            session, request.cookies.get(team_auth.COOKIE), demo=config.demo
+        )
+        return f"employee:{actor.employee_id}"
     return "admin"
 
 

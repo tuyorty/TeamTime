@@ -570,6 +570,7 @@ class Daily(Timestamped, Base):
 
 class DailyInterval(Base):
     __tablename__ = "daily_intervals"
+    efficiency: Mapped[int | None] = mapped_column(SmallInteger)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     daily_id: Mapped[int] = mapped_column(ForeignKey("dailies.id", ondelete="CASCADE"))
@@ -580,6 +581,9 @@ class DailyInterval(Base):
     daily: Mapped[Daily] = relationship(back_populates="intervals")
 
     __table_args__ = (
+        CheckConstraint(
+            "efficiency IS NULL OR (efficiency >= 0 AND efficiency <= 100)", name="efficiency"
+        ),
         CheckConstraint(
             "start_sec BETWEEN 0 AND 86400 AND end_sec BETWEEN 0 AND 86400", name="day_range"
         ),

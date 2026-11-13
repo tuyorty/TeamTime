@@ -74,6 +74,7 @@ from teamtime.services.facts import (
     load_cells,
     today_local,
 )
+from teamtime.services.fund_time_view import adapt
 from teamtime.services.highlights import highlights_for
 from teamtime.services.history import settings_at, terms_at
 from teamtime.services.settings import AppSettings
@@ -411,7 +412,7 @@ async def month_report(
                 )
                 if e.id in conditions
                 else EmployeeOut.model_validate(e),
-                summary=summary_out(summary),
+                summary=await adapt(session, e.id, first, summary_out(summary)),
                 late_days=late_days,
                 weeks=_weeks(ecells),
             )
@@ -464,13 +465,18 @@ async def month_report(
             hrules = await settings_at(session, settings, hf)
             hcells = await load_cells(session, settings, hf, hl, [e.id for e in hemployees])
             summaries = [
-                summary_out(
-                    summarize(
-                        e,
-                        [hcells[(e.id, d)] for d in date_range(hf, hl)],
-                        hrules,
-                        hconditions.get(e.id),
-                    )
+                await adapt(
+                    session,
+                    e.id,
+                    hf,
+                    summary_out(
+                        summarize(
+                            e,
+                            [hcells[(e.id, d)] for d in date_range(hf, hl)],
+                            hrules,
+                            hconditions.get(e.id),
+                        )
+                    ),
                 )
                 for e in hemployees
             ]
@@ -787,7 +793,7 @@ async def employee_report(
         weeks=_weeks(cells),
         tasks=sorted(tasks_by_week.values(), key=lambda w: (w.iso_year, w.iso_week), reverse=True),
         notes=sorted(notes, key=lambda n: n.date, reverse=True),
-        month=summary_out(current_summary),
+        month=await adapt(session, employee.id, month_first, summary_out(current_summary)),
     )
 
 
