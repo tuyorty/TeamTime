@@ -25,7 +25,7 @@ export function tvFixture(date = "2026-10-23"): Today {
           kind: "work", start: start * 3600, end: end * 3600, planned_sec: (end - start) * 3600,
           intervals: [[start * 3600, end * 3600]], note: null, note_has_time: false, raw_line: "",
         } : null,
-        fact: null, late_sec: null, early_leave_sec: null, undertime_sec: null, no_plan: start === null, flags: [], source: {},
+        fact: null, late_sec: null, early_leave_sec: null, undertime_sec: null, no_plan: start === null, flags: [], source: {}, can_confirm_no_show: false,
       },
     })),
   };

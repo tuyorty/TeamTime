@@ -17,6 +17,7 @@ export const STATUS: Record<StatusKind, { label: string; icon: LucideIcon; tone:
 };
 
 export const DEVIATION = {
+  no_show: { label: "Невыход", icon: UserX, tone: "late" as const },
   late: { label: "Опоздание", icon: AlarmClock, tone: "late" as const },
   early_leave: { label: "Ранний уход", icon: LogOut, tone: "deviation" as const },
   undertime: { label: "Недоработка", icon: Hourglass, tone: "deviation" as const },
@@ -27,6 +28,7 @@ export const DEVIATION = {
 /** Короткое описание дня для aria-label и подсказок. */
 export function describeCell(c: DayCell): string {
   const parts: string[] = [];
+  const noShow = c.flags.includes("no_show_confirmed");
   if (c.status) parts.push(STATUS[c.status].label);
   if (c.status === "business_trip") parts.push("часы исключены из зачёта");
   if (c.plan?.kind === "work") parts.push(`план ${clock(c.plan.start)}–${clock(c.plan.end)}`);
@@ -36,9 +38,11 @@ export function describeCell(c: DayCell): string {
     parts.push(`факт ${c.fact.intervals.map(([a, b]) => `${clock(a)}–${clock(b)}`).join(", ")}`);
     parts.push(`часов ${clock(c.fact.worked_sec)}`);
     if (c.fact.efficiency !== null && c.fact.efficiency !== undefined) parts.push(`эффективность ${c.fact.efficiency}%`);
-  } else if (c.state === "missing") parts.push("нет дейлика");
+  } else if (noShow) parts.push(`подтверждён невыход, в опозданиях ${clock(c.late_sec)}`);
+  else if (c.state === "missing") parts.push("нет дейлика");
   else if (c.state === "pending") parts.push("дейлик ещё не пришёл");
-  if (c.late_sec) parts.push(`опоздание ${clock(c.late_sec)}`);
+  if (c.flags.includes("no_show_conflict")) parts.push("подтверждение невыхода требует пересмотра; время невыхода не добавляется к опозданию");
+  if (c.late_sec && !noShow) parts.push(`опоздание ${clock(c.late_sec)}`);
   if (c.early_leave_sec) parts.push(`ранний уход ${clock(c.early_leave_sec)}`);
   if (c.undertime_sec) parts.push(`недоработка ${clock(c.undertime_sec)}`);
   return parts.join(", ");

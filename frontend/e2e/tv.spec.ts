@@ -7,8 +7,8 @@ async function fixtures(page: Page, total?: number) {
     ...data.rows[i % data.rows.length]!,
     employee: { ...data.rows[i % data.rows.length]!.employee, id: i + 1, short_name: `Сотрудник ${i + 1}` },
   }));
-  await page.route("**/api/v1/meta", (route) => route.fulfill({ json: tvMeta }));
-  await page.route("**/api/v1/today**", (route) => route.fulfill({ json: {
+  await page.route(/\/api\/v1\/(display\/)?meta$/, (route) => route.fulfill({ json: tvMeta }));
+  await page.route(/\/api\/v1\/(display\/)?today(?:\?|$)/, (route) => route.fulfill({ json: {
     ...data, date: new URL(route.request().url()).searchParams.get("day") ?? data.date,
   } }));
   return data;
@@ -58,23 +58,29 @@ test("ТВ: при потере API остаются последние данн
   await fixtures(page);
   await page.goto("/tv");
   await expect(page.getByRole("article").first()).toBeVisible();
-  await page.route("**/api/v1/today", (route) => route.fulfill({ status: 503, json: { detail: "Недоступно" } }));
+  await page.route("**/api/v1/display/today", (route) => route.fulfill({ status: 503, json: { detail: "Недоступно" } }));
   await page.clock.fastForward(95_000);
   await expect(page.getByText("Нет свежих данных · обновлено в 14:30 · Демо", { exact: true })).toBeVisible();
   await expect(page.getByRole("article").first()).toBeVisible();
-  await page.unroute("**/api/v1/today");
+  await page.unroute("**/api/v1/display/today");
   await page.clock.fastForward(35_000);
   await expect(page.getByText(/Нет свежих данных/)).toHaveCount(0);
 });
 
 test("ТВ: после полуночи показывает новый день без лишнего запроса завтра", async ({ page }) => {
   await page.clock.install();
+  const started = await page.evaluate(() => Date.now());
   let requests = 0;
   const tomorrowDates: string[] = [];
-  await page.route("**/api/v1/meta", (route) => route.fulfill({ json: {
-    ...tvMeta, demo: false, now: "2026-10-31T23:59:45+05:00", today: "2026-10-31",
-  } }));
-  await page.route("**/api/v1/today**", (route) => {
+  await page.route("**/api/v1/display/meta", async (route) => {
+    const elapsed = (await page.evaluate(() => Date.now())) - started;
+    return route.fulfill({ json: {
+      ...tvMeta, demo: false,
+      now: new Date(Date.parse("2026-10-31T23:59:45+05:00") + elapsed).toISOString(),
+      today: requests > 1 ? "2026-11-01" : "2026-10-31",
+    } });
+  });
+  await page.route("**/api/v1/display/today**", (route) => {
     const day = new URL(route.request().url()).searchParams.get("day");
     if (day) tomorrowDates.push(day);
     return route.fulfill({ json: tvFixture(day ?? (requests++ === 0 ? "2026-10-31" : "2026-11-01")) });
@@ -89,11 +95,11 @@ test("ТВ: после полуночи показывает новый день
 
 test("ТВ: несколько интервалов и длинные подписи не обрезают строки", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.route("**/api/v1/meta", (route) => route.fulfill({ json: tvMeta }));
+  await page.route("**/api/v1/display/meta", (route) => route.fulfill({ json: tvMeta }));
   const data = tvFixture();
   data.rows[0]!.cell.plan!.intervals = [[36000, 43200], [46800, 61200], [72000, 82800]];
   data.rows[0]!.employee.position = "Очень длинное название направления работы сотрудника";
-  await page.route("**/api/v1/today**", (route) => route.fulfill({ json: data }));
+  await page.route("**/api/v1/display/today**", (route) => route.fulfill({ json: data }));
   await page.goto("/tv");
   await expect(page.getByText("3 интервала", { exact: true })).toBeVisible();
   expect(await page.locator(".tv-person").evaluateAll((elements) => elements.every((element) => element.scrollHeight <= element.clientHeight + 2))).toBe(true);
@@ -172,8 +178,8 @@ test("ТВ: выходной имеет приоритет над отметко
   await page.setViewportSize({ width: 1920, height: 1080 });
   const data = tvFixture();
   data.rows[6]!.cell.status = "remote";
-  await page.route("**/api/v1/meta", (route) => route.fulfill({ json: tvMeta }));
-  await page.route("**/api/v1/today**", (route) => route.fulfill({ json: data }));
+  await page.route("**/api/v1/display/meta", (route) => route.fulfill({ json: tvMeta }));
+  await page.route("**/api/v1/display/today**", (route) => route.fulfill({ json: data }));
   await page.goto("/tv");
   const employee = page.getByRole("article", { name: "Белов К.Н.: Выходной" });
   await expect(employee).toBeVisible();
@@ -186,7 +192,7 @@ test("ТВ: секунды идут без перезагрузки и не сб
   await page.clock.install({ time: start });
   await fixtures(page);
   let metaRequests = 0;
-  await page.route("**/api/v1/meta", (route) => {
+  await page.route("**/api/v1/display/meta", (route) => {
     metaRequests++;
     return route.fulfill({ json: tvMeta });
   });

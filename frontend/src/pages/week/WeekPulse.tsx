@@ -1,4 +1,4 @@
-import { AlarmClock, CircleDashed, Hourglass, LogOut } from "lucide-react";
+import { AlarmClock, CircleDashed, Hourglass, LogOut, UserX } from "lucide-react";
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -15,13 +15,13 @@ interface Item {
   key: string;
   employee: Week["rows"][number]["employee"];
   date: string;
-  kind: "late" | "early_leave" | "undertime" | "missing";
+  kind: "late" | "early_leave" | "undertime" | "missing" | "no_show";
   value: number | null;
 }
 
-const ICON = { late: AlarmClock, early_leave: LogOut, undertime: Hourglass, missing: CircleDashed };
-const LABEL = { late: "опоздание", early_leave: "ранний уход", undertime: "недоработка", missing: "нет дейлика" };
-const TONE = { late: "late", early_leave: "deviation", undertime: "deviation", missing: "neutral" } as const;
+const ICON = { late: AlarmClock, early_leave: LogOut, undertime: Hourglass, missing: CircleDashed, no_show: UserX };
+const LABEL = { late: "опоздание", early_leave: "ранний уход", undertime: "недоработка", missing: "нет дейлика", no_show: "невыход" };
+const TONE = { late: "late", early_leave: "deviation", undertime: "deviation", missing: "neutral", no_show: "late" } as const;
 
 const pulseShape = planFactShape({
   outlineKey: "plan",
@@ -59,7 +59,7 @@ export function WeekPulse({ data }: { data: Week }) {
       for (const c of r.cells) {
         const add = (kind: Item["kind"], value: number | null) =>
           out.push({ key: `${r.employee.id}-${c.date}-${kind}`, employee: r.employee, date: c.date, kind, value });
-        if (c.late_sec) add("late", c.late_sec);
+        if (c.late_sec) add(c.flags.includes("no_show_confirmed") ? "no_show" : "late", c.late_sec);
         if (c.early_leave_sec) add("early_leave", c.early_leave_sec);
         if (c.undertime_sec && !c.early_leave_sec) add("undertime", c.undertime_sec);
         if (c.state === "missing") add("missing", null);

@@ -50,8 +50,8 @@ test("ТВ: экран команды в Full HD и HD", async ({ browser }) => 
       const page = await context.newPage();
       const start = new Date("2026-10-23T09:30:00Z");
       await page.clock.setFixedTime(start);
-      await page.route("**/api/v1/meta", (route) => route.fulfill({ json: tvMeta }));
-      await page.route("**/api/v1/today**", (route) => {
+      await page.route("**/api/v1/display/meta", (route) => route.fulfill({ json: tvMeta }));
+      await page.route("**/api/v1/display/today**", (route) => {
         const day = new URL(route.request().url()).searchParams.get("day");
         return route.fulfill({ json: tvFixture(day ?? undefined) });
       });
@@ -266,4 +266,33 @@ test("GIF: дейлик из эмулятора появляется без пе
     gif,
   ]);
   rmSync(videoDir, { recursive: true, force: true });
+});
+
+
+test("фонд: расчёт и четыре вкладки, телефон", async ({ browser, request }) => {
+  const session = await (await request.get("/api/v1/team/session")).json();
+  test.skip(!session.module_available, "Модуль фонда пока в разработке");
+  test.setTimeout(150_000);
+  for (const theme of ["light", "dark"] as const) {
+    for (const [tab, name, mobile] of [["month", "fund-month", false], ["fund", "fund-treasury", false], ["expenses", "fund-expenses", false], ["balances", "fund-balances", false], ["month", "mobile-fund", true]] as const) {
+      await shot(browser, `/finances/2026/11?tab=${tab}`, name, theme, mobile, async (page) => {
+        const people = await (await page.request.get("/api/v1/team/demo-users")).json();
+        await page.request.post("/api/v1/team/demo-login", { headers: { "X-Requested-With": "teamtime" }, data: { employee_id: people[0].id } });
+        await page.reload();
+        await expect(page.getByRole("navigation", { name: "Разделы финансов" })).toBeVisible();
+        await page.waitForLoadState("networkidle");
+        await page.evaluate("document.fonts.ready");
+      });
+    }
+  }
+});
+
+test("финансы: выбор модуля администратором", async ({ browser }) => {
+  for (const theme of ["light", "dark"] as const) {
+    await shot(browser, "/admin/settings", "finance-mode", theme, false, async (page) => {
+      await page.request.post("/api/v1/auth/login", { data: { password: "demo" } });
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Режим финансов" })).toBeVisible();
+    });
+  }
 });

@@ -378,6 +378,14 @@ function EmployeeCell({
 function CellBody({ cell, density }: { cell: DayCell; density: Density }) {
   const f = cell.fact;
   if (!f) {
+    if (cell.flags.includes("no_show_confirmed")) {
+      return (
+        <span className="grid gap-0.5 text-[12px] text-late-ink">
+          <span className="inline-flex items-center gap-1 font-medium"><DEVIATION.no_show.icon className="size-3.5" />Невыход</span>
+          <span className="tnum">+{hm(cell.late_sec)} в опоздания</span>
+        </span>
+      );
+    }
     if (cell.status && cell.status !== "remote") {
       const S = STATUS[cell.status];
       return (

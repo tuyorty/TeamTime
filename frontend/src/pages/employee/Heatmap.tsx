@@ -19,6 +19,7 @@ const FILL = ["", "18%", "34%", "52%", "72%", "100%"];
 
 function title(c: DayCell): string {
   if (c.fact) return `${dayMonth(c.date)}: ${hm(c.fact.worked_sec)}`;
+  if (c.flags.includes("no_show_confirmed")) return `${dayMonth(c.date)}: невыход подтверждён, ${hm(c.late_sec)} в опоздания`;
   if (c.status) return `${dayMonth(c.date)}: ${STATUS[c.status].label.toLowerCase()}`;
   if (c.state === "missing") return `${dayMonth(c.date)}: нет дейлика`;
   return `${dayMonth(c.date)}: —`;
@@ -68,6 +69,9 @@ export function MonthHeatmap({ data, today }: { data: EmployeeDetail; today: str
         <span>10+ ч</span>
         <span className="ml-3 size-3 rounded-[3px] border border-dashed border-ink-3" /> нет дейлика{" "}
         <span className="hatch-absence ml-2 size-3 rounded-[3px]" /> отсутствие
+        {data.days.some((cell) => cell.flags.includes("no_show_confirmed")) ? (
+          <><span className="ml-2 size-3 rounded-[3px] border border-late/50 bg-late-soft" /> невыход</>
+        ) : null}
       </div>
     </Panel>
   );
@@ -126,6 +130,7 @@ function CalendarMonth({
                   cell.fact ? "text-ink" : "bg-surface-2 text-ink-3",
                   !cell.fact && cell.status && cell.status !== "remote" && "hatch-absence",
                   cell.state === "missing" && "border border-dashed border-ink-3 bg-transparent",
+                  cell.flags.includes("no_show_confirmed") && "border border-late/50 bg-late-soft text-late-ink",
                   date > today && "opacity-50",
                 )}
                 style={

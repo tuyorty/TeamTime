@@ -4,6 +4,7 @@ import type { PlanDay, ScheduleChangePreview } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { dayMonth, hm, WEEKDAYS_SHORT, weekday } from "@/lib/format";
 import { TaskList } from "./TaskList";
+import { NoShowAction } from "./NoShowAction";
 
 function planText(plan: PlanDay | null) {
   if (!plan) return "Расписание не задано";
@@ -13,7 +14,7 @@ function planText(plan: PlanDay | null) {
   return `${intervals}${plan.note ? ` · ${plan.note}` : ""}`;
 }
 
-export function ScheduleComparison({ preview, pending = true }: { preview: ScheduleChangePreview; pending?: boolean }) {
+export function ScheduleComparison({ preview, pending = true, employeeId }: { preview: ScheduleChangePreview; pending?: boolean; employeeId?: number }) {
   return (
     <section
       aria-label="Изменения расписания"
@@ -21,11 +22,11 @@ export function ScheduleComparison({ preview, pending = true }: { preview: Sched
     >
       <h3 className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
         <GitCompareArrows className="size-4 text-accent-ink" />
-        Изменения расписания<Badge>Версия {preview.version}</Badge>
+        Изменения расписания<Badge>Версия плана {preview.version}</Badge>
       </h3>
       <div className="grid max-h-96 min-w-0 gap-3 overflow-y-auto pr-1">
         {preview.days.map((day) => {
-          const approval = pending && preview.late_change && day.affects_calculation;
+          const approval = pending && day.affects_calculation;
           const before = approval ? day.current.plan : day.previous;
           const after = approval ? day.if_accepted.plan : day.submitted;
           return (
@@ -67,14 +68,19 @@ export function ScheduleComparison({ preview, pending = true }: { preview: Sched
                       ) : null}
                     </>
                   ) : (
-                    <p className="text-ink-3">Дейлика ещё нет. Опоздание будет рассчитано после его получения.</p>
+                    <p className="text-ink-3">
+                      {day.current.no_show
+                        ? `Невыход подтверждён: ${hm(day.current.late_sec ?? 0)} опоздания. Изменение плана не отменяет подтверждение.`
+                        : "Дейлика нет. Если сотрудник не работал, подтвердите невыход по действующему плану."}
+                    </p>
                   )}
                 </div>
-              ) : pending && preview.late_change ? (
+              ) : pending && (preview.late_change || day.approval_note) ? (
                 <p className="mt-3 border-t border-line pt-2 text-[12px] text-ink-3">
-                  Одобрение не изменит текущий расчёт этого дня: уже действует такой же или более новый план.
+                  {day.approval_note ?? "Одобрение не изменит текущий расчёт этого дня. Проверьте историю планов и подтверждённые невыходы."}
                 </p>
               ) : null}
+              {employeeId ? <div className="mt-3"><NoShowAction employeeId={employeeId} cell={day.current} /></div> : null}
             </section>
           );
         })}

@@ -117,7 +117,7 @@ function LateDays({ row }: { row: MonthRow }) {
             {WEEKDAYS_SHORT[weekday(d.date)]} {ddmm(d.date)}
           </span>
           <span className="min-w-0 truncate text-ink-3">
-            план {clock(d.plan_start)}, пришёл {clock(d.fact_start)}
+            {d.no_show ? "Невыход подтверждён" : `план ${clock(d.plan_start)}, пришёл ${clock(d.fact_start)}`}
           </span>
           <span className="ml-auto font-medium text-late-ink">+{hm(d.late_sec)}</span>
         </li>

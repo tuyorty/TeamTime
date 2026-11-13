@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { Today } from "../src/api/types";
 import { avatarFixture, lateScheduleExample } from "./fixtures";
 
 /** Ключевые сценарии на демо-данных. Ожидания не завязаны на конкретные случайные числа. */
@@ -414,36 +415,49 @@ test("демо: заявка не меняет статус до согласо�
     .filter({ has: page.getByRole("heading", { name: "Проверка согласования статуса", exact: true }) });
   await expect(form.getByRole("button", { name: "Создать пример заявки", exact: true })).toBeEnabled();
   await expect(form.getByLabel("Сотрудник для примера")).not.toHaveValue("");
-  const available = (await (await page.request.get("/api/v1/today")).json()).rows.find(
-    (row: { cell: { status: string | null } }) => row.cell.status !== "remote",
-  );
+  const meta = await (await page.request.get("/api/v1/meta")).json();
+  expect(meta.demo).toBe(true);
+  const today: Today = await (await page.request.get("/api/v1/today")).json();
+  const available = today.rows[0];
   expect(available).toBeTruthy();
-  await form.getByLabel("Сотрудник для примера").selectOption(String(available.employee.id));
-  const employeeId = Number(await form.getByLabel("Сотрудник для примера").inputValue());
-  const before = (await (await page.request.get("/api/v1/today")).json()).rows.find(
-    (row: { employee: { id: number } }) => row.employee.id === employeeId,
-  ).cell.status;
-  expect(before).not.toBe("remote");
-  await form.getByRole("button", { name: "Создать пример заявки", exact: true }).click();
-  await expect(page).toHaveURL(/view=requests.*request=\d+/);
-  const requestId = new URL(page.url()).searchParams.get("request");
-  const card = page.locator(`[data-request-id="${requestId}"]`);
-  await expect(card.getByText("Ждёт решения", { exact: true })).toBeVisible();
-  expect(
-    (await (await page.request.get("/api/v1/today")).json()).rows.find(
-      (row: { employee: { id: number } }) => row.employee.id === employeeId,
-    ).cell.status,
-  ).toBe(before);
-  await card.getByRole("button", { name: "Согласовать", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Подтвердить решение", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByLabel("Состояние заявок").selectOption("accepted");
-  await expect(card.getByText("Согласована", { exact: true })).toBeVisible();
-  expect(
-    (await (await page.request.get("/api/v1/today")).json()).rows.find(
-      (row: { employee: { id: number } }) => row.employee.id === employeeId,
-    ).cell.status,
-  ).toBe("remote");
+  const employeeId = available!.employee.id;
+  const statusPath = `/api/v1/admin/days/${employeeId}/${today.date}/status`;
+  const headers = { "X-Requested-With": "teamtime" };
+  // Каждый прогон начинает с явного выходного и возвращает прежний статус с его заметкой.
+  // Снятие статуса не подходит: в самом расписании уже может быть указана удалёнка.
+  // Иначе после нескольких запусков вся демо-команда оказывается на удалёнке.
+  try {
+    const reset = await page.request.put(statusPath, {
+      data: { kind: "off", note: "", reason: "Исходное состояние проверки согласования" }, headers,
+    });
+    expect(reset.ok()).toBeTruthy();
+    await form.getByLabel("Сотрудник для примера").selectOption(String(employeeId));
+    await form.getByRole("button", { name: "Создать пример заявки", exact: true }).click();
+    await expect(page).toHaveURL(/view=requests.*request=\d+/);
+    const requestId = new URL(page.url()).searchParams.get("request");
+    const card = page.locator(`[data-request-id="${requestId}"]`);
+    await expect(card.getByText("Ждёт решения", { exact: true })).toBeVisible();
+    expect(
+      (await (await page.request.get("/api/v1/today")).json()).rows.find(
+        (row: { employee: { id: number } }) => row.employee.id === employeeId,
+      ).cell.status,
+    ).toBe("off");
+    await card.getByRole("button", { name: "Согласовать", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Подтвердить решение", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByLabel("Состояние заявок").selectOption("accepted");
+    await expect(card.getByText("Согласована", { exact: true })).toBeVisible();
+    expect(
+      (await (await page.request.get("/api/v1/today")).json()).rows.find(
+        (row: { employee: { id: number } }) => row.employee.id === employeeId,
+      ).cell.status,
+    ).toBe("remote");
+  } finally {
+    const restored = await page.request.put(statusPath, {
+      data: { kind: available!.cell.status, note: available!.cell.status_note ?? "", reason: "Восстановление после проверки согласования" }, headers,
+    });
+    expect(restored.ok()).toBeTruthy();
+  }
 });
 
 test("профиль: формат номера, копирование и просмотр аватара", async ({ page, context }) => {
@@ -688,6 +702,7 @@ test("фото: отмена редактирования не меняет пр
 
 test("командная палитра ищет людей", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Сегодня/ }).first()).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const input = page.getByPlaceholder(/Человек, дата/);
   await expect(input).toBeVisible();

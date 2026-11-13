@@ -8,7 +8,7 @@ function row(presence: TodayRow["presence"], id = 1): TodayRow {
     cell: {
       date: "2026-10-23", state: "pending", status: null, status_label: null, status_note: null,
       plan: { kind: "work", start: 36000, end: 64800, intervals: [[36000, 64800]], planned_sec: 28800, note: null, note_has_time: false, raw_line: "" },
-      fact: null, late_sec: null, early_leave_sec: null, undertime_sec: null, no_plan: false, flags: [], source: {},
+      fact: null, late_sec: null, early_leave_sec: null, undertime_sec: null, no_plan: false, flags: [], source: {}, can_confirm_no_show: false,
     },
   };
 }
@@ -17,7 +17,7 @@ it("статусы и начало смены не меняют алфавитн
   const office = row("on_site", 1);
   office.employee.short_name = "Яковлев Я.Я.";
   const absent = row("off", 2);
-  absent.employee.short_name = "Баранов К.А.";
+  absent.employee.short_name = "Белов Б.Б.";
   const later = row("expected_later", 3);
   later.employee.short_name = "Антонов А.А.";
   later.cell.plan!.start = 20 * 3600;

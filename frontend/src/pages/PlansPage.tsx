@@ -3,7 +3,7 @@ import { Fragment, useState } from "react";
 import { DEPARTMENTS, departmentOf } from "@/lib/departments";
 import { DepartmentFilter } from "@/components/domain/DepartmentFilter";
 import { useDepartmentFilter } from "@/lib/departments";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import { useMeta, usePlans } from "@/api/queries";
 import type { PlanDay, PlanRow, PlanVersion } from "@/api/types";
@@ -53,7 +53,13 @@ export default function PlansPage() {
   const year = Number(params.year ?? fallback.year);
   const week = Number(params.week ?? fallback.week);
   const { data, error, refetch } = usePlans(year, week);
-  const [diff, setDiff] = useState<PlanRow | null>(null);
+  const [search, setSearch] = useSearchParams();
+  const diff = data?.rows.find((row) => row.employee.id === Number(search.get("employee"))) ?? null;
+  const showHistory = (employeeId: number | null) => setSearch((current) => {
+    if (employeeId === null) current.delete("employee");
+    else current.set("employee", String(employeeId));
+    return current;
+  });
   const rows = (data?.rows ?? []).filter((row) => department.matches(row.employee));
 
   const go = (delta: number) => {
@@ -91,7 +97,7 @@ export default function PlansPage() {
         <ErrorState error={error} onRetry={() => refetch()} />
       ) : !data ? (
         <Skeleton className="h-96" />
-      ) : !rows.some((r) => r.current) ? (
+      ) : !rows.some((r) => r.current || r.versions.length) ? (
         <EmptyState icon={ClipboardList} title="Расписаний на эту неделю нет">
           Они появятся, когда сотрудники пришлют «Спринт ДД.ММ - ДД.ММ» в тему с расписанием.
         </EmptyState>
@@ -141,16 +147,16 @@ export default function PlansPage() {
                           {r.employee.short_name}
                         </span>
                         {!r.current ? (
-                          <span className="shrink-0 text-[11px] text-ink-3">нет плана</span>
+                          <span className="shrink-0 text-[11px] text-ink-3">{r.versions.length ? "не применён" : "нет плана"}</span>
                         ) : null}
-                        {r.current && r.versions.length > 1 ? (
+                        {r.versions.length > 0 ? (
                           <Button
                             size="icon"
                             variant="ghost"
                             className="ml-auto size-6 shrink-0 text-ink-3"
-                            aria-label={`Что менялось: ${r.versions.length} версии`}
+                            aria-label={`Что менялось: ${r.employee.short_name}`}
                             title={`Что менялось: версий ${r.versions.length}`}
-                            onClick={() => setDiff(r)}
+                            onClick={() => showHistory(r.employee.id)}
                           >
                             <GitCompareArrows className="!size-3.5" />
                           </Button>
@@ -198,7 +204,7 @@ export default function PlansPage() {
           </table>
         </div>
       )}
-      <Sheet open={!!diff} onOpenChange={(o) => !o && setDiff(null)}>
+      <Sheet open={!!diff} onOpenChange={(o) => !o && showHistory(null)}>
         {diff ? (
           <SheetContent title={`${diff.employee.short_name}: версии плана`} subtitle={`${week} неделя`}>
             <VersionsDiff row={diff} days={data?.days ?? []} />
@@ -210,7 +216,8 @@ export default function PlansPage() {
 }
 
 function ScheduleCompleteness({ rows, days }: { rows: PlanRow[]; days: string[] }) {
-  const missing = rows.filter((row) => !row.current);
+  const missing = rows.filter((row) => !row.current && !row.versions.length);
+  const awaiting = rows.filter((row) => !row.current && row.versions.length);
   const noTasks = rows.filter((row) => row.current && !row.current.tasks.length);
   const incomplete = rows.filter((row) => row.current && days.some((day) => !byDate(row.current!).has(day)));
   const unclear = rows.filter((row) =>
@@ -232,6 +239,10 @@ function ScheduleCompleteness({ rows, days }: { rows: PlanRow[]; days: string[] 
           </p>
         </div>
       ))}
+      {awaiting.length ? <p className="rounded-lg border border-deviation-ink/25 bg-deviation-soft px-4 py-3 text-[13px] text-deviation-ink sm:col-span-2 xl:col-span-4">
+        Расписания получены, но не применены: {awaiting.map((row) => row.employee.short_name).join(", ")}.
+        Откройте «Что менялось» рядом с сотрудником, чтобы проверить версии и решения.
+      </p> : null}
     </section>
   );
 }
@@ -284,26 +295,42 @@ function TaskList({ tasks }: { tasks: string[] }) {
 function VersionsDiff({ row, days }: { row: PlanRow; days: string[] }) {
   const versions = [...row.versions].reverse();
   return (
-    <ol className="grid gap-5">
+    <div className="grid gap-4">
+      <p className="text-[12px] leading-relaxed text-ink-3">
+        Здесь версии, которые получил xTime. При поздней правке часов отдельные дни продолжают
+        рассчитываться по прежнему плану до решения администратора; задачи обновляются сразу.
+      </p>
+      <ol className="grid gap-5">
       {versions.map((v, idx) => {
         const prev = versions[idx + 1];
         const cur = byDate(v);
         const old = prev ? byDate(prev) : null;
         const changed = days.filter((d) => old && dayText(cur.get(d)) !== dayText(old.get(d)));
+        const addedTasks = prev ? v.tasks.filter((task) => !prev.tasks.includes(task)) : v.tasks;
+        const removedTasks = prev?.tasks.filter((task) => !v.tasks.includes(task)) ?? [];
+        const manual = v.source === "manual";
         return (
           <li key={v.id} className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-display text-[15px] font-semibold">Версия {v.version}</span>
               {v.retracted ? (
-                <Badge>отозвана</Badge>
-              ) : idx === 0 ? (
-                <Badge tone="accent">актуальная</Badge>
+                <Badge>архивная версия</Badge>
+              ) : row.current?.id === v.id ? (
+                <Badge tone="accent">текущая версия недели</Badge>
               ) : null}
-              {v.edited ? <Badge tone="outline">из правки сообщения</Badge> : null}
+              {!manual && v.source_message_version != null ? <Badge tone="outline">
+                {v.source_message_version === 1 ? "первый полученный текст" : `правка сообщения ${v.source_message_version - 1}`}
+              </Badge> : null}
               <span className="text-[12px] text-ink-3">
-                {dateTime(v.created_at)}, {SOURCE[v.source]}
+                {SOURCE[v.source]}
               </span>
             </div>
+            <p className="text-[12px] text-ink-3">
+              {manual ? `Правка администратора: ${dateTime(v.created_at)}` : <>
+                {v.stated_at ? `${v.edited ? "Изменено" : "Отправлено"}: ${dateTime(v.stated_at)} · ` : ""}
+                Обработано: {dateTime(v.created_at)}
+              </>}
+            </p>
             {old ? (
               changed.length ? (
                 <table className="w-full text-[13px] tnum">
@@ -320,15 +347,29 @@ function VersionsDiff({ row, days }: { row: PlanRow; days: string[] }) {
                   </tbody>
                 </table>
               ) : (
-                <p className="text-[13px] text-ink-2">Дни не менялись, поменялись задачи или текст.</p>
+                <p className="text-[13px] text-ink-2">Рабочие интервалы не менялись.</p>
               )
             ) : (
               <p className="text-[13px] text-ink-2">Первая версия.</p>
             )}
-            {v.raw_message_id ? <SourceMessage rawId={v.raw_message_id} title="Сообщение" /> : null}
+            {addedTasks.length ? <TaskChanges title={prev ? "Добавлены задачи" : "Задачи"} tasks={addedTasks} /> : null}
+            {removedTasks.length ? <TaskChanges title="Убраны задачи" tasks={removedTasks} removed /> : null}
+            {v.raw_message_id ? <SourceMessage
+              rawId={v.raw_message_id}
+              messageVersionId={v.message_version_id}
+              title={manual ? "Исходное сообщение до ручной правки" : "Сообщение этой версии"}
+            /> : null}
           </li>
         );
       })}
-    </ol>
+      </ol>
+    </div>
   );
+}
+
+function TaskChanges({ title, tasks, removed = false }: { title: string; tasks: string[]; removed?: boolean }) {
+  return <div className="rounded-md border border-line p-3 text-[12px]">
+    <p className={cn("mb-1 font-medium", removed ? "text-late-ink" : "text-accent-ink")}>{title} · {tasks.length}</p>
+    <TaskList tasks={tasks} />
+  </div>;
 }

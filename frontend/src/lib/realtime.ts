@@ -64,7 +64,7 @@ const INVALIDATE: Record<string, string[]> = {
   "plan.changed": ["today", "day-summary", "week", "month", "finances", "plans", "employee", "calendar", "audit"],
   "tasks.changed": ["tasks", "audit"],
   "status_request.changed": ["status-requests", "today", "day-summary", "week", "month", "finances", "employee", "audit"],
-  "status.changed": ["today", "day-summary", "week", "month", "finances", "employee", "calendar", "audit"],
+  "status.changed": ["today", "day-summary", "week", "month", "finances", "employee", "calendar", "inbox", "audit"],
   "employee.changed": ["employees", "employee", "week", "month", "finances", "today", "day-summary", "audit"],
   "identity.changed": ["identities", "employee", "inbox", "audit"],
   "inbox.changed": ["inbox", "today", "day-summary", "week", "month", "finances", "plans", "employee", "calendar", "audit"],

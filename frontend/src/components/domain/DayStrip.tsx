@@ -38,7 +38,10 @@ export function DayStrip({
   const w = (a: number, b: number) =>
     `${Math.max(0, ((Math.min(b, axis.end) - Math.max(a, axis.start)) / span) * 100)}%`;
 
-  const plan = cell.plan?.kind === "work" ? segments(cell.plan.intervals as [number, number][]) : [];
+  const noShow = cell.flags.includes("no_show_confirmed");
+  const plan = noShow && cell.no_show
+    ? segments(cell.no_show.intervals as [number, number][])
+    : cell.plan?.kind === "work" ? segments(cell.plan.intervals as [number, number][]) : [];
   const fact = cell.fact ? segments(cell.fact.intervals as [number, number][]) : [];
   const absence = cell.status && cell.status !== "remote" && !cell.fact;
   const missing = cell.state === "missing";
@@ -63,7 +66,7 @@ export function DayStrip({
           key={`p${i}`}
           className={cn(
             "day-strip-plan absolute inset-y-0 rounded-[3px] border",
-            missing ? "border-dashed border-ink-3" : "border-ink-3/70",
+            noShow ? "border-late/50 bg-late-soft" : missing ? "border-dashed border-ink-3" : "border-ink-3/70",
           )}
           style={{ left: x(a), width: w(a, b) }}
         />

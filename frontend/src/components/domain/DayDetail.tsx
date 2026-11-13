@@ -18,6 +18,7 @@ import { Avatar } from "./Avatar";
 import { axisFor } from "@/lib/axis";
 
 import { AxisTicks, DayStrip } from "./DayStrip";
+import { NoShowAction } from "./NoShowAction";
 import { SourceMessage } from "./SourceMessage";
 import { DEVIATION, STATUS } from "./states";
 
@@ -99,6 +100,8 @@ export function DayDetail({ employee, cell }: { employee: EmployeeBrief; cell: D
               {f.edited ? <Badge className="ml-2">отредактирован</Badge> : null}
               {f.source === "manual" ? <Badge className="ml-2" tone="outline">правка вручную</Badge> : null}
             </>
+          ) : cell.flags.includes("no_show_confirmed") ? (
+            <span className="text-late-ink">невыход подтверждён администратором</span>
           ) : cell.state === "pending" ? (
             <span className="text-ink-3">дейлик ещё не пришёл</span>
           ) : cell.state === "missing" ? (
@@ -143,6 +146,7 @@ export function DayDetail({ employee, cell }: { employee: EmployeeBrief; cell: D
       </dl>
 
       <Deviations cell={cell} />
+      <NoShowAction employeeId={employee.id} cell={cell} />
 
       {f?.tasks.length ? (
         <section>
@@ -179,8 +183,8 @@ export function DayDetail({ employee, cell }: { employee: EmployeeBrief; cell: D
         </section>
       ) : null}
 
-      <SourceMessage rawId={cell.source.daily_raw_message_id} title="Дейлик" />
-      <SourceMessage rawId={cell.source.plan_raw_message_id} title={`Расписание, версия ${cell.source.plan_version ?? 1}`} />
+      <SourceMessage rawId={cell.source.daily_raw_message_id} messageVersionId={cell.source.daily_message_version_id} title="Дейлик" />
+      <SourceMessage rawId={cell.source.plan_raw_message_id} messageVersionId={cell.source.plan_message_version_id} title={`Расписание, версия ${cell.source.plan_version ?? 1}`} />
 
       <Link to={`/people/${employee.id}`} className="text-[13px] text-accent-ink hover:underline">
         Карточка сотрудника
@@ -191,10 +195,12 @@ export function DayDetail({ employee, cell }: { employee: EmployeeBrief; cell: D
 
 function Deviations({ cell }: { cell: DayCell }) {
   const items: { key: keyof typeof DEVIATION; value?: string }[] = [];
-  if (cell.late_sec) items.push({ key: "late", value: hm(cell.late_sec) });
+  const noShow = cell.flags.includes("no_show_confirmed");
+  if (noShow) items.push({ key: "no_show", value: hm(cell.late_sec) });
+  else if (cell.late_sec) items.push({ key: "late", value: hm(cell.late_sec) });
   if (cell.early_leave_sec) items.push({ key: "early_leave", value: hm(cell.early_leave_sec) });
   if (cell.undertime_sec) items.push({ key: "undertime", value: hm(cell.undertime_sec) });
-  if (cell.state === "missing") items.push({ key: "missing" });
+  if (cell.state === "missing" && !noShow) items.push({ key: "missing" });
   if (cell.no_plan) items.push({ key: "no_plan" });
   if (!items.length) return null;
   return (

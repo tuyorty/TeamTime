@@ -7,6 +7,7 @@ import { useAdminMutation, useEmployees, useIdentities, useInbox, useStatusReque
 import type { InboxItem, Issue } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { ScheduleComparison } from "@/components/domain/ScheduleComparison";
+import { SourceMessage } from "@/components/domain/SourceMessage";
 import { Pagination } from "@/components/domain/Pagination";
 import { EmptyState, ErrorState } from "@/components/domain/feedback";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -303,6 +304,7 @@ function InboxCard({ item }: { item: InboxItem }) {
   const p = item.parse;
   const m = item.message;
   const [decision, setDecision] = useState<"approve" | "ignore" | null>(null);
+  const [rawHistory, setRawHistory] = useState(false);
   const lateSchedule = p.kind === "schedule" && p.issues.some((issue) => issue.code === "late_change");
   const text = m.versions.find((v) => v.id === p.message_version_id)?.text ?? m.versions.at(-1)!.text;
   const lineIssues = new Map<number, Issue[]>();
@@ -366,6 +368,12 @@ function InboxCard({ item }: { item: InboxItem }) {
             );
           })}
         </pre>
+        {m.versions.length > 1 ? (
+          <details onToggle={(event) => setRawHistory(event.currentTarget.open)} className="text-[12px]">
+            <summary className="cursor-pointer text-accent-ink">Все версии сообщения · {m.versions.length}</summary>
+            {rawHistory ? <div className="mt-3"><SourceMessage rawId={m.id} title="История текста сообщения" /></div> : null}
+          </details>
+        ) : null}
         {p.resolution !== "pending" ? (
           <span className="text-[12px] text-ink-3">Решение: {RESOLUTION[p.resolution]}</span>
         ) : null}
@@ -384,13 +392,19 @@ function InboxCard({ item }: { item: InboxItem }) {
           </ul>
         ) : null}
         <Summary item={item} />
+        {p.kind === "schedule" && d && p.employee ? (
+          <Link className="w-fit text-[12px] text-accent-ink hover:underline" to={`/plans/${d.iso_year}/${d.iso_week}?employee=${p.employee.id}`}>
+            История расписания и исходные сообщения
+          </Link>
+        ) : null}
         {item.plan_change ? (
-          <ScheduleComparison preview={item.plan_change} pending={p.resolution === "pending"} />
+          <ScheduleComparison preview={item.plan_change} pending={p.resolution === "pending"} employeeId={p.employee?.id} />
         ) : null}
         {lateSchedule && p.resolution === "pending" ? (
           <p className="rounded-md border border-deviation/30 bg-deviation-soft/40 p-3 text-[12px] leading-relaxed text-ink-2">
-            Это предупреждение о позднем изменении расписания. Одобрение применит новый план и пересчитает
-            опоздания и итоги. Фактическое время останется из дейлика.
+            Это предупреждение о позднем изменении расписания. Результат одобрения для каждого дня показан
+            в сравнении выше. Более поздняя ручная правка имеет приоритет. Подтверждённый невыход сохраняется
+            до отдельной отмены администратором.
           </p>
         ) : null}
         {p.employee_unresolved ? <LinkIdentity item={item} /> : null}
@@ -451,7 +465,7 @@ function InboxCard({ item }: { item: InboxItem }) {
             </Button>
             <p className="basis-full text-[12px] leading-snug text-ink-3">
               {lateSchedule
-                ? "«Одобрить новый план» — применить показанные изменения и пересчитать таблицу. «Игнорировать» — исключить данные этого сообщения из расчётов."
+                ? "«Одобрить новый план» — подтвердить эту версию с учётом показанного расчёта. «Игнорировать» — отклонить эту версию; прежний пригодный план сохранится."
                 : "«Исправить в таблице» — поправить цифры дня вручную. «Принять как есть» — подтвердить разбор и закрыть вопрос."}{" "}
               «Переразобрать» — прочитать сообщение заново, если бот обновился или в справочнике появился
               сотрудник.
@@ -483,8 +497,9 @@ function InboxCard({ item }: { item: InboxItem }) {
             </>
           ) : (
             <p className="text-[13px] leading-relaxed text-ink-2">
-              Производные планы или дейлики из этого сообщения будут отозваны. Предыдущая версия того же
-              сообщения автоматически не восстанавливается. Для точечного изменения откройте день в таблице.
+              {p.kind === "schedule"
+                ? "Эта версия расписания не будет учитываться. Предыдущая пригодная версия сохранится. Подтверждённый невыход не отменяется."
+                : "Дейлики из этого сообщения будут отозваны. Для точечного изменения откройте день в таблице."}
             </p>
           )}
           <div className="mt-5 flex flex-wrap justify-end gap-2">

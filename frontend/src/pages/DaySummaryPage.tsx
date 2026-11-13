@@ -65,9 +65,9 @@ export function DaySummary() {
   const filteredRows = data.rows.filter((row) => department.matches(row.employee));
   const waiting = filteredRows.filter(waitingForDaily);
   const received = filteredRows.filter((row) => row.cell.fact);
-  const late = received.filter((row) => row.cell.late_sec);
+  const late = filteredRows.filter((row) => row.cell.late_sec);
   const rows = [...filteredRows]
-    .filter((row) => row.cell.fact || waitingForDaily(row))
+    .filter((row) => row.cell.fact || waitingForDaily(row) || row.cell.flags.includes("no_show_confirmed"))
     .sort(
       (a, b) =>
         Number(!!a.cell.fact) - Number(!!b.cell.fact) ||
@@ -90,7 +90,7 @@ export function DaySummary() {
           <div className="mt-2"><DepartmentFilter value={department.department} onChange={department.setDepartment} /></div>
           <p className="mt-1 text-[13px] text-ink-2">
             {dayMonth(day)} ·{" "}
-            {isToday ? "День ещё идёт, итоги предварительные" : "Часы, задачи и опоздания по дейликам"}
+            {isToday ? "День ещё идёт, итоги предварительные" : "Дейлики и подтверждённые итоги дня"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -123,7 +123,7 @@ export function DaySummary() {
           { label: "Прислали дейлик", value: received.length },
           { label: isToday ? "Ещё не прислали" : "Без дейлика", value: waiting.length },
           { label: "Отработано командой", value: hm(data.worked_sec) },
-          { label: "Опоздания по дейликам", value: late.length },
+          { label: "Опоздания и невыходы", value: late.length },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-line bg-surface p-4">
             <p className="font-display text-[30px] font-semibold tnum">{item.value}</p>
@@ -177,6 +177,8 @@ export function DaySummary() {
                               : "Опоздание не рассчитывается"}
                         </span>
                       </>
+                    ) : row.cell.flags.includes("no_show_confirmed") ? (
+                      <Badge tone="late">Невыход · {hm(row.cell.late_sec)} в опозданиях</Badge>
                     ) : (
                       <Badge
                         className="whitespace-normal"

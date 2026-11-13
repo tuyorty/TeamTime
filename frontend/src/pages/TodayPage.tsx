@@ -49,6 +49,7 @@ const PRESENCE: Record<Presence, { label: string; order: number; color: string }
 };
 
 function presenceText(row: TodayRow): string {
+  if (row.cell.flags.includes("no_show_confirmed")) return "Невыход подтверждён";
   if (row.cell.status && row.presence === "absent") return STATUS[row.cell.status].label;
   if (row.presence === "no_plan" && row.cell.plan?.note) return row.cell.plan.note;
   if (row.presence === "expected_later") return `Начнёт в ${clock(row.cell.plan?.start)}`;

@@ -354,7 +354,7 @@ function RecentDays({
 }) {
   const days = [...data.days]
     .reverse()
-    .filter((d) => d.fact || d.plan || d.status)
+    .filter((d) => d.fact || d.plan || d.status || d.no_show)
     .slice(0, 14);
   return (
     <Panel
@@ -415,7 +415,9 @@ function RecentDays({
                 <td className="px-3 py-2 tnum">
                   {d.fact
                     ? d.fact.intervals.map(([a, b]) => `${hm(a)}–${hm(b)}`).join("; ")
-                    : d.status
+                    : d.flags.includes("no_show_confirmed")
+                      ? "Невыход подтверждён"
+                      : d.status
                       ? STATUS[d.status].label
                       : d.state === "missing"
                         ? "нет дейлика"
@@ -430,7 +432,8 @@ function RecentDays({
                 </td>
                 <td className="px-4 py-2">
                   <span className="flex flex-wrap gap-1">
-                    {d.late_sec ? <Badge tone="late">опоздание {hm(d.late_sec)}</Badge> : null}
+                    {d.late_sec ? <Badge tone="late">{d.flags.includes("no_show_confirmed") ? "Невыход, в опоздания" : "опоздание"} {hm(d.late_sec)}</Badge> : null}
+                    {d.flags.includes("no_show_conflict") ? <Badge tone="deviation">Проверить невыход</Badge> : null}
                     {d.early_leave_sec ? (
                       <Badge tone="deviation">ранний уход {hm(d.early_leave_sec)}</Badge>
                     ) : null}

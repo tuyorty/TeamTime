@@ -12,7 +12,8 @@ export function axisFor(cells: DayCell[], fallback: Axis = { start: 9 * 3600, en
   let lo = Infinity;
   let hi = -Infinity;
   for (const c of cells) {
-    for (const [a, b] of [...(c.plan?.intervals ?? []), ...(c.fact?.intervals ?? [])]) {
+    const confirmed = c.flags.includes("no_show_confirmed") ? c.no_show?.intervals ?? [] : [];
+    for (const [a, b] of [...(c.plan?.intervals ?? []), ...(c.fact?.intervals ?? []), ...confirmed] as [number, number][]) {
       lo = Math.min(lo, a);
       hi = Math.max(hi, b < a ? DAY + b : b);
     }
