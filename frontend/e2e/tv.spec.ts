@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { tvFixture, tvMeta } from "./tv-fixtures";
+import { displayFixture, tvFixture, tvMeta } from "./tv-fixtures";
 
 async function fixtures(page: Page, total?: number) {
   const data = tvFixture();
@@ -8,13 +8,17 @@ async function fixtures(page: Page, total?: number) {
     employee: { ...data.rows[i % data.rows.length]!.employee, id: i + 1, short_name: `Сотрудник ${i + 1}` },
   }));
   await page.route(/\/api\/v1\/(display\/)?meta$/, (route) => route.fulfill({ json: tvMeta }));
-  await page.route(/\/api\/v1\/(display\/)?today(?:\?|$)/, (route) => route.fulfill({ json: {
-    ...data, date: new URL(route.request().url()).searchParams.get("day") ?? data.date,
-  } }));
+  await page.route(/\/api\/v1\/(display\/)?today(?:\?|$)/, (route) => {
+    const url = new URL(route.request().url());
+    const response = { ...data, date: url.searchParams.get("day") ?? data.date };
+    return route.fulfill({ json: url.pathname.includes("/display/") ? displayFixture(response) : response });
+  });
   return data;
 }
 
 test("ТВ: вся команда и все состояния помещаются в Full HD без элементов управления", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1920, height: 1080 });
   const data = await fixtures(page);
   await page.goto("/tv");
@@ -27,11 +31,40 @@ test("ТВ: вся команда и все состояния помещают�
   await expect(page.getByRole("article").getByText("Выходной", { exact: true })).toBeVisible();
   await expect(page.getByText("Время не указано", { exact: true })).toBeVisible();
   await expect(page.getByText("15:00–21:00", { exact: true })).toBeVisible();
+  const workStrip = page.getByRole("img", { name: "Рабочее время по расписанию: Соколов А.М.", exact: true });
+  await expect(workStrip).toBeVisible();
+  await expect(workStrip.locator(".day-strip-plan")).toHaveCount(1);
   const numbers = await page.locator(".tv-stat-value").allTextContents();
   expect(numbers.reduce((sum, value) => sum + Number(value), 0)).toBe(data.rows.length);
   expect(await page.evaluate("document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth")).toBe(true);
   expect(await page.locator(".tv-person, .tv-upcoming").evaluateAll((elements) => elements.every((element) => element.scrollHeight <= element.clientHeight + 2))).toBe(true);
   await expect(page).toHaveTitle("xTime · Команда сегодня");
+  expect(errors).toEqual([]);
+});
+
+test("ТВ: настоящий display API показывает рабочие интервалы после открытия и обновления страницы", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const response = await page.request.get("/api/v1/display/today");
+  expect(response.ok()).toBe(true);
+  const data: ReturnType<typeof displayFixture> = await response.json();
+  const working = data.rows.filter((row) => row.presence !== "off" && row.presence !== "absent"
+    && row.cell.plan?.kind === "work" && row.cell.plan.intervals.length > 0);
+  expect(working.length, "В тестовом дне нужен сотрудник с рабочими интервалами").toBeGreaterThan(0);
+  const employee = working.sort((a, b) => a.employee.short_name.localeCompare(b.employee.short_name, "ru"))[0]!;
+  expect(employee.cell).not.toHaveProperty("flags");
+  expect(employee.cell).not.toHaveProperty("fact");
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/tv");
+  const strip = page.getByRole("img", { name: `Рабочее время по расписанию: ${employee.employee.short_name}`, exact: true });
+  for (let load = 0; load < 2; load++) {
+    if (load) await page.reload();
+    await expect(strip).toBeVisible();
+    await expect(strip.locator(".day-strip-plan")).toHaveCount(employee.cell.plan!.intervals.length);
+    await expect(page).toHaveTitle("xTime · Команда сегодня");
+    await expect(page.getByText("Unexpected Application Error!", { exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  }
 });
 
 test("ТВ: большая команда автоматически меняет страницы, никого не теряя", async ({ page }) => {
@@ -83,7 +116,7 @@ test("ТВ: после полуночи показывает новый день
   await page.route("**/api/v1/display/today**", (route) => {
     const day = new URL(route.request().url()).searchParams.get("day");
     if (day) tomorrowDates.push(day);
-    return route.fulfill({ json: tvFixture(day ?? (requests++ === 0 ? "2026-10-31" : "2026-11-01")) });
+    return route.fulfill({ json: displayFixture(tvFixture(day ?? (requests++ === 0 ? "2026-10-31" : "2026-11-01"))) });
   });
   await page.goto("/tv");
   await expect(page.getByRole("heading", { name: "Сегодня · 31 октября", exact: true })).toBeVisible();
@@ -99,7 +132,7 @@ test("ТВ: несколько интервалов и длинные подпи
   const data = tvFixture();
   data.rows[0]!.cell.plan!.intervals = [[36000, 43200], [46800, 61200], [72000, 82800]];
   data.rows[0]!.employee.position = "Очень длинное название направления работы сотрудника";
-  await page.route("**/api/v1/display/today**", (route) => route.fulfill({ json: data }));
+  await page.route("**/api/v1/display/today**", (route) => route.fulfill({ json: displayFixture(data) }));
   await page.goto("/tv");
   await expect(page.getByText("3 интервала", { exact: true })).toBeVisible();
   expect(await page.locator(".tv-person").evaluateAll((elements) => elements.every((element) => element.scrollHeight <= element.clientHeight + 2))).toBe(true);
@@ -179,7 +212,7 @@ test("ТВ: выходной имеет приоритет над отметко
   const data = tvFixture();
   data.rows[6]!.cell.status = "remote";
   await page.route("**/api/v1/display/meta", (route) => route.fulfill({ json: tvMeta }));
-  await page.route("**/api/v1/display/today**", (route) => route.fulfill({ json: data }));
+  await page.route("**/api/v1/display/today**", (route) => route.fulfill({ json: displayFixture(data) }));
   await page.goto("/tv");
   const employee = page.getByRole("article", { name: "Белов К.Н.: Выходной" });
   await expect(employee).toBeVisible();

@@ -31,6 +31,13 @@ export type ProjectBonus = S["ProjectBonusOut"];
 export type PenaltyScale = S["PenaltyScaleOut"];
 export type Today = S["TodayOut"];
 export type TodayRow = S["TodayRow"];
+/** /display/today отдаёт только план: без фактов, штрафов и источников сообщений. */
+export type DisplayDayCell = Pick<DayCell, "date" | "plan" | "status" | "status_note">;
+export type DisplayTodayRow = Pick<TodayRow, "presence"> & {
+  employee: Pick<EmployeeBrief, "id" | "full_name" | "short_name" | "department" | "avatar_url" | "position" | "color">;
+  cell: DisplayDayCell;
+};
+export type DisplayToday = Pick<Today, "date" | "now_sec" | "counts"> & { rows: DisplayTodayRow[] };
 export type FeedItem = S["FeedItem"];
 export type Plans = S["PlansOut"];
 export type PlanRow = S["PlanRow"];

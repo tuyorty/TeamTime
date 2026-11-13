@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { employeeGroups } from "@/lib/departments";
 
 import { api } from "@/api/client";
-import type { Meta, Today, TodayRow } from "@/api/types";
+import type { DisplayToday, DisplayTodayRow, Meta } from "@/api/types";
 import { Avatar } from "@/components/domain/Avatar";
 import { AxisTicks, DayStrip } from "@/components/domain/DayStrip";
 import { TeamTimeline } from "@/components/domain/TeamTimeline";
@@ -33,7 +33,7 @@ export default function TvPage() {
   const meta = useQuery({ queryKey: ["display", "meta"], queryFn: () => api.get<Meta>("/display/meta"), enabled: accessReady, refetchInterval: 30_000 });
   const today = useQuery({
     queryKey: ["today", "tv"],
-    queryFn: () => api.get<Today>("/display/today"),
+    queryFn: () => api.get<DisplayToday>("/display/today"),
     enabled: accessReady,
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
@@ -140,7 +140,7 @@ function TeamClock({ meta, updatedAt }: { meta: Meta; updatedAt: number }) {
   return <time dateTime={now.toISOString()} aria-label="Текущее время команды">{time}</time>;
 }
 
-function Team({ rows, now }: { rows: TodayRow[]; now: number }) {
+function Team({ rows, now }: { rows: DisplayTodayRow[]; now: number }) {
   const people = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState(() => capacity());
   const [page, setPage] = useState(0);
@@ -194,7 +194,7 @@ function capacity() {
 }
 
 
-function Upcoming({ rows, now }: { rows: TodayRow[]; now: number }) {
+function Upcoming({ rows, now }: { rows: DisplayTodayRow[]; now: number }) {
   const list = useRef<HTMLOListElement>(null);
   const [limit, setLimit] = useState(3);
   const events = upcomingEvents(rows, now);
@@ -222,7 +222,7 @@ function Upcoming({ rows, now }: { rows: TodayRow[]; now: number }) {
   </section>;
 }
 
-function Person({ row, axis }: { row: TodayRow; axis: Axis }) {
+function Person({ row, axis }: { row: DisplayTodayRow; axis: Axis }) {
   const group = groupFor(row);
   const plan = timedPlan(row);
   const away = group === "off" || group === "absent";

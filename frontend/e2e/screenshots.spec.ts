@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { avatarFixture, lateScheduleExample } from "./fixtures";
-import { tvFixture, tvMeta } from "./tv-fixtures";
+import { displayFixture, tvFixture, tvMeta } from "./tv-fixtures";
 
 /**
  * Скриншоты и GIF для README на демо-данных:
@@ -53,7 +53,7 @@ test("ТВ: экран команды в Full HD и HD", async ({ browser }) => 
       await page.route("**/api/v1/display/meta", (route) => route.fulfill({ json: tvMeta }));
       await page.route("**/api/v1/display/today**", (route) => {
         const day = new URL(route.request().url()).searchParams.get("day");
-        return route.fulfill({ json: tvFixture(day ?? undefined) });
+        return route.fulfill({ json: displayFixture(tvFixture(day ?? undefined)) });
       });
       await page.goto("/tv");
       await expect(page.getByRole("article").first()).toBeVisible();

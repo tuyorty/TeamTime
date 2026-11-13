@@ -1,4 +1,4 @@
-import type { TodayRow } from "@/api/types";
+import type { DisplayTodayRow } from "@/api/types";
 import { clock, isoDate, parseDate } from "@/lib/format";
 import { compareEmployeeRows } from "@/lib/employees";
 
@@ -15,7 +15,7 @@ export const GROUPS: { key: TvGroup; label: string }[] = [
 ];
 
 /** Расписание определяет план, а не подтверждённое присутствие человека. */
-export function groupFor(row: TodayRow): TvGroup {
+export function groupFor(row: DisplayTodayRow): TvGroup {
   if (row.presence === "off" || row.presence === "absent") return row.presence;
   if (!timedPlan(row)) return "unknown";
   switch (row.presence) {
@@ -27,25 +27,25 @@ export function groupFor(row: TodayRow): TvGroup {
   }
 }
 
-export function timedPlan(row: TodayRow) {
+export function timedPlan(row: DisplayTodayRow) {
   const plan = row.cell.plan;
   return plan?.kind === "work" && plan.start !== null && plan.end !== null ? plan : null;
 }
 
-export function groupCounts(rows: TodayRow[]): Record<TvGroup, number> {
+export function groupCounts(rows: DisplayTodayRow[]): Record<TvGroup, number> {
   const result = { office: 0, remote: 0, later: 0, finished: 0, off: 0, absent: 0, unknown: 0 };
   for (const row of rows) result[groupFor(row)] += 1;
   return result;
 }
 
-export function sortTeam(rows: TodayRow[]): TodayRow[] {
+export function sortTeam(rows: DisplayTodayRow[]): DisplayTodayRow[] {
   return [...rows].sort(compareEmployeeRows);
 }
 
-export interface TvEvent { row: TodayRow; time: number; kind: "start" | "end" }
+export interface TvEvent { row: DisplayTodayRow; time: number; kind: "start" | "end" }
 
 /** Только начало и конец дня: отдельный учёт перерывов пока не включён. */
-export function upcomingEvents(rows: TodayRow[], now: number): TvEvent[] {
+export function upcomingEvents(rows: DisplayTodayRow[], now: number): TvEvent[] {
   return rows.flatMap((row): TvEvent[] => {
     const plan = timedPlan(row);
     if (!plan || row.presence === "off" || row.presence === "absent") return [];
@@ -68,7 +68,7 @@ export function tvClock(seconds: number | null | undefined): string {
   return `${clock(seconds % 86400)}${seconds >= 86400 ? " +1" : ""}`;
 }
 
-export function tomorrowSummary(rows: TodayRow[]) {
+export function tomorrowSummary(rows: DisplayTodayRow[]) {
   const working = rows.filter((row) => timedPlan(row) && row.presence !== "off" && row.presence !== "absent");
   const remote = working.filter((row) => row.cell.status === "remote").length;
   const away = rows.filter((row) => row.presence === "off" || row.presence === "absent").length;

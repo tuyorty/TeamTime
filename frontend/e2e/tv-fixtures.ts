@@ -31,6 +31,23 @@ export function tvFixture(date = "2026-10-23"): Today {
   };
 }
 
+/** Публичный ТВ-контракт: без факта, штрафов, флагов и ссылок на исходные сообщения. */
+export function displayFixture(data = tvFixture()) {
+  return {
+    ...data,
+    feed: [], week_pulse: [], worked_sec: 0,
+    rows: data.rows.map(({ employee, cell, presence }) => ({
+      employee: {
+        id: employee.id, full_name: employee.full_name, short_name: employee.short_name,
+        department: employee.department, avatar_url: employee.avatar_url,
+        position: employee.position, color: employee.color,
+      },
+      presence, daily_overdue: false, tasks: [],
+      cell: { date: cell.date, plan: cell.plan, status: cell.status, status_note: "" },
+    })),
+  };
+}
+
 export const tvMeta: Meta = {
   version: "demo", demo: true, admin_enabled: true, is_admin: false, timezone: "Asia/Yekaterinburg",
   today: "2026-10-23", now: "2026-10-23T14:30:00+05:00", bot_username: null, late_tolerance_min: 15, weekly_off: [6],

@@ -10,7 +10,7 @@ export function Avatar({
   size = 24,
   className,
 }: {
-  employee: EmployeeBrief;
+  employee: Pick<EmployeeBrief, "id" | "short_name" | "color" | "avatar_url"> & Partial<EmployeeBrief>;
   size?: number;
   className?: string;
 }) {
