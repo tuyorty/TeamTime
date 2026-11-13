@@ -36,3 +36,25 @@ def test_unknown_message_has_no_issues() -> None:
     r = parse_message("всем привет", SENT, TZ, topic_hint=MessageKind.DAILY)
     assert r.kind is MessageKind.UNKNOWN
     assert r.issues == ()
+
+
+@pytest.mark.parametrize("tag", ["виклик", "ВиКлИкИ", "викли", "WEEKLY"])
+@pytest.mark.parametrize("hint", [None, MessageKind.DAILY, MessageKind.SCHEDULE])
+def test_weekly_report_tag_overrides_dates_times_and_topic(
+    tag: str, hint: MessageKind | None
+) -> None:
+    text = f"23.10.2026\n10:00 - 18:00\nЭффективность: 80%\n#{tag}"
+    result = parse_message(text, SENT, TZ, topic_hint=hint)
+    assert result.kind is MessageKind.UNKNOWN
+    assert result.daily is None and result.schedule is None
+    assert result.issues == ()
+
+
+def test_weekly_report_with_sprint_heading_is_not_schedule() -> None:
+    assert detect_kind("#виклик\nСпринт 19.10 - 25.10\nПн: 10:00 - 18:00") is MessageKind.UNKNOWN
+
+
+@pytest.mark.parametrize("task", ["Подготовил виклик", "Проверил #weekly_notes"])
+def test_mention_of_weekly_report_in_daily_task_does_not_hide_daily(task: str) -> None:
+    text = f"23.10.2026\n10:00 - 18:00\nЭффективность: 80%\n- {task}\n#дейли"
+    assert detect_kind(text, MessageKind.DAILY) is MessageKind.DAILY

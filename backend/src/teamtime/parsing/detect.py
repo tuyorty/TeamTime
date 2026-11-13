@@ -10,6 +10,9 @@ from teamtime.parsing.types import MessageKind
 PLAN_TAGS = {"дейлиплан", "дэйлиплан", "планнадень", "dailyplan"}
 """Утренний план на день: не дейлик и не расписание, бот его пропускает."""
 
+WEEKLY_TAGS = {"виклик", "виклики", "викли", "weekly"}
+"""Недельные отчёты: даты и часы в тексте или подписи к файлу не являются дейликом."""
+
 
 def _first_lines(text: str, limit: int = 3) -> list[str]:
     lines = [strip_hashtags(norm) for _, _, norm in split_lines(text)]
@@ -19,13 +22,14 @@ def _first_lines(text: str, limit: int = 3) -> list[str]:
 def detect_kind(text: str, topic_hint: MessageKind | None = None) -> MessageKind:
     """Тип сообщения по содержимому, хэштегу и теме форума.
 
-    Хэштег утреннего плана (#дейлиплан) сразу даёт UNKNOWN. Дальше содержимое — самый сильный
-    сигнал: заголовок «Спринт …» однозначен, как и пара «дата + интервалы» в начале. Затем хэштег,
+    Хэштеги утреннего плана (#дейлиплан) и недельного отчёта (#виклик) сразу дают UNKNOWN.
+    Дальше содержимое — самый сильный сигнал: заголовок «Спринт …» однозначен, как и пара
+    «дата + интервалы» в начале. Затем хэштег,
     затем привязка темы. Обычная болтовня в теме даёт UNKNOWN, чтобы бот не реагировал на
     «всем привет».
     """
     tags = {fold(t) for t in hashtags(text)}
-    if tags & PLAN_TAGS:
+    if tags & (PLAN_TAGS | WEEKLY_TAGS):
         return MessageKind.UNKNOWN
     head = _first_lines(text)
     if any(HEADER_RE.match(line) for line in head):

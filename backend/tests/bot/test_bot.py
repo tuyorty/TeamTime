@@ -30,6 +30,7 @@ from teamtime.db.models import (
     StatusRequest,
     TopicBinding,
 )
+from teamtime.parsing import MessageKind
 from teamtime.services import status_requests
 from teamtime.services.facts import current_dailies, current_plans
 from teamtime.services.settings import load_settings, save_settings
@@ -148,6 +149,33 @@ async def test_unlinked_account_is_not_blamed_on_author(tg: Telegram) -> None:
 async def test_chatter_in_topic_is_ignored(tg: Telegram) -> None:
     await tg.group(501, "кто идёт на обед?")
     assert tg.session.calls == []
+
+
+@pytest.mark.parametrize("document", [False, True])
+async def test_weekly_report_is_ignored_without_warning_or_inbox(
+    tg: Telegram, maker, document
+) -> None:
+    await tg.group(501, "#виклик\n19.10.2026 - 25.10.2026", document=document)
+    assert tg.session.calls == []
+    async with maker() as session:
+        row = await session.scalar(select(ParseResultRow).where(ParseResultRow.is_latest))
+        assert row is not None and row.kind is MessageKind.UNKNOWN
+        assert row.resolution is Resolution.IGNORED
+        assert await current_dailies(session, date(2026, 10, 19), date(2026, 10, 25)) == []
+
+
+async def test_edit_to_weekly_report_removes_inbox_question_and_bot_warning(
+    tg: Telegram, maker
+) -> None:
+    text = "19.10.2026 - 25.10.2026"
+    mid = await tg.group(501, text, document=True)
+    assert len(tg.session.of(SendMessage)) == 1
+    await tg.group(501, f"#виклик\n{text}", message_id=mid, edit=True, document=True)
+    assert len(tg.session.of(SendMessage)) == 1
+    assert len(tg.session.of(DeleteMessage)) == 1
+    async with maker() as session:
+        row = await session.scalar(select(ParseResultRow).where(ParseResultRow.is_latest))
+        assert row is not None and row.resolution is Resolution.IGNORED
 
 
 @pytest.mark.parametrize("feedback", ["reaction", "reply"])
