@@ -26,7 +26,9 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
             raise
 
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# Подтверждаем транзакцию до отправки ответа: следующий запрос уже должен видеть запись,
+# а ошибка commit должна возвращать ошибку клиенту вместо преждевременного успеха.
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 
 
 async def get_app_settings(session: SessionDep) -> AppSettings:
