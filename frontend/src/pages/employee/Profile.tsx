@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { copyText, formatPhone, phoneHref } from "@/lib/phone";
 import { clock, dayMonth, hm } from "@/lib/format";
+import { EmployeeCalculator } from "./Calculator";
 
 export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -65,13 +66,16 @@ export function EmployeeProfile({ data }: { data: EmployeeDetail }) {
           </p>
           {!employee.is_active ? <Badge className="mt-2">Неактивный сотрудник</Badge> : null}
         </div>
-        {meta?.is_admin ? (
-          <Button asChild size="sm">
-            <Link to={`/admin/employees?edit=${employee.id}`}>
-              <Pencil /> Редактировать профиль
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          {meta?.today ? <EmployeeCalculator key={employee.id} data={data} today={meta.today} day={row?.cell} /> : null}
+          {meta?.is_admin ? (
+            <Button asChild size="sm">
+              <Link to={`/admin/employees?edit=${employee.id}`}>
+                <Pencil /> Редактировать профиль
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </header>
       <div className="grid border-t border-line md:grid-cols-3">
         <div className="grid content-start gap-3 p-5 md:border-r md:border-line">

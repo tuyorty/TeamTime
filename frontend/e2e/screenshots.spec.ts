@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { calculatorExample, installCalculatorExample, openCalculator } from "./calculator-fixtures";
 import { avatarFixture, lateScheduleExample } from "./fixtures";
 import { displayFixture, tvFixture, tvMeta } from "./tv-fixtures";
 
@@ -163,6 +164,34 @@ async function prepareAvatarEditor(page: Page) {
   for (let step = 0; step < 10; step++) await zoom.press("ArrowRight");
   await dialog.getByRole("region", { name: "Настройка фотографии", exact: true }).scrollIntoViewIfNeeded();
 }
+
+test("калькулятор: день и месяц", async ({ browser, request }) => {
+  test.setTimeout(120_000);
+  const example = await calculatorExample(request);
+  for (const theme of ["light", "dark"] as const) {
+    for (const mobile of [false, true]) {
+      for (const mode of ["day", "month"] as const) {
+        const name = `${mobile ? "mobile-" : ""}calculator-${mode}`;
+        await shot(browser, example.url, name, theme, mobile, async (page) => {
+          await installCalculatorExample(page, example);
+          await page.reload();
+          const dialog = await openCalculator(page);
+          if (mode === "day") {
+            await dialog.getByRole("button", { name: "Пример", exact: true }).click();
+            await expect(dialog.getByTestId("daily-efficiency")).toHaveText("91%");
+          } else {
+            await dialog.getByRole("tab", { name: "Доход за месяц", exact: true }).click();
+            await dialog.getByLabel("Хочу получить, ₽", { exact: true }).fill("102000");
+            await dialog.getByLabel("Эффективность оставшихся часов, %", { exact: true }).fill("80");
+            await expect(dialog.getByTestId("monthly-needed-actual")).toHaveText("131:15");
+          }
+          await page.evaluate("document.fonts.ready");
+          await dialog.evaluate((element) => element.scrollTo({ top: 0, behavior: "instant" }));
+        });
+      }
+    }
+  }
+});
 
 test("демо: пример заявки на статус", async ({ browser }) => {
   for (const theme of ["light", "dark"] as const) {
