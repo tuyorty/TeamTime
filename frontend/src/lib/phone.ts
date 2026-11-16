@@ -27,7 +27,9 @@ export async function copyText(value: string): Promise<void> {
   input.value = value;
   input.setAttribute("readonly", "");
   input.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
-  document.body.append(input);
+  // В модальном окне поле должно оставаться внутри области фокуса Radix Dialog.
+  const container = previous instanceof Element ? previous.closest('[role="dialog"]') : null;
+  (container ?? document.body).append(input);
   try {
     input.select();
     if (!document.execCommand("copy")) throw new Error("Не удалось скопировать номер");
