@@ -9,7 +9,7 @@ import { hm } from "@/lib/format";
 import { copyText } from "@/lib/phone";
 
 import { Breakdown, Metric } from "./fields";
-import { readNumber } from "./input";
+import { normalizeClock, readNumber } from "./input";
 import { calculateDay, serializeDayIntervals, type IntervalDraft } from "./model";
 
 type Row = IntervalDraft & { id: number };
@@ -25,6 +25,10 @@ export function DayCalculator({ day, onMonth }: { day?: DayCell; onMonth: (effic
   const update = (id: number, field: "start" | "end", text: string) => {
     setEdited(true);
     setIntervals((rows) => rows.map((row) => row.id === id ? { ...row, [field]: text, nextDay: undefined } : row));
+  };
+  const finishClock = (row: Row, field: "start" | "end") => {
+    const normalized = normalizeClock(row[field]);
+    if (normalized !== row[field]) update(row.id, field, normalized);
   };
   const fill = (times: number[][], minutes = 0) => {
     setIntervals(times.map(([start, end]) => ({
@@ -44,7 +48,7 @@ export function DayCalculator({ day, onMonth }: { day?: DayCell; onMonth: (effic
           <h3 className="text-[15px] font-semibold">Когда работали</h3>
           <Button size="sm" variant="ghost" onClick={() => fill([[37200, 64800], [71400, 85200]], 60)}>Пример</Button>
         </div>
-        <p className="mt-1 text-[13px] text-ink-2">Добавьте каждый отрезок фактического времени.</p>
+        <p className="mt-1 text-[13px] text-ink-2">Время от 00:00 до 23:59. Можно вводить цифрами: 930 → 09:30.</p>
         {day?.fact?.intervals.length || day?.plan?.kind === "work" ? <div className="mt-2 flex flex-wrap gap-2">
           {day?.fact?.intervals.length ? <Button size="sm" onClick={() => fill(day.fact!.intervals)}>Интервалы из дейлика</Button> : null}
           {day?.plan?.kind === "work" && day.plan.intervals.length ? <Button size="sm" onClick={() => fill(day.plan!.intervals)}>Интервалы из расписания</Button> : null}
@@ -56,14 +60,16 @@ export function DayCalculator({ day, onMonth }: { day?: DayCell; onMonth: (effic
         {intervals.map((row, index) => <fieldset key={row.id} className="min-w-0 rounded-lg border border-line bg-surface-2/50 p-3">
           <legend className="px-1 text-[11px] font-medium uppercase tracking-wide text-ink-3">Интервал {index + 1}</legend>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
-            <Field label="Начало"><Input type="time" aria-label={`Начало интервала ${index + 1}`} value={row.start}
-              onChange={(event) => update(row.id, "start", event.target.value)} className="h-10 min-w-0 px-1.5 text-sm" /></Field>
-            <Field label="Конец"><Input type="time" aria-label={`Конец интервала ${index + 1}`} value={row.end}
-              onChange={(event) => update(row.id, "end", event.target.value)} className="h-10 min-w-0 px-1.5 text-sm" /></Field>
+            <Field label="Начало"><Input type="text" inputMode="numeric" placeholder="ЧЧ:ММ" autoComplete="off" spellCheck={false}
+              aria-label={`Начало интервала ${index + 1}`} value={row.start} onBlur={() => finishClock(row, "start")}
+              onChange={(event) => update(row.id, "start", event.target.value)} className="h-10 min-w-0 text-sm" /></Field>
+            <Field label="Конец"><Input type="text" inputMode="numeric" placeholder="ЧЧ:ММ" autoComplete="off" spellCheck={false}
+              aria-label={`Конец интервала ${index + 1}`} value={row.end} onBlur={() => finishClock(row, "end")}
+              onChange={(event) => update(row.id, "end", event.target.value)} className="h-10 min-w-0 text-sm" /></Field>
             <Button variant="ghost" size="icon" className="mb-1" disabled={intervals.length === 1} aria-label={`Удалить интервал ${index + 1}`}
               onClick={() => setIntervals((rows) => rows.filter((item) => item.id !== row.id))}><Trash2 /></Button>
           </div>
-          {row.start && row.end && (row.end < row.start || row.nextDay) ? <p className="mt-2 text-[11px] text-ink-2">Окончание на следующий день</p> : null}
+          {value?.intervals.find((interval) => interval.index === index)?.nextDay ? <p className="mt-2 text-[11px] text-ink-2">Окончание на следующий день</p> : null}
         </fieldset>)}
         <Button className="w-full border-dashed" onClick={() => { setIntervals((rows) => [...rows, { id: nextId.current++, start: "", end: "" }]); setEdited(true); }} disabled={intervals.length >= 12}>
           <Plus />Добавить интервал
